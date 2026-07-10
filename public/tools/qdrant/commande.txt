@@ -1,0 +1,1 @@
+.\qdrant.exe --config-path config.yaml

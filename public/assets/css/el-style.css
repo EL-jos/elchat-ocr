@@ -1,0 +1,45 @@
+.choose-box{
+    text-align: center;
+}
+
+.pricing-box:hover,
+.el-default-pricing.pricing-box{
+    background-color: var(--e-global-color-accent);
+}
+
+.pricing-box:hover *,
+.el-default-pricing.pricing-box * {
+    color: var(--e-global-color-primary);
+}
+
+.pricing-box:hover .generic-price span.price-text,
+.el-default-pricing.pricing-box .generic-price span.price-text,
+.pricing-box:hover .generic-price span.per-month,
+.el-default-pricing.pricing-box .generic-price span.per-month,
+.pricing-box:hover span.starting-at,
+.el-default-pricing.pricing-box span.starting-at{
+    color: var(--e-global-color-primary);
+}
+
+.pricing-box:hover .primary_btn,
+.el-default-pricing.pricing-box .primary_btn{
+    background-color: var(--e-global-color-primary);
+    color: var(--e-global-color-secondary);
+}
+
+.pricing-box:hover,
+.el-default-pricing.pricing-box{
+    transform: translateY(-5px);
+}
+
+.header-con .navbar-brand figure img{
+    width: 60px;
+}
+
+.logos-con img{
+    height: 50px;
+}
+
+.client-logo-con{
+    padding: 0;
+}

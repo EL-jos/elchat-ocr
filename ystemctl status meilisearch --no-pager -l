@@ -1,0 +1,20 @@
+[0;1;32m●[0m mercure.service - Mercure Hub
+     Loaded: loaded (/etc/systemd/system/mercure.service; disabled; vendor preset: enabled)
+     Active: [0;1;32mactive (running)[0m since Mon 2026-06-29 16:32:25 UTC; 1min 23s ago
+   Main PID: 16008 (mercure)
+      Tasks: 9 (limit: 19136)
+     Memory: 10.0M
+        CPU: 47ms
+     CGroup: /system.slice/mercure.service
+             └─16008 /usr/bin/mercure run --config /etc/mercure/Caddyfile
+
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"warn","ts":1782750745.4663906,"logger":"http","msg":"HTTP/2 skipped because it requires TLS","network":"tcp","addr":":3000"}
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"warn","ts":1782750745.466401,"logger":"http","msg":"HTTP/3 skipped because it requires TLS","network":"tcp","addr":":3000"}
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"info","ts":1782750745.4664047,"logger":"http.log","msg":"server running","name":"srv0","protocols":["h1","h2","h3"]}
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"info","ts":1782750745.4674406,"msg":"autosaved config (load with --resume flag)","file":"/root/.config/caddy/autosave.json"}
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"info","ts":1782750745.4674911,"msg":"serving initial configuration"}
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"info","ts":1782750745.4703388,"logger":"tls","msg":"cleaning storage unit","storage":"FileStorage:/root/.local/share/caddy"}
+Jun 29 16:32:25 srv1418215 mercure[16008]: {"level":"info","ts":1782750745.4720669,"logger":"tls","msg":"finished cleaning storage units"}
+Jun 29 16:32:35 srv1418215 mercure[16008]: 2026/06/29 16:32:35.156        INFO        http.log.access.log0        handled request        {"request": {"remote_ip": "127.0.0.1", "remote_port": "55934", "client_ip": "127.0.0.1", "proto": "HTTP/1.1", "method": "HEAD", "host": "127.0.0.1:3000", "uri": "/.well-known/mercure", "headers": {"User-Agent": ["curl/7.81.0"], "Accept": ["*/*"]}}, "bytes_read": 0, "user_id": "", "duration": 0.000563852, "size": 27, "status": 400, "resp_headers": {"Content-Type": ["text/plain; charset=utf-8"], "Server": ["Mercure.rocks Caddy"], "X-Frame-Options": ["DENY"], "X-Content-Type-Options": ["nosniff"], "X-Xss-Protection": ["1; mode=block"], "Content-Security-Policy": ["default-src 'self'"]}}
+Jun 29 16:32:41 srv1418215 mercure[16008]: 2026/06/29 16:32:41.353        INFO        http.log.access.log0        handled request        {"request": {"remote_ip": "127.0.0.1", "remote_port": "60710", "client_ip": "127.0.0.1", "proto": "HTTP/1.1", "method": "HEAD", "host": "127.0.0.1:3000", "uri": "/.well-known/mercure", "headers": {"User-Agent": ["curl/7.81.0"], "Accept": ["*/*"]}}, "bytes_read": 0, "user_id": "", "duration": 0.00018166, "size": 27, "status": 400, "resp_headers": {"Content-Type": ["text/plain; charset=utf-8"], "Server": ["Mercure.rocks Caddy"], "X-Frame-Options": ["DENY"], "X-Content-Type-Options": ["nosniff"], "X-Xss-Protection": ["1; mode=block"], "Content-Security-Policy": ["default-src 'self'"]}}
+Jun 29 16:33:16 srv1418215 mercure[16008]: 2026/06/29 16:33:16.009        INFO        http.log.access.log0        handled request        {"request": {"remote_ip": "127.0.0.1", "remote_port": "56620", "client_ip": "127.0.0.1", "proto": "HTTP/1.1", "method": "HEAD", "host": "127.0.0.1:3000", "uri": "/.well-known/mercure", "headers": {"Accept": ["*/*"], "User-Agent": ["curl/7.81.0"]}}, "bytes_read": 0, "user_id": "", "duration": 0.000119178, "size": 27, "status": 400, "resp_headers": {"Server": ["Mercure.rocks Caddy"], "X-Frame-Options": ["DENY"], "X-Content-Type-Options": ["nosniff"], "X-Xss-Protection": ["1; mode=block"], "Content-Security-Policy": ["default-src 'self'"], "Content-Type": ["text/plain; charset=utf-8"]}}

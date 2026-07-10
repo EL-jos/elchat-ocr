@@ -1,0 +1,404 @@
+{
+  "product_name": [
+    "nom produit",
+    "designation",
+    "intitule",
+    "libelle",
+    "titre produit",
+    "nom article",
+    "produit",
+    "product name",
+    "article",
+    "modele"
+  ],
+
+  "product_reference": [
+    "reference",
+    "sku",
+    "ref produit",
+    "code produit",
+    "code article",
+    "reference interne",
+    "id produit",
+    "product sku",
+    "product ref",
+    "code"
+  ],
+
+  "product_type": [
+    "type produit",
+    "type",
+    "categorie produit",
+    "famille produit",
+    "nature produit",
+    "product type",
+    "classification",
+    "genre produit",
+    "type article",
+    "segment"
+  ],
+
+  "product_category": [
+    "categorie",
+    "categorie produit",
+    "famille",
+    "rayon",
+    "section",
+    "univers",
+    "classe",
+    "product category",
+    "groupe",
+    "classification produit"
+  ],
+
+  "description": [
+    "description",
+    "description complete",
+    "details",
+    "presentation",
+    "texte produit",
+    "contenu",
+    "fiche produit",
+    "description longue",
+    "resume detaille",
+    "infos produit"
+  ],
+
+  "short_description": [
+    "description courte",
+    "resume",
+    "aperçu",
+    "intro",
+    "presentation courte",
+    "extrait",
+    "short description",
+    "mini description",
+    "accroche",
+    "texte court"
+  ],
+
+  "price": [
+    "prix",
+    "price",
+    "prix vente",
+    "prix public",
+    "tarif",
+    "montant",
+    "prix ttc",
+    "prix final",
+    "cout",
+    "valeur"
+  ],
+
+  "currency": [
+    "devise",
+    "currency",
+    "monnaie",
+    "code devise",
+    "iso devise",
+    "type devise",
+    "symbole devise",
+    "currency code",
+    "argent",
+    "unite monetaire"
+  ],
+
+  "price_min": [
+    "prix min",
+    "prix minimum",
+    "min price",
+    "tarif min",
+    "prix de depart",
+    "prix bas",
+    "borne basse",
+    "minimum prix",
+    "low price",
+    "prix plancher"
+  ],
+
+  "price_max": [
+    "prix max",
+    "prix maximum",
+    "max price",
+    "tarif max",
+    "prix haut",
+    "borne haute",
+    "maximum prix",
+    "high price",
+    "prix plafond",
+    "limite prix"
+  ],
+
+  "discount_price": [
+    "prix promo",
+    "prix reduit",
+    "prix remise",
+    "promotion",
+    "discount price",
+    "prix solde",
+    "prix special",
+    "prix offre",
+    "tarif promo",
+    "prix rabais"
+  ],
+
+  "tax_rate": [
+    "tva",
+    "taxe",
+    "taux tva",
+    "vat",
+    "tax rate",
+    "pourcentage tva",
+    "taxe produit",
+    "taux taxe",
+    "imposition",
+    "tax"
+  ],
+
+  "features": [
+    "caracteristiques",
+    "specifications",
+    "details techniques",
+    "fiche technique",
+    "attributs",
+    "proprietes",
+    "features",
+    "specs",
+    "infos techniques",
+    "donnees techniques"
+  ],
+
+  "brand": [
+    "marque",
+    "brand",
+    "fabricant",
+    "constructeur",
+    "label",
+    "enseigne",
+    "marque produit",
+    "nom marque",
+    "societe",
+    "compagnie"
+  ],
+
+  "tags": [
+    "tags",
+    "etiquettes",
+    "labels",
+    "mots cles",
+    "keywords",
+    "balises",
+    "tag produit",
+    "index",
+    "thematiques",
+    "classification libre"
+  ],
+
+  "keywords": [
+    "mots cles",
+    "keywords",
+    "termes",
+    "expressions",
+    "recherche",
+    "seo",
+    "cles seo",
+    "mots recherche",
+    "indexation",
+    "referencement"
+  ],
+
+  "stock_status": [
+    "statut stock",
+    "etat stock",
+    "stock status",
+    "disponibilite stock",
+    "etat inventaire",
+    "statut inventaire",
+    "stock etat",
+    "availability stock",
+    "etat produit",
+    "statut produit"
+  ],
+
+  "stock_quantity": [
+    "quantite",
+    "stock",
+    "quantite stock",
+    "stock quantity",
+    "inventaire",
+    "nombre pieces",
+    "units",
+    "qte",
+    "nb stock",
+    "disponible"
+  ],
+
+  "weight": [
+    "poids",
+    "weight",
+    "masse",
+    "poids produit",
+    "kg",
+    "grammage",
+    "charge",
+    "net weight",
+    "poids net",
+    "poids brut"
+  ],
+
+  "dimensions": [
+    "dimensions",
+    "taille",
+    "mesures",
+    "dimension produit",
+    "size",
+    "volume",
+    "longueur largeur hauteur",
+    "gabarit",
+    "format",
+    "dimension"
+  ],
+
+  "colors": [
+    "couleurs",
+    "coloris",
+    "color",
+    "teintes",
+    "nuances",
+    "couleur produit",
+    "palette",
+    "variantes couleur",
+    "color options",
+    "color list"
+  ],
+
+  "materials": [
+    "matieres",
+    "materiaux",
+    "material",
+    "composition",
+    "fabrication",
+    "matiere principale",
+    "structure",
+    "elements",
+    "composants",
+    "build material"
+  ],
+
+  "availability": [
+    "disponibilite",
+    "availability",
+    "etat",
+    "statut",
+    "en stock",
+    "hors stock",
+    "disponible",
+    "indisponible",
+    "etat vente",
+    "etat commande"
+  ],
+
+  "image_url": [
+    "image",
+    "image principale",
+    "photo",
+    "image url",
+    "photo produit",
+    "visuel",
+    "picture",
+    "thumbnail",
+    "cover image",
+    "image link"
+  ],
+
+  "product_url": [
+    "url produit",
+    "lien produit",
+    "product url",
+    "page produit",
+    "lien page",
+    "permalink",
+    "url",
+    "link",
+    "product link",
+    "page url"
+  ],
+
+  "gallery_urls": [
+    "galerie",
+    "images",
+    "gallery",
+    "photos",
+    "gallery urls",
+    "image gallery",
+    "album",
+    "liste images",
+    "photos produit",
+    "media"
+  ],
+
+  "video_url": [
+    "video",
+    "video url",
+    "lien video",
+    "product video",
+    "media video",
+    "youtube",
+    "vimeo",
+    "video produit",
+    "presentation video",
+    "url video"
+  ],
+
+  "status": [
+    "statut",
+    "etat",
+    "status",
+    "actif",
+    "inactif",
+    "publie",
+    "brouillon",
+    "archive",
+    "enabled",
+    "disabled"
+  ],
+
+  "language": [
+    "langue",
+    "language",
+    "lang",
+    "locale",
+    "code langue",
+    "fr",
+    "francais",
+    "language code",
+    "localisation",
+    "traduction"
+  ],
+
+  "visibility": [
+    "visibilite",
+    "visibility",
+    "public",
+    "prive",
+    "affichage",
+    "etat affichage",
+    "publication",
+    "scope",
+    "exposition",
+    "niveau visibilite"
+  ],
+
+  "created_at": [
+    "date creation",
+    "created at",
+    "date ajout",
+    "creation",
+    "date produit",
+    "date enregistrement",
+    "timestamp",
+    "date import",
+    "date insertion",
+    "added at"
+  ]
+}
