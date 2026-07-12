@@ -52,6 +52,11 @@ class ChatService
             'plural' => 'documents',
             'priority' => 3,
         ],
+        'image' => [
+            'singular' => 'image',
+            'plural' => 'images',
+            'priority' => 4,
+        ],
     ];
     protected HopResponse $results;
 
@@ -148,9 +153,22 @@ class ChatService
                     ];
                 }
 
+                $content = $m->content;
+
+                // 🖼️ Si ce message avait une image jointe, on réinjecte sa
+                // description dans l'historique : une question de suivi comme
+                // "et la couleur ?" reste compréhensible par le LLM même sans
+                // revoir l'image (le LLM principal n'a pas besoin d'être
+                // multimodal, la description texte suffit).
+                $attachment = $m->attachments->first();
+
+                if ($attachment && $attachment->description) {
+                    $content .= "\n[Image jointe précédemment par le visiteur : {$attachment->description}]";
+                }
+
                 return [
                     'role' => 'user',
-                    'content' => $m->content,
+                    'content' => $content,
                 ];
             })
             ->toArray();

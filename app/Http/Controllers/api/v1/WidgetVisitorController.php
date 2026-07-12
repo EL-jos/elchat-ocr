@@ -48,9 +48,17 @@ class WidgetVisitorController extends Controller
         $data = $request->validate([
             'site_id' => 'required|exists:sites,id',
             'visitor_uuid' => 'required|uuid',
-            'question' => 'required|string|max:1000',
-            'conversation_id' => 'nullable|uuid'
+            'question' => 'nullable|string|max:1000',
+            'conversation_id' => 'nullable|uuid',
+            // 🖼️ Upload d'image pendant la conversation (visiteur widget)
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192',
         ]);
+
+        if (empty($data['question']) && !$request->hasFile('image')) {
+            return response()->json([
+                'message' => 'La question ou une image est requise.'
+            ], 422);
+        }
 
         $site = Site::findOrFail($data['site_id']);
 
@@ -81,6 +89,13 @@ class WidgetVisitorController extends Controller
             'question' => $data['question'],
             'conversation_id' => $data['conversation_id'] ?? null
         ]);
+
+        // 🖼️ Transmettre le fichier image (FileBag) à la requête interne —
+        // `new Request([...])` ne prend que les champs simples, les fichiers
+        // uploadés doivent être transférés explicitement.
+        if ($request->hasFile('image')) {
+            $internalRequest->files->set('image', $request->file('image'));
+        }
 
         $chatController = app(ChatController::class);
 

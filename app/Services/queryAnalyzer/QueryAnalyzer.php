@@ -201,6 +201,42 @@ class QueryAnalyzer
         7. Constraints (explicit or implicit limits such as budget, time, region, compliance, performance, etc.)
 
         =================
+        JSON SCHEMA CONTRACT (MANDATORY)
+        =================
+
+        The output MUST contain ALL of the following keys.
+
+        No key may ever be omitted.
+
+        If a value is unknown, use one of the following defaults instead of omitting the key:
+
+        clean_query: ""
+        search_queries: []
+        sub_queries: []
+        entities: []
+        intent: "information"
+        query_type: "factual"
+        needs_conversation_context: false
+        filters: {
+          "date_range": null,
+          "product": null,
+          "plan": null,
+          "language": null,
+          "other": {}
+        }
+        top_k: 30
+        search_strategy: "single"
+        constraints: []
+
+        Every key is REQUIRED.
+
+        Never remove a field because it is empty.
+
+        Empty arrays and null values are REQUIRED when no value exists.
+
+        Any missing key makes the response invalid.
+
+        =================
         OUTPUT FORMAT
         =================
 
@@ -364,6 +400,20 @@ class QueryAnalyzer
         - infer best possible clean_query
         - use multi_query strategy
         - avoid filters unless certain
+
+        ================
+        FINAL VALIDATION
+        ================
+
+        Before answering, internally verify:
+
+        ✓ every required key exists
+        ✓ every array exists (possibly empty)
+        ✓ every object exists
+        ✓ every enum is valid
+        ✓ no field has been omitted
+
+        If any required field is missing, regenerate the JSON before responding.
         PROMPT;
     }
     private function mapToQueryPlan(array $data): QueryPlan
@@ -428,14 +478,166 @@ class QueryAnalyzer
                         [
                             "role" => "system",
                             "content" => "You are a query planning engine for a semantic search system.
-                            Return ONLY valid JSON."
+                            Return EXACTLY one JSON object matching the schema below.
+
+                            The object MUST contain every field shown below.
+
+                            No additional fields.
+                            No missing fields.
+
+                            Missing fields are considered an invalid response."
                         ],
                         [
                             "role" => "user",
                             "content" => $prompt
                         ]
                     ],
+                    "response_format" => [
+                        "type" => "json_schema",
+                        "json_schema" => [
+                            "name" => "query_plan",
+                            "strict" => true,
+                            "schema" => [
+                                "type" => "object",
 
+                                "properties" => [
+
+                                    "clean_query" => [
+                                        "type" => "string"
+                                    ],
+
+                                    "search_queries" => [
+                                        "type" => "array",
+                                        "items" => [
+                                            "type" => "string"
+                                        ]
+                                    ],
+
+                                    "sub_queries" => [
+                                        "type" => "array",
+                                        "items" => [
+                                            "type" => "string"
+                                        ]
+                                    ],
+
+                                    "entities" => [
+                                        "type" => "array",
+                                        "items" => [
+                                            "type" => "object",
+                                            "properties" => [
+                                                "type" => [
+                                                    "type" => "string"
+                                                ],
+                                                "value" => [
+                                                    "type" => "string"
+                                                ]
+                                            ],
+                                            "required" => [
+                                                "type",
+                                                "value"
+                                            ],
+                                            "additionalProperties" => false
+                                        ]
+                                    ],
+
+                                    "intent" => [
+                                        "type" => "string",
+                                        "enum" => [
+                                            "information",
+                                            "pricing",
+                                            "comparison",
+                                            "navigation",
+                                            "transactional",
+                                            "support",
+                                            "lead",
+                                            "booking",
+                                            "download"
+                                        ]
+                                    ],
+
+                                    "query_type" => [
+                                        "type" => "string",
+                                        "enum" => [
+                                            "factual",
+                                            "exploratory",
+                                            "transactional"
+                                        ]
+                                    ],
+
+                                    "needs_conversation_context" => [
+                                        "type" => "boolean"
+                                    ],
+
+                                    "filters" => [
+                                        "type" => "object",
+                                        "properties" => [
+                                            "date_range" => [
+                                                "type" => ["string", "null"]
+                                            ],
+                                            "product" => [
+                                                "type" => ["string", "null"]
+                                            ],
+                                            "plan" => [
+                                                "type" => ["string", "null"]
+                                            ],
+                                            "language" => [
+                                                "type" => ["string", "null"]
+                                            ],
+                                            "other" => [
+                                                "type" => "object"
+                                            ]
+                                        ],
+                                        "required" => [
+                                            "date_range",
+                                            "product",
+                                            "plan",
+                                            "language",
+                                            "other"
+                                        ],
+                                        "additionalProperties" => false
+                                    ],
+
+                                    "top_k" => [
+                                        "type" => "integer",
+                                        "minimum" => 1,
+                                        "maximum" => 50
+                                    ],
+
+                                    "search_strategy" => [
+                                        "type" => "string",
+                                        "enum" => [
+                                            "single",
+                                            "multi_query",
+                                            "decomposition"
+                                        ]
+                                    ],
+
+                                    "constraints" => [
+                                        "type" => "array",
+                                        "items" => [
+                                            "type" => "string"
+                                        ]
+                                    ]
+                                ],
+
+                                "required" => [
+                                    "clean_query",
+                                    "search_queries",
+                                    "sub_queries",
+                                    "entities",
+                                    "intent",
+                                    "query_type",
+                                    "needs_conversation_context",
+                                    "filters",
+                                    "top_k",
+                                    "search_strategy",
+                                    "constraints"
+                                ],
+
+                                "additionalProperties" => false
+                            ]
+                        ]
+                    ],
                     "temperature" => 0.2,
                     "max_tokens" => 400
                 ]);

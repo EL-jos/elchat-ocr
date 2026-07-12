@@ -4,8 +4,9 @@ namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
-use App\Models\ConversationMemory;
+use App\Models\Document;
 use App\Models\Message;
+use App\Models\MessageAttachment;
 use App\Models\MessageCTA;
 use App\Models\Site;
 use App\Services\ia\ChatService;
@@ -13,7 +14,9 @@ use App\Services\ia\EmbeddingService;
 use App\Services\MercureService;
 use App\Services\vector\VectorCreationService;
 use App\Services\vector\VectorIndexService;
+use App\Services\vision\ImageVisionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -27,17 +30,26 @@ class ChatController extends Controller
         private VectorCreationService $vectorCreationService,
         private VectorIndexService $vectorIndexService,
         private EmbeddingService $embeddingService,
-
+        private ImageVisionService $imageVisionService,
     ){}
     public function ask(Request $request)
     {
 
         $data = $request->validate([
             'site_id' => 'required|exists:sites,id',
-            'question' => 'required|string|max:1000',
+            // 🖼️ La question devient optionnelle : un visiteur peut envoyer
+            // uniquement une image ("qu'est-ce que c'est ?" implicite).
+            'question' => 'nullable|string|max:1000',
             'conversation_id' => 'nullable|exists:conversations,id',
             'visitor_id' => 'nullable|exists:visitors,id',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192', // 8 Mo, cohérent avec vision.max_image_bytes
         ]);
+
+        if (empty($data['question']) && !$request->hasFile('image')) {
+            return response()->json([
+                'message' => 'La question ou une image est requise.'
+            ], 422);
+        }
 
         $userId = auth()->id();
         $visitorId = $data['visitor_id'] ?? null;
@@ -65,16 +77,60 @@ class ChatController extends Controller
                 'visitor_id' => $visitorId,
             ]);
 
-           /* $isCreated = $this->vectorCreationService->createSiteCollection(
-                siteId: $site->id,
-                collection: "conversations_{$conversation->id}"
+        }
+
+        // ─────────────────────────────
+        // 🖼️ Pièce jointe image (upload visiteur pendant la conversation)
+        // ─────────────────────────────
+        $attachmentUrl = null;
+        $visionResult = null;
+        //$attachement = new MessageAttachment();
+
+        if ($request->hasFile('image')) {
+
+            $files = $request->file('image');
+
+            $bytes = file_get_contents($files->getRealPath());
+
+            // Même service, même cache global (par hash d'octets) que le
+            // crawl / les documents / les produits : si le visiteur envoie
+            // la photo d'un produit déjà indexé, aucun appel vision n'est
+            // refait, la description existante est réutilisée instantanément.
+            $visionResult = $this->imageVisionService->analyzeBytes(
+                $bytes,
+                alt: null,
+                context: $data['question'] ?? null,
+                logRef: "visitor-upload:{$conversation->id}",
             );
 
-            if ($isCreated) {
-                Log::info("Création de la collection réussit", [
-                    'collection' => "conversations_{$conversation->id}",
-                ]);
-            }*/
+            /*$document = $this->saveDocument($files, $attachement, 'image');
+            $attachmentUrl = $document->url;*/
+        }
+
+        // 🧠 Requête enrichie envoyée au pipeline RAG : le texte du visiteur
+        // + la description/OCR de l'image, pour que le retrieval (produits,
+        // pages, documents, images déjà indexées) et la génération LLM
+        // "voient" le contenu visuel sans que le LLM principal ait besoin
+        // d'être multimodal.
+        $rawQuestion = trim($data['question'] ?? '');
+        $enrichedQuestion = $rawQuestion;
+
+        if ($visionResult) {
+            $visionText = trim(implode("\n", array_filter([
+                !empty($visionResult['description']) ? "Description de l'image envoyée : {$visionResult['description']}" : null,
+                !empty($visionResult['ocr_text']) ? "Texte visible sur l'image : {$visionResult['ocr_text']}" : null,
+            ])));
+
+            if ($visionText !== '') {
+                $enrichedQuestion = $rawQuestion !== ''
+                    ? "{$rawQuestion}\n\n[Image jointe par le visiteur]\n{$visionText}"
+                    : "Le visiteur a envoyé une image sans texte. Voici ce qu'elle contient :\n{$visionText}\n\nDécris ce que tu peux en dire, et indique si un produit ou une information de notre catalogue y correspond.";
+            }
+        }
+
+        if ($enrichedQuestion === '') {
+            // Image envoyée mais non analysable (décorative/illisible) et pas de texte
+            $enrichedQuestion = "Le visiteur a envoyé une image, mais son contenu n'a pas pu être analysé. Demande-lui de préciser sa question.";
         }
 
         // Sauvegarder la question
@@ -83,8 +139,31 @@ class ChatController extends Controller
             'conversation_id' => $conversation->id,
             'user_id' => $userId,
             'role' => 'user',
-            'content' => $data['question'],
+            // 🖼️ On garde le contenu affiché à l'utilisateur PROPRE (son texte
+            // brut, pas la description/OCR) : l'historique visuel du chat ne
+            // doit pas s'encombrer du texte extrait de l'image.
+            'content' => $rawQuestion !== '' ? $rawQuestion : '📷 Image envoyée',
         ]);
+
+
+        if ($request->hasFile('image')) {
+
+            $attachement = MessageAttachment::create([
+                'id' => (string) Str::uuid(),
+                'message_id' => $userMessage->id,
+                'type' => 'image',
+                'url' => "unknown",
+                'content_hash' => $visionResult['content_hash'] ?? null,
+                'description' => $visionResult['description'] ?? null,
+                'ocr_text' => $visionResult['ocr_text'] ?? null,
+            ]);
+
+            if($attachement){
+                $document = $this->saveDocument($files, $attachement, 'image');
+                $attachmentUrl = asset($document->path);
+                $attachement->update(['url' => $attachmentUrl]);
+            }
+        }
 
         // ────────────────
         // 1️⃣ Mémoire structurée
@@ -124,7 +203,12 @@ class ChatController extends Controller
         $this->mercureService->post($topic, [
             'type' => 'user_message',
             'conversation_id' => $conversation->id,
-            'content' => $data['question'],
+            'content' => $userMessage->content,
+            // 🖼️ objet minimal (pas besoin du MessageAttachment complet côté front)
+            'attachment' => $attachmentUrl ? [
+                'url' => $attachmentUrl,
+                'type' => 'image',
+            ] : null,
             'created_at' => now()->toISOString(),
         ]);
 
@@ -132,7 +216,7 @@ class ChatController extends Controller
         // Générer la réponse (🧠 avec mémoire)
         $chatResponse = $this->chatService->answer(
             site: $site,
-            question: $data['question'],
+            question: $enrichedQuestion,
             conversation: $conversation
         );
 
@@ -201,6 +285,54 @@ class ChatController extends Controller
             'ctas' => $chatResponse->ctas, // front-end peut directement afficher
             'entities' => $chatResponse->entities,
             'conversation_id' => $conversation->id,
+            // 🖼️ même format que l'event Mercure, pour un traitement unifié côté front
+            'attachment' => $attachmentUrl ? [
+                'url' => $attachmentUrl,
+                'type' => 'image',
+            ] : null,
+            // le widget peut afficher immédiatement la vignette envoyée.
+            'user_message_attachment_url' => $attachmentUrl,
         ]);
+    }
+
+    private function moveImage($file)
+    {
+        $currentDateTime = Carbon::now();
+        $formattedDateTime = $currentDateTime->format('Ymd_His');
+
+        $path_file = (string) Str::uuid() . '.' . $file->getClientOriginalExtension();
+        $file->move(public_path('assets/resources/chats/'), $path_file);
+
+        return "assets/resources/chats/" . $path_file;
+    }
+    // Méthode pour supprimer une image
+    private function deleteImage($path)
+    {
+        if ( file_exists( public_path($path) ) ) {
+            unlink(public_path($path));
+        }
+    }
+    private function saveDocument($files, MessageAttachment $attachement, string $type){
+
+        $document = null;
+        if (is_array($files)) {
+
+            foreach ($files as $file) {
+                $documentPath = $this->moveImage($file);
+                $extension = $files->getClientOriginalExtension();
+                $document = new Document([ 'id' => (string) Str::uuid(), 'path' => $documentPath, 'type' => $type, 'extension' => $extension]);
+                $document = $attachement->documents()->save($document);
+            }
+
+        } else {
+
+            $documentPath = $this->moveImage($files);
+            $extension = $files->getClientOriginalExtension();
+            $document = new Document([ 'id' => (string) Str::uuid(), 'path' => $documentPath, 'type' => $type, 'extension' => $extension]);
+            $document = $attachement->documents()->save($document);
+
+        }
+
+        return $document;
     }
 }
