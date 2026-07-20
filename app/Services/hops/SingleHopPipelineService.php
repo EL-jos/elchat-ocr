@@ -2,6 +2,7 @@
 
 namespace App\Services\hops;
 
+use App\Contracts\ConversationEngineInterface;
 use App\Models\Conversation;
 use App\Models\Site;
 use App\Models\UnansweredQuestion;
@@ -29,6 +30,7 @@ use App\Services\rag\LLMReRankerService;
 use App\Services\rag\RetrievalOptimizer;
 use App\Services\vector\VectorSearchService;
 use App\Traits\TextNormalizer;
+use App\ValueObjects\ConversationDirective;
 use Illuminate\Support\Facades\Log;
 
 class SingleHopPipelineService
@@ -87,6 +89,7 @@ class SingleHopPipelineService
         protected HybridSearchService $hybridSearchService,
         protected LLMReRankerService $LLMReRankerService,
         protected ContextSelectionService $contextSelectionService,
+        protected ConversationEngineInterface $conversationEngine,
 
     )
     {}
@@ -94,7 +97,14 @@ class SingleHopPipelineService
     /**
      * Réponse commerciale incarnée (mode production)
      */
-    public function handle(string $question, QueryPlan $queryPlan, Site $site, Conversation $conversation = null, array $history = [],): HopResponse
+    public function handle(
+        string $question,
+        QueryPlan $queryPlan,
+        Site $site,
+        Conversation $conversation = null,
+        array $history = [],
+        ?ConversationDirective $directive = null,   // 🆕
+    ): HopResponse
     {
 
         $query = $queryPlan->cleanQuery;
@@ -265,6 +275,17 @@ class SingleHopPipelineService
             ->toArray();
         $maxChunks = 10; // chunks + messages
         $allContextChunks = array_slice($allContextChunks, 0, $maxChunks);
+        if ($directive) {
+            $directive = $this->conversationEngine->refine(
+                directive: $directive,
+                retrievedChunkCount: count($allContextChunks),
+                plan: $queryPlan,
+                // groundingConfidence: pas d'équivalent dans ce pipeline en une
+                // passe, on laisse null → la politique retombe sur le comptage
+                // de chunks (voir §4 pour le cas MultiHop, qui fournit un score
+                // de confiance à la place).
+            );
+        }
         // Construire le contexte final pour le LLM
         $context = $this->contextBuilder->build($allContextChunks);
         /*Log::info("CONTEXT BUILDER", [
@@ -304,7 +325,8 @@ class SingleHopPipelineService
             history: $history,
             conversation: $conversation,
             cats: $ctas,
-            entities: $entities
+            entities: $entities,
+            directive: $directive
         );
 
         //Log::info("Prompt Payload:", $promptPayload);

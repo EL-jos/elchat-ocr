@@ -76,7 +76,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="assets/images/sub-banner-img.png" alt="robot">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="robot">
                         </figure>
                         <!-- sub banner img con -->
                     </div>
@@ -108,7 +108,7 @@
                         <div class="plan-content">
                             <h3 class="">Starter</h3>
                             <p>
-                                Pour les petites entreprises qui testent l’automatisation de leurs conversations avec l’IA.
+                                Pour les petites entreprises qui souhaitent lancer leur premier assistant IA.
                             </p>
                             <div class="generic-price d-inline-block">
                                 <span class="d-block  starting-at">
@@ -124,19 +124,32 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    1 site
+                                    1 site web
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    1 réseau social
+                                    1 réseau social connecté
                                 </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Assistant IA basé sur votre site et vos documents
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Import de documents
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Indexation automatique du site web
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Réponses avec sources
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Historique des conversations
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Widget personnalisable
+                                </li>
+
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
                                     Jusqu’à 50 messages / mois
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 10 000 chunks de connaissances
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 1M tokens IA (usage optimisé)
                                 </li>
                             </ul>
                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
@@ -149,7 +162,7 @@
                         <div class="plan-content">
                             <h3 class="">Business</h3>
                             <p>
-                                Pour les indépendants et petites équipes qui veulent une automatisation plus sérieuse.
+                                Pour les entreprises qui souhaitent automatiser leur relation client sur plusieurs canaux.
                             </p>
                             <div class="generic-price d-inline-block">
                                 <span class="d-block starting-at">À partir de :</span>
@@ -164,19 +177,22 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    1 site
+                                    Tout Starter
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    3 réseaux sociaux
+                                    2 réseaux sociaux connectés
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    boîte e-mail professionnelle connectée
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Catalogue produits
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Suggestions automatiques d'amélioration de la base de connaissances
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
                                     Jusqu’à 150 messages / mois
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 55 000 chunks de connaissances
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 3M tokens IA
                                 </li>
                             </ul>
                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
@@ -206,19 +222,22 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    3 sites
+                                    Tout Business
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    3 réseaux sociaux par site
+                                    Jusqu'à 3 sites
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Jusqu'à 3 réseaux sociaux par site
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    1 boîte e-mail professionnelle connectée par site
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Gestion multi-sites
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
                                     Jusqu’à 300 messages / mois (GLOBAL)
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 100 000 chunks de connaissances
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 20M tokens IA
                                 </li>
                             </ul>
                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
@@ -250,22 +269,25 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    À partir de 3 sites
+                                    Tout Pro
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    5 réseaux sociaux par site
+                                    3+ sites web
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 900 messages / mois (GLOBAL)
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 200 000 chunks de connaissances
-                                </li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 100M tokens IA
+                                    Jusqu'à 5 réseaux sociaux par site
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
                                     SLA premium
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Customer Success Manager dédié
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Support prioritaire
+                                </li>
+                                <li class="position-relative"><i class="fa-solid fa-check"></i>
+                                    Jusqu’à 900 messages / mois (GLOBAL)
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
                                     White-label option

@@ -9,6 +9,7 @@ use App\Models\Social\SocialConversation;
 use App\Models\Social\SocialEvent;
 use App\Models\Social\SocialMessage;
 use App\Services\Social\ConversationBridgeService;
+use App\Services\Social\SocialImageAnalysisService;
 use App\Services\Social\UserResolver;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,7 @@ class FacebookEventParser
     public function __construct(
         private readonly UserResolver              $userResolver,
         private readonly ConversationBridgeService $conversationBridge,
+        private readonly SocialImageAnalysisService $socialImageAnalysisService, // 🆕
     ) {}
 
     // ─────────────────────────────────────────────────────────
@@ -168,6 +170,7 @@ class FacebookEventParser
         $commentId = $value['comment_id'] ?? null;
         $parentId  = $value['parent_id']  ?? null;
         $content   = $value['message']    ?? $value['story'] ?? null;
+        $photoUrl = $value['photo'] ?? null; // 🆕 Meta expose value.photo si le commentaire a une photo
 
         if (!$from || !isset($from['id'])) {
             Log::warning('[Facebook][Feed] "from" manquant', $value);
@@ -214,6 +217,23 @@ class FacebookEventParser
         $externalMessageId = $commentId
             ?? ('fb_feed_' . ($value['created_time'] ?? uniqid()));
 
+        $messageType = MessageType::TEXT->value;
+        $imageMeta   = null;
+
+        if ($photoUrl) {
+            $visionResult = $this->socialImageAnalysisService->analyzeFromUrl(
+                $photoUrl,
+                $content,
+                "facebook-feed-comment:{$commentId}",
+            );
+
+            if ($visionResult) {
+                $content     = $this->socialImageAnalysisService->buildEnrichedContent($content, $visionResult);
+                $messageType = MessageType::IMAGE->value;
+                $imageMeta   = $this->socialImageAnalysisService->buildMetadataBlock($visionResult, $photoUrl);
+            }
+        }
+
         $message = SocialMessage::firstOrCreate(
             [
                 'provider'            => 'facebook',
@@ -223,9 +243,9 @@ class FacebookEventParser
                 'social_conversation_id' => $conversation->id,
                 'direction'              => 'incoming',
                 'content'                => $content ?? '[no content]',
-                'message_type'           => MessageType::TEXT->value,
+                'message_type'           => $messageType,
                 'generated_by_ai'        => false,
-                'metadata'               => [
+                'metadata'               => array_merge([
                     'raw'               => $value,
                     'post_id'           => $postId,
                     'comment_id'        => $commentId,
@@ -234,7 +254,7 @@ class FacebookEventParser
                     'is_reply'          => $isReply,
                     'post'              => $value['post']                  ?? null,
                     'permalink'         => $value['post']['permalink_url'] ?? null,
-                ],
+                ], $imageMeta ? ['image' => $imageMeta] : []), // 🆕,
                 'published_at' => $publishedAt,
             ]
         );
@@ -533,6 +553,7 @@ class FacebookEventParser
         $text   = $msg['text'] ?? null;
         $mid    = $msg['mid']  ?? null;
         $isEcho = ($msg['is_echo'] ?? false) || $senderId === $account->provider_account_id;
+        $imageUrl = $this->extractImageAttachmentUrl($msg); // 🆕
 
         if ($isEcho) {
             $this->handleInboxEcho(
@@ -548,8 +569,8 @@ class FacebookEventParser
             return;
         }
 
-        if (!$text) {
-            Log::info("[{$provider}][DM] Message non-texte reçu", [
+        if (!$text && !$imageUrl) {
+            Log::info("[{$provider}][DM] Message non-texte/non-image reçu", [
                 'type' => $this->resolveAttachmentType($msg),
                 'mid'  => $mid,
             ]);
@@ -588,6 +609,25 @@ class FacebookEventParser
             ]
         );
 
+        // 🆕 Analyse vision si image présente
+        $content     = $text;
+        $messageType = MessageType::TEXT->value;
+        $imageMeta   = null;
+
+        if ($imageUrl) {
+            $visionResult = $this->socialImageAnalysisService->analyzeFromUrl(
+                $imageUrl,
+                $text,
+                "meta-{$provider}-dm:{$mid}",
+            );
+
+            if ($visionResult) {
+                $content     = $this->socialImageAnalysisService->buildEnrichedContent($text, $visionResult);
+                $messageType = MessageType::IMAGE->value;
+                $imageMeta   = $this->socialImageAnalysisService->buildMetadataBlock($visionResult, $imageUrl);
+            }
+        }
+
         $message = SocialMessage::firstOrCreate(
             [
                 'provider'            => $provider,
@@ -596,15 +636,15 @@ class FacebookEventParser
             [
                 'social_conversation_id' => $conversation->id,
                 'direction'              => 'incoming',
-                'content'                => $text,
-                'message_type'           => MessageType::TEXT->value,
+                'content'                => $content,     // 🆕 était $text
+                'message_type'           => $messageType, // 🆕 était MessageType::TEXT->value
                 'generated_by_ai'        => false,
-                'metadata'               => [
+                'metadata'               => array_merge([
                     'raw'          => $messagingEvent,
                     'sender_id'    => $senderId,
                     'recipient_id' => $recipientId,
                     'mid'          => $mid,
-                ],
+                ], $imageMeta ? ['image' => $imageMeta] : []), // 🆕
                 'published_at' => $publishedAt,
             ]
         );
@@ -629,7 +669,7 @@ class FacebookEventParser
                 socialMessage:      $message,
                 isNewConversation:  $conversation->wasRecentlyCreated,
                 contextTitle:       null,
-                contextDescription: $text,
+                contextDescription: $content,
             );
 
             SocialMessageReceivedJob::dispatch($message->id);
@@ -903,6 +943,22 @@ class FacebookEventParser
             return 'sticker';
         }
         return 'unknown';
+    }
+
+    /**
+     * URL de l'image d'un DM Messenger/Instagram, si présente.
+     * Format Meta : attachments: [{ type: 'image', payload: { url: '...' } }]
+     * (identique sur Facebook Messenger et Instagram DM)
+     */
+    private function extractImageAttachmentUrl(array $msg): ?string
+    {
+        $attachment = $msg['attachments'][0] ?? null;
+
+        if (($attachment['type'] ?? null) !== 'image') {
+            return null;
+        }
+
+        return $attachment['payload']['url'] ?? null;
     }
 
     private function touchConversation(SocialConversation $conversation, Carbon $publishedAt): void

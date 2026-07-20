@@ -43,4 +43,9 @@ return [
     'call_timeout' => (int) env('VISION_CALL_TIMEOUT', 45),
 
     'max_retries' => (int) env('VISION_MAX_RETRIES', 4),
+
+    // Active/désactive l'OCR/vision UNIQUEMENT pour le crawl web (CrawlService).
+    // N'affecte pas l'analyse des documents uploadés, des produits, ni des
+    // réseaux sociaux — chacun a son propre point d'entrée indépendant. 
+    'crawl_enabled' => (bool) env('VISION_CRAWL_ENABLED', true),
 ];

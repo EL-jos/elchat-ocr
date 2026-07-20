@@ -5,6 +5,7 @@ namespace App\Services\ia;
 use App\Models\AIRole;
 use App\Models\Conversation;
 use App\Models\Site;
+use App\ValueObjects\ConversationDirective;
 use Illuminate\Support\Facades\DB;
 
 class PromptBuilder
@@ -17,6 +18,7 @@ class PromptBuilder
         ?Conversation $conversation = null,
         ?array $cats = [],
         ?array $entities = [],
+        ?ConversationDirective $directive = null,   // 🆕
         ?array $extra = []
     ): array {
 
@@ -53,6 +55,11 @@ CONTEXTE CONVERSATIONNEL UTILE POUR RÉPONDRE
 MEMORY;
         }
 
+        // 🆕 SYSTEM — CONVERSATION ENGINE (juste après le bloc MEMORY, avant l'assemblage)
+        if ($directive && $conversationBlock = $this->buildConversationEngineBlock($directive)) {
+            $systemParts[] = $conversationBlock;
+        }
+
         // 🔥 Ajout du SYSTEM global (toujours en premier)
         if (!empty($systemParts)) {
             $messages[] = [
@@ -76,8 +83,31 @@ MEMORY;
 
         return [
             'system' => $this->buildSystemPrompt($site),
-            'messages' => $messages
+            'messages' => $messages,
+            'max_tokens' => $directive?->maxTokens ?? 380,   // 🆕
         ];
+    }
+
+    // 🆕 nouvelle méthode
+    protected function buildConversationEngineBlock(ConversationDirective $directive): string
+    {
+        if (empty($directive->styleHints)) {
+            return "";
+        }
+
+        $hints = implode("\n", array_map(fn($h) => "- {$h}", $directive->styleHints));
+
+        return <<<BLOCK
+==============================
+STYLE DE RÉPONSE POUR CET ÉCHANGE
+==============================
+
+Ces indications concernent uniquement la forme de ta réponse (longueur,
+rythme, posture). Elles ne modifient jamais les règles factuelles ni le
+rôle défini plus haut.
+
+{$hints}
+BLOCK;
     }
 
     protected function buildContextPrompt(string $context): string

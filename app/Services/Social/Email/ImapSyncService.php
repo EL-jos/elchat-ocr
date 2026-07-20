@@ -82,6 +82,7 @@ class ImapSyncService
                                 ?? strip_tags($msg->getHTMLBody() ?? ''),
                             'date'        => $msg->getDate()->toString(),
                             'in_reply_to' => $msg->getHeader()->get('in-reply-to')?->first() ?? null,
+                            'attachments' => $this->extractImageAttachments($msg), // 🆕
                         ],
                         'metadata' => [
                             'received_at' => now()->toISOString(),
@@ -138,5 +139,59 @@ class ImapSyncService
             'password'      => decrypt($imap['password']),
             'protocol'      => 'imap',
         ]);
+    }
+
+    /**
+     * Ne garde que les pièces jointes image, filtre les logos de signature
+     * (même liste que Gmail/Outlook/crawl : config('vision.filename_blacklist')),
+     * et se limite à 1 image par email pour contrôler le coût.
+     *
+     * ⚠️ Écrit en base64 car $emailData finit dans SocialEvent.payload (colonne
+     * JSON) — des octets bruts non-UTF8 corrompraient le json_encode().
+     *
+     * ⚠️ API Webklex : getAttachments()/getMimeType()/getName()/getContent() sont
+     * celles de la branche stable actuelle (2.x/3.x). Si ta version installée
+     * diverge (certaines anciennes versions exposent des propriétés au lieu de
+     * méthodes), adapte ces 4 appels — le reste de la logique ne change pas.
+     */
+    private function extractImageAttachments($msg): array
+    {
+        $images = [];
+
+        try {
+            foreach ($msg->getAttachments() as $attachment) {
+
+                $mime = strtolower($attachment->getMimeType() ?? '');
+
+                if (!str_starts_with($mime, 'image/')) {
+                    continue; // on ignore le mime AVANT de lire le contenu (évite un fetch IMAP inutile)
+                }
+
+                $filename = strtolower($attachment->getName() ?? 'image');
+
+                $blacklisted = false;
+                foreach (config('vision.filename_blacklist', []) as $needle) {
+                    if (str_contains($filename, $needle)) {
+                        $blacklisted = true;
+                        break;
+                    }
+                }
+                if ($blacklisted) {
+                    continue;
+                }
+
+                $images[] = [
+                    'mime'         => $mime,
+                    'filename'     => $filename,
+                    'bytes_base64' => base64_encode($attachment->getContent()),
+                ];
+
+                break; // 1 image suffit — cohérent avec le choix fait pour Gmail
+            }
+        } catch (Throwable $e) {
+            Log::warning('[IMAP] Extraction pièce jointe échouée', ['error' => $e->getMessage()]);
+        }
+
+        return $images;
     }
 }

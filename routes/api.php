@@ -63,6 +63,12 @@ Route::prefix('v1')->group(function () {
             Route::get('/conversation/{conversationId}/{siteId}/admin', 'messagesAdmin');
             Route::get('/conversation/{conversationId}/site/{siteId}/user/{userId}', 'messagesByUser');
             Route::get('/site/{siteId}/users/{userId}/conversations', "conversationsByUser");
+
+            Route::get('sites/{siteId}/conversations', 'index');
+            Route::get('site/{siteId}/conversations/{conversation}', 'show');
+            Route::get('site/{siteId}/conversations/{conversation}/messages', 'adminMessages');
+            Route::patch('conversations/{conversation}/status', 'updateStatus');
+            Route::post('conversations/{conversation}/convert-to-user', 'convertToUser');
         });
         Route::post('/site/{site}/manual-content', [ManualContentController::class, 'store']);
         Route::post('/site/{site}/sitemap', [SitemapController::class, 'store']);

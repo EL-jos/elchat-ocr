@@ -182,6 +182,12 @@ class CrawlService {
      */
     private function extractImageCandidates(Crawler $main, string $baseUrl, Site $site): array
     {
+        // 🔌 Coupe-circuit crawl uniquement — retour immédiat, aucun parcours DOM,
+        // aucune requête `img` exécutée, donc aucun coût même en cas de gros site.
+        if (!config('vision.crawl_enabled', true)) {
+            return [];
+        }
+        
         $maxPerPage = (int) config('vision.max_images_per_page', 15);
         $minWidth   = (int) config('vision.min_width', 100);
         $minHeight  = (int) config('vision.min_height', 100);

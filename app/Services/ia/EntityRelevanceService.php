@@ -62,12 +62,12 @@ class EntityRelevanceService
         $weights = config('entities.relevance.weights');
 
         $semantic = $this->semanticScore($entity, $questionEmbedding);
-        //$keyword  = $this->keywordScore($entity, $question);
+        $keyword  = $this->keywordScore($entity, $question);
         $bonus    = $this->entityBonus($entity, $queryEntities);
 
         return
             ($semantic * $weights['semantic']) +
-            //($keyword  * $weights['keyword']) +
+            ($keyword  * $weights['keyword']) +
             ($bonus    * $weights['entity_bonus']);
     }
 

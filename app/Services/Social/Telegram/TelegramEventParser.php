@@ -9,15 +9,19 @@ use App\Models\Social\SocialConversation;
 use App\Models\Social\SocialEvent;
 use App\Models\Social\SocialMessage;
 use App\Services\Social\ConversationBridgeService;
+use App\Services\Social\SocialImageAnalysisService;
 use App\Services\Social\UserResolver;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
+use Throwable;
 
 class TelegramEventParser
 {
     public function __construct(
         private readonly UserResolver              $userResolver,
         private readonly ConversationBridgeService $conversationBridge,
+        private readonly SocialImageAnalysisService $socialImageAnalysisService, // 🆕
     ) {}
 
     public function handle(SocialEvent $event): void
@@ -85,13 +89,14 @@ class TelegramEventParser
             return;
         }
 
-        if (!$text) {
-            // ✅ Cas particulier : message de type "contact" → on extrait
-            // le numéro de téléphone pour enrichir le User si besoin.
+        // APRÈS
+        $hasPhoto = isset($msg['photo']); // 🆕
+
+        if (!$text && !$hasPhoto) {
             if (isset($msg['contact'])) {
                 $this->handleContactMessage($account, $msg, $chat, $from, $chatId, $chatType, $publishedAt);
             } else {
-                Log::info('[Telegram][Message] Message non-texte reçu', [
+                Log::info('[Telegram][Message] Message non-texte/non-image reçu', [
                     'type'       => $this->resolveAttachmentType($msg),
                     'message_id' => $messageId,
                     'chat_id'    => $chatId,
@@ -121,6 +126,32 @@ class TelegramEventParser
         $parentMessage     = $this->resolveParentMessage($replyTo, $publishedAt);
         $externalMessageId = $this->buildExternalMessageId($account->id, $chatId, $messageId);
 
+        // 🆕
+        $content     = $text;
+        $messageType = MessageType::TEXT->value;
+        $imageMeta   = null;
+
+        if ($hasPhoto) {
+            $bytes = $this->downloadTelegramPhoto($account, $msg);
+
+            if ($bytes) {
+                $visionResult = $this->socialImageAnalysisService->analyzeBytes(
+                    $bytes,
+                    $text, // légende Telegram (msg.caption), déjà capturée dans $text plus haut
+                    "telegram-photo:{$externalMessageId}",
+                );
+
+                if ($visionResult) {
+                    $content     = $this->socialImageAnalysisService->buildEnrichedContent($text, $visionResult);
+                    $messageType = MessageType::IMAGE->value;
+                    $imageMeta   = $this->socialImageAnalysisService->buildMetadataBlock($visionResult);
+                }
+            }
+
+            // Photo présente mais téléchargement/analyse échoués et pas de légende
+            $content ??= '[Image reçue, analyse indisponible]';
+        }
+
         $message = SocialMessage::firstOrCreate(
             [
                 'provider'            => 'telegram',
@@ -129,10 +160,10 @@ class TelegramEventParser
             [
                 'social_conversation_id' => $conversation->id,
                 'direction'              => 'incoming',
-                'content'                => $text,
-                'message_type'           => MessageType::TEXT->value,
+                'content'                => $content,
+                'message_type'           => $messageType,
                 'generated_by_ai'        => false,
-                'metadata'               => [
+                'metadata'               => array_merge([
                     'chat_id'           => $chatId,
                     'chat_type'         => $chatType,
                     'message_id'        => $messageId,
@@ -141,7 +172,7 @@ class TelegramEventParser
                     'parent_message_id' => $parentMessage?->id,
                     'is_reply'          => $replyTo !== null,
                     'raw'               => $msg,
-                ],
+                ], $imageMeta ? ['image' => $imageMeta] : []), // 🆕
                 'published_at' => $publishedAt,
             ]
         );
@@ -535,6 +566,50 @@ class TelegramEventParser
 
         if (!$current || $publishedAt->greaterThan($current)) {
             $conversation->update(['last_message_at' => $publishedAt]);
+        }
+    }
+
+    /**
+     * Télécharge la plus grande résolution disponible d'une photo Telegram.
+     * Nécessite 2 appels Bot API : Telegram ne transmet jamais l'URL directe
+     * dans le webhook, seulement un file_id à résoudre.
+     *
+     * ⚠️ ASSOMPTION à vérifier : le token du bot est lu sur $account->access_token
+     * (même convention que Gmail/Outlook plus bas dans EmailEventParser). Si le
+     * tien vit ailleurs (ex: $account->metadata['bot_token']), adapte cette ligne.
+     */
+    private function downloadTelegramPhoto(SocialAccount $account, array $msg): ?string
+    {
+        $photos = $msg['photo'] ?? null;
+        if (!$photos) {
+            return null;
+        }
+
+        // Telegram trie du plus petit au plus grand : le dernier = la meilleure résolution
+        $fileId = end($photos)['file_id'] ?? null;
+        if (!$fileId) {
+            return null;
+        }
+
+        $botToken = $account->access_token;
+
+        try {
+            $filePath = Http::get("https://api.telegram.org/bot{$botToken}/getFile", [
+                'file_id' => $fileId,
+            ])->json('result.file_path');
+
+            if (!$filePath) {
+                return null;
+            }
+
+            $response = Http::timeout(20)
+                ->get("https://api.telegram.org/file/bot{$botToken}/{$filePath}");
+
+            return $response->successful() ? $response->body() : null;
+
+        } catch (Throwable $e) {
+            Log::warning('[Telegram][Photo] Téléchargement échoué', ['error' => $e->getMessage()]);
+            return null;
         }
     }
 }

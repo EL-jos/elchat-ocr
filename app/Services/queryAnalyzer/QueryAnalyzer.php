@@ -12,9 +12,11 @@ class QueryAnalyzer
     public function __construct(
 
     ) {}
-    public function analyze(string $question, Conversation $conversation): QueryPlan
+    public function analyze(string $question, Conversation $conversation, ?string $rawQuestion = null): QueryPlan
     {
-        $prompt = $this->buildPrompt($question, $conversation);
+        $rawQuestion ??= $question; // rétrocompatible : si non fourni, comportement inchangé
+
+        $prompt = $this->buildPrompt($question, $conversation, $rawQuestion);
 
         $maxValidationRetries = 5;
 
@@ -165,7 +167,7 @@ class QueryAnalyzer
             $this->buildFallbackPlan($question)
         );
     }
-    private function buildPrompt(string $question, Conversation $conversation): string
+    private function buildPrompt(string $question, Conversation $conversation, string $rawQuestion): string
     {
         $summary = $conversation->summary ?? "";
 
@@ -186,6 +188,9 @@ class QueryAnalyzer
         User question:
         {$question}
 
+        Raw user input (texte tel que tapé, AVANT réécriture) :
+        {$rawQuestion}
+
         =================
         OBJECTIVES
         =================
@@ -199,6 +204,7 @@ class QueryAnalyzer
         5. Filters (ONLY if explicitly or implicitly required)
         6. Retrieval strategy (based on query complexity)
         7. Constraints (explicit or implicit limits such as budget, time, region, compliance, performance, etc.)
+        8. Reply polarity: classify whether "Raw user input" is a short confirmation, a short refusal, or neither
 
         =================
         JSON SCHEMA CONTRACT (MANDATORY)
@@ -227,6 +233,7 @@ class QueryAnalyzer
         top_k: 30
         search_strategy: "single"
         constraints: []
+        reply_polarity: "neutral"
 
         Every key is REQUIRED.
 
@@ -273,7 +280,9 @@ class QueryAnalyzer
 
           "search_strategy": "single | multi_query | decomposition",
 
-          "constraints": []
+          "constraints": [],
+
+          "reply_polarity": "affirmative | negative | neutral"
         }
 
         =================
@@ -393,6 +402,24 @@ class QueryAnalyzer
         download → requesting a resource
 
         =================
+        REPLY POLARITY DEFINITION
+        =================
+
+        Classify "Raw user input" alone (ignore "User question" for this field) :
+
+        - "affirmative" → short confirmation: "oui", "ok", "vas-y", "carrément",
+          "avec plaisir", "pourquoi pas"...
+        - "negative" → short refusal/decline: "non", "non merci", "pas besoin",
+          "laisse tomber", "pas vraiment"...
+        - "neutral" → anything else: a real question, a statement, an ambiguous or
+          longer message, or no clear polarity
+
+        Do NOT infer polarity from a full sentence — only from short confirmatory or
+        declining replies. A full question is always "neutral", even if it contains
+        "oui" or "non" as a sub-word (e.g. "avez-vous des matelas non traités
+        chimiquement ?" → neutral, NOT negative).
+
+        =================
         FAILSAFE
         =================
 
@@ -451,6 +478,8 @@ class QueryAnalyzer
         $plan->constraints = is_array($data['constraints'] ?? null)
             ? $data['constraints']
             : [];
+
+        $plan->replyPolarity = $data['reply_polarity'] ?? 'neutral';
 
         return $plan;
     }
@@ -617,7 +646,16 @@ class QueryAnalyzer
                                         "items" => [
                                             "type" => "string"
                                         ]
-                                    ]
+                                    ],
+
+                                    "reply_polarity" => [
+                                        "type" => "string",
+                                        "enum" => [
+                                            "affirmative",
+                                            "negative",
+                                            "neutral"
+                                        ]
+                                    ],
                                 ],
 
                                 "required" => [
@@ -631,7 +669,8 @@ class QueryAnalyzer
                                     "filters",
                                     "top_k",
                                     "search_strategy",
-                                    "constraints"
+                                    "constraints",
+                                    "reply_polarity"
                                 ],
 
                                 "additionalProperties" => false
@@ -700,7 +739,8 @@ class QueryAnalyzer
             "filters" => [],
             "top_k" => 30,
             "search_strategy" => "single",
-            "constraints" => []
+            "constraints" => [],
+            "reply_polarity" => "neutral"
         ]);
     }
     private function extractJson(string $response): ?array
@@ -746,7 +786,8 @@ class QueryAnalyzer
             'filters',
             'top_k',
             'search_strategy',
-            'constraints'
+            'constraints',
+            'reply_polarity'
         ];
 
         foreach ($requiredFields as $field) {
@@ -792,6 +833,10 @@ class QueryAnalyzer
             return false;
         }
 
+        if (!is_string($data['reply_polarity'])) {
+            return false;
+        }
+
         return true;
     }
     private function validateEnums(array $data): bool
@@ -820,6 +865,8 @@ class QueryAnalyzer
             'decomposition'
         ];
 
+        $validReplyPolarities = ['affirmative', 'negative', 'neutral'];
+
         if (!in_array($data['intent'], $validIntents)) {
             return false;
         }
@@ -829,6 +876,10 @@ class QueryAnalyzer
         }
 
         if (!in_array($data['search_strategy'], $validStrategies)) {
+            return false;
+        }
+
+        if (!in_array($data['reply_polarity'], $validReplyPolarities)) {
             return false;
         }
 
@@ -892,6 +943,7 @@ You MUST now:
         $data['intent'] = strtolower(trim($data['intent']));
         $data['query_type'] = strtolower(trim($data['query_type']));
         $data['search_strategy'] = strtolower(trim($data['search_strategy']));
+        $data['reply_polarity'] = strtolower(trim($data['reply_polarity'] ?? 'neutral'));
 
         $data['top_k'] = max(
             1,
@@ -930,7 +982,9 @@ You MUST now:
 
             "search_strategy" => "single",
 
-            "constraints" => []
+            "constraints" => [],
+
+            "reply_polarity" => "neutral",
         ];
     }
 }

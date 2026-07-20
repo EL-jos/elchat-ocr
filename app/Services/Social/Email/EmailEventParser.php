@@ -9,6 +9,7 @@ use App\Models\Social\SocialConversation;
 use App\Models\Social\SocialEvent;
 use App\Models\Social\SocialMessage;
 use App\Services\Social\ConversationBridgeService;
+use App\Services\Social\SocialImageAnalysisService;
 use App\Services\Social\UserResolver;
 use App\SocialChannels\Email\GmailChannel;
 use Illuminate\Support\Carbon;
@@ -24,6 +25,7 @@ class EmailEventParser
     public function __construct(
         private readonly UserResolver              $userResolver,
         private readonly ConversationBridgeService $conversationBridge,
+        private readonly SocialImageAnalysisService $socialImageAnalysisService, // 🆕
     ) {}
 
     // ─────────────────────────────────────────────────────────
@@ -80,6 +82,61 @@ class EmailEventParser
 
         if ($historyId) {
             $account->update(['sync_cursor' => (string) $historyId]);
+        }
+    }
+
+    /**
+     * Parcourt récursivement les parts MIME pour trouver les pièces jointes
+     * image/*. Réutilise config('vision.filename_blacklist') pour ignorer les
+     * logos de signature (même liste que le crawl/documents).
+     */
+    private function extractGmailImageAttachments(SocialAccount $account, string $gmailMessageId, array $payload): array
+    {
+        $images = [];
+
+        $this->walkGmailParts($payload, function (array $part) use (&$images, $account, $gmailMessageId) {
+
+            if (!str_starts_with($part['mimeType'] ?? '', 'image/')) {
+                return;
+            }
+
+            $filename = strtolower($part['filename'] ?? 'image');
+
+            foreach (config('vision.filename_blacklist', []) as $needle) {
+                if (str_contains($filename, $needle)) return; // logo de signature, etc.
+            }
+
+            if (!empty($part['body']['data'])) {
+                $images[] = ['bytes' => base64_decode(strtr($part['body']['data'], '-_', '+/')), 'filename' => $filename];
+                return;
+            }
+
+            $attachmentId = $part['body']['attachmentId'] ?? null;
+            if (!$attachmentId) return;
+
+            try {
+                $data = Http::withToken($account->access_token)
+                    ->get("{$this->gmailUrl}/messages/{$gmailMessageId}/attachments/{$attachmentId}")
+                    ->json('data');
+
+                if ($data) {
+                    $images[] = ['bytes' => base64_decode(strtr($data, '-_', '+/')), 'filename' => $filename];
+                }
+            } catch (Throwable $e) {
+                Log::warning('[Gmail] Pièce jointe échouée', ['error' => $e->getMessage()]);
+            }
+        });
+
+        return $images;
+    }
+
+    private function walkGmailParts(array $payload, callable $callback): void
+    {
+        if (isset($payload['mimeType'])) {
+            $callback($payload);
+        }
+        foreach ($payload['parts'] ?? [] as $part) {
+            $this->walkGmailParts($part, $callback);
         }
     }
 
@@ -176,6 +233,27 @@ class EmailEventParser
 
         $publishedAt = $date ? Carbon::parse($date) : now();
         $body        = $this->extractGmailBody($msg['payload'] ?? []);
+        // 🆕 — on ne traite que la 1ère image pertinente (pas de logo/signature) :
+// contrôle du coût, une image suffit largement pour capter l'intention.
+        $content     = $body ?? $subject;
+        $messageType = MessageType::TEXT->value;
+        $imageMeta   = null;
+
+        $relevantImage = collect($this->extractGmailImageAttachments($account, $gmailMessageId, $msg['payload'] ?? []))->first();
+
+        if ($relevantImage) {
+            $visionResult = $this->socialImageAnalysisService->analyzeBytes(
+                $relevantImage['bytes'],
+                $body,
+                "gmail-attachment:{$gmailMessageId}",
+            );
+
+            if ($visionResult) {
+                $content     = $this->socialImageAnalysisService->buildEnrichedContent($body, $visionResult);
+                $messageType = MessageType::IMAGE->value;
+                $imageMeta   = $this->socialImageAnalysisService->buildMetadataBlock($visionResult);
+            }
+        }
 
         [$senderName, $senderEmail] = $this->parseEmailAddress($from ?? '');
 
@@ -203,10 +281,10 @@ class EmailEventParser
             [
                 'social_conversation_id' => $conversation->id,
                 'direction'              => 'incoming',
-                'content'                => $body ?? $subject,
-                'message_type'           => MessageType::TEXT->value,
+                'content'                => $content,
+                'message_type'           => $messageType,
                 'generated_by_ai'        => false,
-                'metadata'               => [
+                'metadata'               => array_merge([
                     'gmail_message_id'  => $gmailMessageId,
                     'thread_id'         => $threadId,
                     'subject'           => $subject,
@@ -215,7 +293,7 @@ class EmailEventParser
                     'in_reply_to'       => $inReplyTo,
                     'message_id_header' => $messageIdH,
                     'raw_headers'       => $headers->toArray(),
-                ],
+                ], $imageMeta ? ['image' => $imageMeta] : []), // 🆕
                 'published_at' => $publishedAt,
             ]
         );
@@ -317,7 +395,7 @@ class EmailEventParser
         try {
             $response = Http::withToken($account->access_token)
                 ->get("{$this->graphUrl}/me/messages/{$outlookMessageId}", [
-                    '$select' => 'id,subject,from,toRecipients,body,receivedDateTime,conversationId,isRead,isDraft',
+                    '$select' => 'id,subject,from,toRecipients,body,receivedDateTime,conversationId,isRead,isDraft,hasAttachments', // 🆕
                 ]);
 
             if (!$response->successful()) return;
@@ -335,6 +413,25 @@ class EmailEventParser
         $senderName  = $from['name']                ?? null;
         $threadId    = $msg['conversationId']       ?? null;
         $body        = strip_tags($msg['body']['content'] ?? '');
+        $content     = $body ?: $subject;
+        $messageType = MessageType::TEXT->value;
+        $imageMeta   = null;
+
+        if (!empty($msg['hasAttachments'])) {
+            $imageAttachment = $this->fetchOutlookImageAttachment($account, $outlookMessageId);
+
+            if ($imageAttachment) {
+                $visionResult = $this->socialImageAnalysisService->analyzeBytes(
+                    $imageAttachment['bytes'], $body, "outlook-attachment:{$outlookMessageId}",
+                );
+
+                if ($visionResult) {
+                    $content     = $this->socialImageAnalysisService->buildEnrichedContent($body, $visionResult);
+                    $messageType = MessageType::IMAGE->value;
+                    $imageMeta   = $this->socialImageAnalysisService->buildMetadataBlock($visionResult);
+                }
+            }
+        }
         $publishedAt = isset($msg['receivedDateTime'])
             ? Carbon::parse($msg['receivedDateTime'])
             : now();
@@ -359,10 +456,10 @@ class EmailEventParser
             [
                 'social_conversation_id' => $conversation->id,
                 'direction'              => 'incoming',
-                'content'                => $body ?: $subject,
-                'message_type'           => MessageType::TEXT->value,
+                'content'                => $content,
+                'message_type'           => $messageType,
                 'generated_by_ai'        => false,
-                'metadata'               => [
+                'metadata'               => array_merge([
                     'outlook_message_id' => $outlookMessageId,
                     'thread_id'          => $threadId,
                     'subject'            => $subject,
@@ -370,7 +467,7 @@ class EmailEventParser
                     'from_name'          => $senderName,
                     'is_read'            => $msg['isRead'] ?? false,
                     'raw'                => $msg,
-                ],
+                ], $imageMeta ? ['image' => $imageMeta] : []), // 🆕
                 'published_at' => $publishedAt,
             ]
         );
@@ -404,6 +501,32 @@ class EmailEventParser
         $this->touchConversation($conversation, $publishedAt);
     }
 
+    private function fetchOutlookImageAttachment(SocialAccount $account, string $outlookMessageId): ?array
+    {
+        try {
+            $attachments = Http::withToken($account->access_token)
+                ->get("{$this->graphUrl}/me/messages/{$outlookMessageId}/attachments")
+                ->json('value', []);
+
+            foreach ($attachments as $att) {
+                if (!str_starts_with($att['contentType'] ?? '', 'image/')) continue;
+
+                $name = strtolower($att['name'] ?? '');
+                $blacklisted = collect(config('vision.filename_blacklist', []))
+                    ->contains(fn($needle) => str_contains($name, $needle));
+                if ($blacklisted) continue;
+
+                if (!empty($att['contentBytes'])) {
+                    return ['bytes' => base64_decode($att['contentBytes']), 'filename' => $att['name'] ?? 'image'];
+                }
+            }
+        } catch (Throwable $e) {
+            Log::warning('[Outlook] Pièce jointe échouée', ['error' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
     // ─────────────────────────────────────────────────────────
     // IMAP
     // ─────────────────────────────────────────────────────────
@@ -422,6 +545,29 @@ class EmailEventParser
         $senderEmail = $emailData['from_email'] ?? null;
         $senderName  = $emailData['from_name']  ?? null;
         $body        = $emailData['body']        ?? $subject;
+        // Dans handleImap(), après $body = $emailData['body'] ?? $subject;
+        $content     = $body;
+        $messageType = MessageType::TEXT->value;
+        $imageMeta   = null;
+
+        $imageAttachment = collect($emailData['attachments'] ?? [])
+            ->first(fn($att) => str_starts_with($att['mime'] ?? '', 'image/'));
+
+        if ($imageAttachment) {
+            $bytes = base64_decode($imageAttachment['bytes_base64']); // 🆕 était 'bytes' brut, maintenant décodé
+
+            $visionResult = $this->socialImageAnalysisService->analyzeBytes(
+                $bytes,
+                $body,
+                "imap-attachment:{$externalId}",
+            );
+
+            if ($visionResult) {
+                $content     = $this->socialImageAnalysisService->buildEnrichedContent($body, $visionResult);
+                $messageType = MessageType::IMAGE->value;
+                $imageMeta   = $this->socialImageAnalysisService->buildMetadataBlock($visionResult);
+            }
+        }
         $threadId    = $emailData['message_id'] ?? null;
         $publishedAt = isset($emailData['date'])
             ? Carbon::parse($emailData['date'])
@@ -446,10 +592,12 @@ class EmailEventParser
             [
                 'social_conversation_id' => $conversation->id,
                 'direction'              => 'incoming',
-                'content'                => $body,
-                'message_type'           => MessageType::TEXT->value,
+                'content'                => $content,
+                'message_type'           => $messageType,
                 'generated_by_ai'        => false,
-                'metadata'               => $emailData,
+                'metadata'               => array_merge(
+                    $emailData,
+                    $imageMeta ? ['image' => $imageMeta] : []), // 🆕
                 'published_at'           => $publishedAt,
             ]
         );
@@ -600,7 +748,7 @@ class EmailEventParser
 
     // ─────────────────────────────────────────────────────────
     // HELPERS
-    // ───────────────────────────────────────────────────────── 
+    // ─────────────────────────────────────────────────────────
 
     private function extractGmailBody(array $payload): ?string
     {

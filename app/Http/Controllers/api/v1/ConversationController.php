@@ -3,28 +3,64 @@
 namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\UpdateConversationStatusRequest;
+use App\Http\Resources\ConversationDetailResource;
+use App\Http\Resources\ConversationListResource;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\conversation\VisitorConversionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Http\Resources\MessageResource;
 
 class ConversationController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index(Request $request)
-    {
-        $data = $request->validate([
-            'site_id' => 'required|exists:sites,id',
-        ]);
-        $conversations = Conversation::with('messages')
-            ->where('site_id', $data['site_id'])
-            ->where('user_id', auth()->id())
-            ->get();
+    public function __construct(
+        private readonly VisitorConversionService $conversionService
+    ) {
+    }
 
-        return response()->json($conversations);
+    /**
+     * GET /api/sites/{siteId}/conversations
+     * Liste paginée pour la sidebar, filtrable par statut et recherche
+     * (résumé, nom/email de l'utilisateur rattaché).
+     */
+    public function index(Request $request, string $siteId): JsonResponse
+    {
+        $perPage = (int) $request->integer('per_page', 20);
+
+        $query = Conversation::query()
+            ->where('site_id', $siteId)
+            ->with(['user'])
+            ->withCount('messages')
+            ->orderByDesc('updated_at');
+
+        if ($status = $request->string('status')->toString()) {
+            $query->where('status', $status);
+        }
+
+        if ($search = $request->string('search')->toString()) {
+            $query->where(function ($q) use ($search) {
+                $q->where('summary', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($u) use ($search) {
+                        $u->where('firstname', 'like', "%{$search}%")
+                            ->orWhere('lastname', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        $paginator = $query->paginate($perPage);
+
+        return response()->json([
+            'data' => ConversationListResource::collection($paginator->items()),
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+        ]);
     }
 
     /**
@@ -35,18 +71,55 @@ class ConversationController extends Controller
         //
     }
     /**
-     * Display the specified resource.
+     * GET /api/sites/{siteId}/conversations/{conversation}
+     *
+     * Bundle "meta" complet : visiteur/utilisateur, résumé, mémoire structurée,
+     * dernière soumission de formulaire. Les messages restent chargés séparément
+     * via l'endpoint paginé déjà existant (GET /conversation/{id}/messages),
+     * pour ne pas dupliquer une pagination qui fonctionne déjà.
      */
-    public function show(Conversation $conversation)
+    public function show(string $siteId, Conversation $conversation): JsonResponse
     {
-        //
+        abort_unless($conversation->site_id === $siteId, 404);
+
+        $conversation->load([
+            'visitor',
+            'user',
+            'memory',
+            'formSubmissions' => fn ($q) => $q->latest()->limit(1)->with('files'),
+        ]);
+
+        return response()->json(new ConversationDetailResource($conversation));
     }
     /**
-     * Update the specified resource in storage.
+     * PATCH /api/sites/{siteId}/conversations/{conversation}/status
      */
-    public function update(Request $request, Conversation $conversation)
+    public function updateStatus(UpdateConversationStatusRequest $request, string $siteId, Conversation $conversation): JsonResponse
     {
-        //
+        abort_unless($conversation->site_id === $siteId, 404);
+
+        $conversation->update(['status' => $request->validated('status')]);
+
+        return response()->json(['success' => true, 'status' => $conversation->status]);
+    }
+
+    /**
+     * POST /api/sites/{siteId}/conversations/{conversation}/convert-to-user
+     */
+    public function convertToUser(string $siteId, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->site_id === $siteId, 404);
+
+        $result = $this->conversionService->convert($conversation);
+
+        if (! $result['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 422);
+        }
+
+        return response()->json($result);
     }
     /**
      * Remove the specified resource from storage.
@@ -211,5 +284,34 @@ class ConversationController extends Controller
         });
 
         return response()->json($formatted);
+    }
+
+    /**
+     * GET /v1/site/{siteId}/conversations/{conversation}/messages
+     *
+     * Messages paginés et enrichis (CTAs affichées, pièce jointe, soumissions de
+     * formulaire) pour le panneau de l'onglet admin "Conversations".
+     * Distincte de messages()/messagesAdmin()/messagesByUser() : celles-ci ont
+     * des scopes d'autorisation différents (visiteur propriétaire, ou aucun
+     * filtre de site) et ne renvoient pas un format paginé enrichi.
+     */
+    public function adminMessages(Request $request, string $siteId, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->site_id === $siteId, 404);
+
+        $perPage = (int) $request->integer('per_page', 30);
+
+        $paginator = $conversation->messages()
+            ->with(['displayedCtas', 'chatFormSubmissions.files'])
+            ->orderBy('created_at', 'asc')
+            ->paginate($perPage);
+
+        return response()->json([
+            'data' => MessageResource::collection($paginator->items()),
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+        ]);
     }
 }

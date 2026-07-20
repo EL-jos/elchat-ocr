@@ -15,4 +15,5 @@ class QueryPlan
     public int $topK = 8;
     public string $searchStrategy = "single";
     public  array $constraints = [];
+    public string $replyPolarity = 'neutral';
 }

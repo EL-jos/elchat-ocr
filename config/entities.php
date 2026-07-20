@@ -31,9 +31,9 @@ return [
         'threshold' => 0.55,
 
         'weights' => [
-            'semantic' => 0.7,
-            'keyword' => 0.2,
-            'entity_bonus' => 0.1,
+            'semantic' => 0.5,   // 0.7 → 0.5
+            'keyword' => 0.2,    // inchangé, mais enfin actif
+            'entity_bonus' => 0.3, // 0.1 → 0.3
         ],
 
         'fields' => [

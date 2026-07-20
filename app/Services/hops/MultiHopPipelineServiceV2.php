@@ -2,6 +2,7 @@
 
 namespace App\Services\hops;
 
+use App\Contracts\ConversationEngineInterface;
 use App\Models\Conversation;
 use App\Models\Site;
 use App\Services\chunks\ChunkHydrationService;
@@ -17,6 +18,7 @@ use App\Services\ia\PromptBuilder;
 use App\Services\queryAnalyzer\QueryPlan;
 use App\Services\rag\ContextSelectionService;
 use App\Services\rag\LLMReRankerService;
+use App\ValueObjects\ConversationDirective;
 use Illuminate\Support\Facades\Log;
 
 class MultiHopPipelineServiceV2
@@ -36,7 +38,8 @@ class MultiHopPipelineServiceV2
         protected EntityExtractor $entityExtractor,
         protected EntityRelevanceService $entityRelevanceService,
         protected CTAEngine $CTAEngine,
-        protected CTARelevanceService $CTARelevanceService
+        protected CTARelevanceService $CTARelevanceService,
+        protected ConversationEngineInterface $conversationEngine,
 
     ) {}
     public function handle(
@@ -44,7 +47,8 @@ class MultiHopPipelineServiceV2
         QueryPlan $plan,
         Site $site,
         ?Conversation $conversation = null,
-        ?array $history = []
+        ?array $history = [],
+        ?ConversationDirective $directive = null
     ): HopResponse {
 
         Log::info("MULTI-HOP ACTIVATED");
@@ -173,18 +177,33 @@ class MultiHopPipelineServiceV2
         );*/
 
         $entities = $this->entityExtractor->extract(chunks: $finalChunks);
-        $entities = $this->entityRelevanceService->filterRelevant(
+        /*$entities = $this->entityRelevanceService->filterRelevant(
             entities: $entities,
             question: $plan->cleanQuery,
             queryEntities: $plan->entities ?? []
-        );
+        );*/
         $ctas = $this->CTAEngine->resolve(site: $site, queryPlan: $plan, conversation: $conversation);
-        $ctas = $this->CTARelevanceService->filterRelevant(
+        /*$ctas = $this->CTARelevanceService->filterRelevant(
             ctas: $ctas,
             queryPlan: $plan,
             question: $plan->cleanQuery,
             entities: $entities
-        );
+        );*/
+
+        // juste avant :  $context = $this->contextBuilder->build($finalChunks);
+        if ($directive) {
+            $directive = $this->conversationEngine->refine(
+                directive: $directive,
+                retrievedChunkCount: count($finalChunks),
+                plan: $plan,
+                // 🆕 ce pipeline dispose déjà d'un score de confiance cumulé
+                // (coverage/quality/diversity), plus fiable ici qu'un comptage de
+                // chunks qui grossit mécaniquement à chaque hop. On le transmet
+                // pour que ClarifyingQuestionPolicy l'utilise à la place du seuil
+                // de comptage (voir App\Services\conversation\ClarifyingQuestionPolicy).
+                groundingConfidence: $state['confidence']['final'] ?? null,
+            );
+        }
 
         $context = $this->contextBuilder->build($finalChunks);
 
@@ -208,6 +227,7 @@ class MultiHopPipelineServiceV2
             conversation: $conversation,
             cats: $ctas,
             entities: $entities,
+            directive: $directive,              // 🆕
             extra: [
                 'structured_summary' => $state['summary']
             ],

@@ -1,6 +1,7 @@
 <?php
 namespace App\Services\ia;
 
+use App\Contracts\ConversationEngineInterface;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Site;
@@ -80,6 +81,8 @@ class ChatService
         protected RetrievalQueryExpander $retrievalQueryExpander,
 
         protected MercureService $mercureService, // 🔹 ajouté
+
+        protected ConversationEngineInterface $conversationEngine,
     )
     {}
 
@@ -124,7 +127,11 @@ class ChatService
         // ─────────────────────────────
         // 2️⃣ Query Analysis
         // ─────────────────────────────
-        $baseQueryPlan  = $this->queryAnalyzer->analyze(question: $resolvedQuestion, conversation: $conversation);
+        $baseQueryPlan  = $this->queryAnalyzer->analyze(
+            question: $resolvedQuestion,
+            conversation: $conversation,
+            rawQuestion: $question,   // 🆕 texte brut, avant réécriture
+        );
 
         // ─────────────────────────────
         // 3️⃣ Retrieval Expansion
@@ -172,6 +179,16 @@ class ChatService
                 ];
             })
             ->toArray();
+
+        $directive = $this->conversationEngine->decide(
+            plan: $baseQueryPlan,
+            site: $site,
+            conversation: $conversation,
+            question: $question,        // 🆕 le texte BRUT tapé par l'utilisateur, PAS $resolvedQuestion
+            history: $history,
+        );
+
+        Log::info('Conversation Directive', $directive->toLogArray());
 
         // ─────────────────────────────
         // Runtime State
@@ -237,14 +254,16 @@ class ChatService
                     plan: $queryPlan,
                     site: $site,
                     conversation: $conversation,
-                    history: $history
+                    history: $history,
+                    directive: $directive
                 )
                 : $this->singleHopPipelineService->handle(
                     question: $currentQuestion,
                     queryPlan: $queryPlan,
                     site: $site,
                     conversation: $conversation,
-                    history: $history
+                    history: $history,
+                    directive: $directive
                 );
 
             if (is_null($results->prompt) || (!is_null($results->message))) {
@@ -422,7 +441,7 @@ class ChatService
                     'model' => 'openai/gpt-4.1-mini',
                     'messages' => $messages,
                     'temperature' => floatval($settings->ai_temperature),
-                    'max_tokens' => 350//$settings->ai_max_tokens,
+                    'max_tokens' => $prompt['max_tokens'] ?? $settings->ai_max_tokens ?? 350,//$settings->ai_max_tokens,
                 ]);
 
                 // Vérifier si la requête HTTP a échoué (statut 4xx, 5xx)
