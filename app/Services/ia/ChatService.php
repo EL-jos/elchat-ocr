@@ -11,6 +11,7 @@ use App\Services\hops\HopResponse;
 use App\Services\hops\MultiHopPipelineService;
 use App\Services\hops\MultiHopPipelineServiceV2;
 use App\Services\hops\SingleHopPipelineService;
+use App\Services\mcp\MCPActionGateService;
 use App\Services\MercureService;
 use App\Services\queryAnalyzer\IntentRouter;
 use App\Services\queryAnalyzer\LeadService;
@@ -83,6 +84,8 @@ class ChatService
         protected MercureService $mercureService, // 🔹 ajouté
 
         protected ConversationEngineInterface $conversationEngine,
+        // 🆕 MCP
+        protected MCPActionGateService $mcpActionGateService,
     )
     {}
 
@@ -179,6 +182,41 @@ class ChatService
                 ];
             })
             ->toArray();
+
+        // ─────────────────────────────
+        // 🆕 4️⃣bis Passerelle MCP (actions : commande, rendez-vous...)
+        // ─────────────────────────────
+        // S'exécute AVANT le pipeline RAG. Si le site n'a aucun connecteur MCP
+        // actif, retourne immédiatement sans coût LLM. Si la demande n'est pas une
+        // action (cas normal, question de connaissance), retourne 'not_applicable'
+        // et la suite de cette méthode s'exécute EXACTEMENT comme aujourd'hui.
+        $mcpResult = $this->mcpActionGateService->tryHandle(
+            site: $site,
+            conversation: $conversation,
+            question: $question,   // texte brut du visiteur, pas $resolvedQuestion
+            history: $history,
+        );
+
+        if ($mcpResult->status === 'finished') {
+            return $mcpResult->response;
+        }
+
+        if ($mcpResult->status === 'awaiting_confirmation') {
+            return new ChatResponse(
+                message: "Avant de continuer, pouvez-vous confirmer cette action ?",
+                ctas: [],
+                entities: [],
+                pendingConfirmation: [
+                    'connector' => $mcpResult->pendingConnector,
+                    'tool' => $mcpResult->pendingTool,
+                    'params' => $mcpResult->pendingParams,
+                    'tool_call_id' => $mcpResult->pendingToolCallId,
+                    'messages' => $mcpResult->pendingMessages, // à renvoyer tel quel lors de la confirmation
+                ],
+            );
+        }
+
+        // $mcpResult->status === 'not_applicable' => on continue le flux existant, rien ne change ci-dessous.
 
         $directive = $this->conversationEngine->decide(
             plan: $baseQueryPlan,

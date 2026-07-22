@@ -18,6 +18,8 @@ use App\Http\Controllers\api\v1\WidgetVisitorController;
 use App\Http\Controllers\api\v2\CtaController;
 use App\Http\Controllers\api\v4\Form\ChatbotFormController;
 use App\Http\Controllers\api\v4\SocialIntegrationController;
+use App\Http\Controllers\api\v5\MCPConnectorController;
+use App\Http\Controllers\api\v5\MCPPermissionController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
 use App\Http\Controllers\web\v4\FacebookWebhookController;
 use App\Http\Controllers\web\v4\InstagramConnectController;
@@ -120,8 +122,24 @@ Route::prefix('v1')->group(function () {
             Route::get('/sites/{siteId}/forms/{formId}/submissions', 'submissions');
         });
 
+        Route::prefix('/site/{site}/mcp')->group(function () {
+
+            Route::controller(MCPConnectorController::class)->group(function () {
+                Route::get('/connectors', 'index');
+                Route::post('/connectors/{slug}/activate', 'activateWithApiKey');
+                Route::post('/connectors/{slug}/deactivate', 'deactivate');
+                Route::get('/connectors/{slug}/oauth/redirect', 'oauthRedirect');
+            });
+
+            Route::controller(MCPPermissionController::class)->group(function () {
+                Route::get('/permissions', 'index');
+                Route::put('/permissions', 'update');
+            });
+
+        });
+
     });
-    
+
     Route::controller(SiteController::class)->group(function () {
         Route::get('/site/{site_id}/widget/config', 'widgetConfig');
     });
@@ -145,7 +163,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/sites/{siteId}/forms/{form}/submissions', 'submitForm');
         });
     });
-    
+
     Route::prefix('social')->group(function () {
 
         Route::prefix('/facebook')->controller(FacebookConnectController::class)->group(function () {
@@ -161,5 +179,9 @@ Route::prefix('v1')->group(function () {
         });
 
     });
+
+    Route::post('/conversations/{conversation}/confirm-mcp-action', [
+        ChatController::class, 'confirmMcpAction',
+    ]);
 
 });

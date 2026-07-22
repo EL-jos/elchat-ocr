@@ -1,0 +1,122 @@
+<?php
+
+namespace App\Http\Controllers\api\v5;
+
+use App\Domain\MCP\Security\CredentialVault;
+use App\Http\Controllers\Controller;
+use App\Models\Site;
+use App\Models\Mcp\McpConnector;
+use Illuminate\Http\Request;
+
+/**
+ * API du "marketplace de connecteurs" côté admin site (consommée par le
+ * module Angular mcp/connector-marketplace).
+ */
+class MCPConnectorController extends Controller
+{
+    public function __construct(private readonly CredentialVault $vault)
+    {
+    }
+
+    /**
+     * Liste tous les connecteurs disponibles + leur statut d'activation
+     * pour le site courant.
+     */
+    public function index(Request $request, Site $site)
+    {
+        $connectors = McpConnector::where('is_active', true)
+            ->with(['siteConnectors' => fn ($q) => $q->where('site_id', $site->id)])
+            ->get()
+            ->map(function (McpConnector $connector) {
+                $activation = $connector->siteConnectors->first();
+
+                return [
+                    'slug' => $connector->slug,
+                    'name' => $connector->name,
+                    'category' => $connector->category,
+                    'auth_type' => $connector->auth_type,
+                    'icon_url' => $connector->icon_url,
+                    'description' => $connector->description,
+                    'status' => $activation->status ?? 'not_connected',
+                    'connected_at' => $activation->connected_at ?? null,
+                ];
+            });
+
+        return response()->json(['data' => $connectors]);
+    }
+
+    /**
+     * Active un connecteur à identifiants statiques (API key/secret, ex:
+     * WooCommerce). Pour l'OAuth2 (Google Calendar...), voir
+     * oauthRedirect/oauthCallback ci-dessous.
+     */
+    public function activateWithApiKey(Request $request, Site $site, string $slug)
+    {
+        $validated = $request->validate([
+            'credentials' => ['required', 'array'],
+            'settings' => ['array'],
+        ]);
+
+        $connector = McpConnector::where('slug', $slug)->where('auth_type', 'api_key')->firstOrFail();
+
+        $this->vault->store($site, $slug, $validated['credentials'], $validated['settings'] ?? []);
+
+        return response()->json(['status' => 'connected']);
+    }
+
+    public function deactivate(Request $request, Site $site, string $slug)
+    {
+        $this->vault->revoke($site, $slug);
+
+        return response()->json(['status' => 'revoked']);
+    }
+
+    /**
+     * Démarre le flux OAuth2 pour un connecteur donné (Google Calendar...).
+     * Retourne l'URL d'autorisation à ouvrir côté Angular.
+     */
+    public function oauthRedirect(Request $request, Site $site, string $slug)
+    {
+        $state = encrypt(['site_id' => $site->id, 'connector' => $slug]);
+
+        $url = match ($slug) {
+            'google_calendar' => 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
+                'client_id' => config('mcp.connectors.google_calendar.client_id'),
+                'redirect_uri' => config('mcp.connectors.google_calendar.redirect_uri'),
+                'response_type' => 'code',
+                'access_type' => 'offline',
+                'prompt' => 'consent',
+                'scope' => 'https://www.googleapis.com/auth/calendar',
+                'state' => $state,
+            ]),
+            default => abort(404, "OAuth non supporté pour {$slug}"),
+        };
+
+        return response()->json(['authorization_url' => $url]);
+    }
+
+    public function oauthCallback(Request $request, string $slug)
+    {
+        $state = decrypt($request->query('state'));
+        $site = Site::findOrFail($state['site_id']);
+        $code = $request->query('code');
+
+        // Échange du code contre les tokens — logique spécifique à chaque
+        // provider. Exemple minimal pour Google Calendar :
+        $tokenResponse = \Illuminate\Support\Facades\Http::asForm()->post('https://oauth2.googleapis.com/token', [
+            'client_id' => config('mcp.connectors.google_calendar.client_id'),
+            'client_secret' => config('mcp.connectors.google_calendar.client_secret'),
+            'redirect_uri' => config('mcp.connectors.google_calendar.redirect_uri'),
+            'code' => $code,
+            'grant_type' => 'authorization_code',
+        ])->throw()->json();
+
+        $this->vault->store($site, $slug, [
+            'access_token' => $tokenResponse['access_token'],
+            'refresh_token' => $tokenResponse['refresh_token'],
+            'expires_at' => now()->addSeconds($tokenResponse['expires_in'])->timestamp,
+        ]);
+
+        return redirect(config('app.frontend_url') . '/settings/connectors?connected=' . $slug);
+    }
+}

@@ -11,6 +11,7 @@ use App\Models\MessageCTA;
 use App\Models\Site;
 use App\Services\ia\ChatService;
 use App\Services\ia\EmbeddingService;
+use App\Services\mcp\MCPActionGateService;
 use App\Services\MercureService;
 use App\Services\vector\VectorCreationService;
 use App\Services\vector\VectorIndexService;
@@ -31,6 +32,7 @@ class ChatController extends Controller
         private VectorIndexService $vectorIndexService,
         private EmbeddingService $embeddingService,
         private ImageVisionService $imageVisionService,
+        private MCPActionGateService $mcpActionGateService, // 🆕
     ){}
     public function ask(Request $request)
     {
@@ -292,6 +294,8 @@ class ChatController extends Controller
             ] : null,
             // le widget peut afficher immédiatement la vignette envoyée.
             'user_message_attachment_url' => $attachmentUrl,
+            // 🆕 non-null seulement si une action nécessite une confirmation
+            'pending_mcp_confirmation' => $chatResponse->pendingConfirmation,
         ]);
     }
 
@@ -334,5 +338,54 @@ class ChatController extends Controller
         }
 
         return $document;
+    }
+
+    public function confirmMcpAction(Request $request, Conversation $conversation)
+    {
+        $validated = $request->validate([
+            'approved' => ['required', 'boolean'],
+            'connector' => ['required', 'string'],
+            'tool' => ['required', 'string'],
+            'params' => ['array'],
+            'tool_call_id' => ['required', 'string'],
+            'messages' => ['required', 'array'], // renvoyé tel quel depuis pending_mcp_confirmation
+        ]);
+
+        $site = $conversation->site;
+
+        $result = $this->mcpActionGateService->resumeAfterConfirmation(
+            site: $site,
+            conversation: $conversation,
+            pendingMessages: $validated['messages'],
+            connectorSlug: $validated['connector'],
+            toolName: $validated['tool'],
+            params: $validated['params'] ?? [],
+            toolCallId: $validated['tool_call_id'],
+            approved: $validated['approved'],
+        );
+
+        $chatResponse = $result->response ?? new \App\Services\cta\ChatResponse(
+            message: "D'accord, cette action a été annulée.",
+            ctas: [],
+            entities: [],
+        );
+
+        $botMessage = Message::create([
+            'id' => (string) Str::uuid(),
+            'conversation_id' => $conversation->id,
+            'role' => 'bot',
+            'content' => $chatResponse->message,
+        ]);
+
+        $this->mercureService->post("/sites/{$site->id}/conversations/{$conversation->id}", [
+            'type' => 'bot_message',
+            'conversation_id' => $conversation->id,
+            'content' => $chatResponse->message,
+            'ctas' => [],
+            'entities' => [],
+            'created_at' => now()->toISOString(),
+        ]);
+
+        return response()->json(['answer' => $chatResponse->message]);
     }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\api\v5\MCPConnectorController;
 use App\Http\Controllers\web\PageController;
 #use App\Http\Controllers\web\v1\FacebookWebhookController;
 use App\Http\Controllers\web\v1\GoogleController;
@@ -141,6 +142,9 @@ Route::prefix('social')->group(function (){
     });
 
 });
+
+Route::get('/site/{site}/mcp/connectors/{slug}/oauth/callback', [MCPConnectorController::class, 'oauthCallback']);
+
 
 Route::get('/app/{any?}', function () {
     return response()->file(
