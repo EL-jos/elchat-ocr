@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\api\v5;
 
+use App\Domain\MCP\Registry\ConnectorRegistry;
 use App\Domain\MCP\Security\CredentialVault;
+use App\Domain\MCP\Security\PermissionEngine;
 use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\Mcp\McpConnector;
@@ -14,7 +16,11 @@ use Illuminate\Http\Request;
  */
 class MCPConnectorController extends Controller
 {
-    public function __construct(private readonly CredentialVault $vault)
+    public function __construct(
+        private readonly CredentialVault $vault,
+        private readonly PermissionEngine $permissions, // 🆕
+        private readonly ConnectorRegistry $registry,   // 🆕
+    )
     {
     }
 
@@ -60,6 +66,13 @@ class MCPConnectorController extends Controller
         $connector = McpConnector::where('slug', $slug)->where('auth_type', 'api_key')->firstOrFail();
 
         $this->vault->store($site, $slug, $validated['credentials'], $validated['settings'] ?? []);
+
+        // 🆕 Pré-remplit mcp_permissions avec les valeurs par défaut suggérées par
+        // chaque outil (voir ToolSchema::$defaultMode/$defaultActorScope/$defaultConfirmActor).
+        // N'écrase jamais une règle déjà configurée.
+        if ($this->registry->has($slug)) {
+            $this->permissions->seedDefaultsIfMissing($site, $this->registry->get($slug)->listTools());
+        }
 
         return response()->json(['status' => 'connected']);
     }
@@ -116,6 +129,13 @@ class MCPConnectorController extends Controller
             'refresh_token' => $tokenResponse['refresh_token'],
             'expires_at' => now()->addSeconds($tokenResponse['expires_in'])->timestamp,
         ]);
+
+        // 🆕 Pré-remplit mcp_permissions avec les valeurs par défaut suggérées par
+        // chaque outil (voir ToolSchema::$defaultMode/$defaultActorScope/$defaultConfirmActor).
+        // N'écrase jamais une règle déjà configurée.
+        if ($this->registry->has($slug)) {
+            $this->permissions->seedDefaultsIfMissing($site, $this->registry->get($slug)->listTools());
+        }
 
         return redirect(config('app.frontend_url') . '/settings/connectors?connected=' . $slug);
     }

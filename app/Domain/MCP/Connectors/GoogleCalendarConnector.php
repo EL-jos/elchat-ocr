@@ -98,7 +98,7 @@ class GoogleCalendarConnector extends AbstractConnector
         ];
     }
 
-    public function callTool(string $toolName, array $params, array $credentials): ToolResult
+    public function callTool(string $toolName, array $params, array $credentials, array $context = []): ToolResult
     {
         return match ($toolName) {
             'check_availability' => $this->checkAvailability($params, $credentials),

@@ -36,7 +36,6 @@ class MCPPermissionController extends Controller
 
         $result = [];
         foreach ($activeSlugs as $slug) {
-
             if (!$this->registry->has($slug)) {
                 continue;
             }
@@ -50,6 +49,8 @@ class MCPPermissionController extends Controller
                     'description' => $tool->description,
                     'is_write_action' => $tool->isWriteAction,
                     'mode' => $existing->mode ?? 'deny',
+                    'actor_scope' => $existing->actor_scope ?? $tool->defaultActorScope,   // 🆕
+                    'confirm_actor' => $existing->confirm_actor ?? $tool->defaultConfirmActor, // 🆕
                     'daily_call_limit' => $existing->daily_call_limit ?? null,
                 ];
             }
@@ -64,12 +65,23 @@ class MCPPermissionController extends Controller
             'connector' => ['required', 'string'],
             'tool' => ['required', 'string'],
             'mode' => ['required', 'in:auto,confirm,deny'],
+            'actor_scope' => ['required', 'in:visitor,admin'],           // 🆕
+            'confirm_actor' => ['nullable', 'in:visitor,admin'],         // 🆕
             'daily_call_limit' => ['nullable', 'integer', 'min:1'],
         ]);
 
         McpPermission::updateOrCreate(
-            ['site_id' => $site->id, 'connector_slug' => $validated['connector'], 'tool_name' => $validated['tool']],
-            ['mode' => $validated['mode'], 'daily_call_limit' => $validated['daily_call_limit'] ?? null],
+            [
+                'site_id' => $site->id,
+                'connector_slug' => $validated['connector'],
+                'tool_name' => $validated['tool']
+            ],
+            [
+                'mode' => $validated['mode'],
+                'actor_scope' => $validated['actor_scope'],       // 🆕
+                'confirm_actor' => $validated['confirm_actor'] ?? null, // 🆕
+                'daily_call_limit' => $validated['daily_call_limit'] ?? null
+            ],
         );
 
         return response()->json(['status' => 'updated']);

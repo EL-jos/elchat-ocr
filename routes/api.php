@@ -19,6 +19,7 @@ use App\Http\Controllers\api\v2\CtaController;
 use App\Http\Controllers\api\v4\Form\ChatbotFormController;
 use App\Http\Controllers\api\v4\SocialIntegrationController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
+use App\Http\Controllers\api\v5\MCPPendingActionController;
 use App\Http\Controllers\api\v5\MCPPermissionController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
 use App\Http\Controllers\web\v4\FacebookWebhookController;
@@ -136,6 +137,17 @@ Route::prefix('v1')->group(function () {
                 Route::put('/permissions', 'update');
             });
 
+            Route::controller(MCPPendingActionController::class)->group(function () {
+                // 🆕 File d'attente back-office des actions à valider par un admin
+                Route::get('/pending-actions', 'index');
+                // 🆕 Résolution d'une action en attente — accessible à la fois au widget
+                // visiteur (confirm_actor='visitor', pas d'auth requise, vérifié par
+                // possession de la conversation) et à l'admin authentifié (confirm_actor='admin').
+                // Retirez auth:sanctum ici : l'autorisation fine est faite DANS le contrôleur
+                // selon confirm_actor (voir MCPPendingActionController::resolve).
+                Route::post('/pending-actions/{pendingAction}/resolve', 'resolve');
+            });
+
         });
 
     });
@@ -180,8 +192,12 @@ Route::prefix('v1')->group(function () {
 
     });
 
-    Route::post('/conversations/{conversation}/confirm-mcp-action', [
+    /*Route::post('/conversations/{conversation}/confirm-mcp-action', [
         ChatController::class, 'confirmMcpAction',
+    ]);*/
+
+    Route::post('/mcp/pending-actions/{pendingAction}/resolve', [
+        MCPPendingActionController::class, 'resolve',
     ]);
 
 });

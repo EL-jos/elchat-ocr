@@ -11,5 +11,6 @@ class ChatResponse
         // 🆕 non-null uniquement quand une action MCP attend une
         // confirmation humaine avant exécution (mode 'confirm').
         public ?array $pendingConfirmation = null,
+        public ?array $suggestedActions = null, // 🆕 [{label, prompt}]
     ) {}
 }

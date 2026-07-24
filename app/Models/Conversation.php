@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,6 +11,15 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Conversation extends BaseModel
 {
+    use HasUuids;
+    public static function booted()
+    {
+        // Tri par défaut selon la colonne "priority" en ordre croissant
+        static::addGlobalScope('order', function ($builder) {
+            $builder->orderBy('created_at', 'desc');
+        });
+    }
+
     protected $casts = [
         'metadata' => 'array',
     ];

@@ -30,7 +30,7 @@ class OpenRouterToolClient
      * @param array $tools Format OpenAI: [{type: 'function', function: {name, description, parameters}}]
      * @return array ['text' => ?string, 'tool_calls' => array] — tool_calls vide si le modèle a répondu directement.
      */
-    public function send(array $messages, array $tools, float $temperature = 0.2, int $maxTokens = 500): array
+    public function send(array $messages, array $tools, string $toolChoice = 'auto', float $temperature = 0.2, int $maxTokens = 500): array
     {
         $delay = 1;
 
@@ -42,7 +42,7 @@ class OpenRouterToolClient
                 'model' => $this->model,
                 'messages' => $messages,
                 'tools' => $tools,
-                'tool_choice' => 'auto',
+                'tool_choice' => $toolChoice, // 🆕 était hardcodé sur 'auto'
                 'temperature' => $temperature,
                 'max_tokens' => $maxTokens,
             ]);

@@ -44,8 +44,13 @@ interface MCPConnectorInterface
      * Doit toujours retourner un ToolResult, même en cas d'erreur métier
      * (commande introuvable, créneau déjà pris...) — les exceptions sont
      * réservées aux erreurs techniques (réseau, auth, timeout).
+     *
+     * $context (🆕) : injecté par MCPActionGateService, jamais fourni par le
+     *  LLM. Contient site_id, conversation_id, owner_type/owner_id (panier,
+     *  wishlist) et is_admin. Les connecteurs qui n'en ont pas besoin
+     *  (GoogleCalendarConnector) peuvent l'ignorer.
      */
-    public function callTool(string $toolName, array $params, array $credentials): ToolResult;
+    public function callTool(string $toolName, array $params, array $credentials, array $context = []): ToolResult;
 
     /**
      * Timeout par défaut en secondes pour tout appel réseau de ce connecteur.

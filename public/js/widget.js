@@ -199,8 +199,169 @@
             case 'CLOSE_WIDGET':
                 closeIframe();
                 break;
+            case 'CART_SYNC': // 🆕
+                syncCartWithWooCommerce(event.data.payload);
+                break;
+            case 'remove_many':
+                remove_many(event.data.payload);
+                break;
+            case 'OPEN_LINK': // 🆕
+                openExternalLink(event.data.payload);
+                break;
         }
     });
+
+    /* =========================
+       🆕 Synchronisation panier WooCommerce (Store API, même origine)
+    ========================= */
+    let wcCartNonce = null;
+    let cartSyncQueue = Promise.resolve(); // 🆕 sérialise les actions pour éviter les courses sur le nonce
+
+    async function wcStoreApiRequest(path, options = {}, retry = true) {
+        try {
+            const res = await fetch(`${window.location.origin}/wp-json/wc/store/v1${path}`, {
+                ...options,
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(wcCartNonce ? { 'Nonce': wcCartNonce } : {}),
+                    ...(options.headers || {}),
+                },
+            });
+            const nonceHeader = res.headers.get('Nonce') || res.headers.get('X-WC-Store-API-Nonce');
+            if (nonceHeader) wcCartNonce = nonceHeader;
+
+            if (!res.ok && retry && res.status !== 400) {
+                // 🆕 un seul retry sur erreur transitoire (pas sur 400, qui est une
+                // erreur métier — variante manquante, coupon invalide... — inutile
+                // de la rejouer)
+                return wcStoreApiRequest(path, options, false);
+            }
+
+            return res;
+        } catch (networkError) {
+            if (retry) return wcStoreApiRequest(path, options, false);
+            throw networkError;
+        }
+    }
+
+    async function wcFindCartItemKey(productId, variationId) {
+        const res = await wcStoreApiRequest('/cart');
+        const cart = await res.json();
+        const target = String(variationId || productId);
+        const match = (cart.items || []).find(item => String(item.id) === target);
+        return match ? match.key : null;
+    }
+
+    async function performCartSync(payload) {
+        if (!payload || !payload.type) return;
+
+        if (!wcCartNonce) await wcStoreApiRequest('/cart'); // amorce le nonce
+
+        switch (payload.type) {
+            case 'add':
+                await wcStoreApiRequest('/cart/add-item', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        id: payload.variation_id || payload.product_id,
+                        quantity: payload.quantity || 1,
+                    }),
+                });
+                break;
+
+            case 'update': {
+                const key = await wcFindCartItemKey(payload.product_id, payload.variation_id);
+                if (key) {
+                    await wcStoreApiRequest(`/cart/items/${key}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ quantity: payload.quantity }),
+                    });
+                }
+                break;
+            }
+
+            case 'remove': {
+                const key = await wcFindCartItemKey(payload.product_id, payload.variation_id);
+                if (key) {
+                    await wcStoreApiRequest(`/cart/items/${key}`, { method: 'DELETE' });
+                }
+                break;
+            }
+
+            case 'clear':
+                await wcStoreApiRequest('/cart/items', { method: 'DELETE' });
+                break;
+
+            // 🆕
+            case 'apply_coupon':
+                await wcStoreApiRequest('/cart/coupons', {
+                    method: 'POST',
+                    body: JSON.stringify({ code: payload.code }),
+                });
+                break;
+
+            // 🆕
+            case 'remove_coupon':
+                await wcStoreApiRequest(`/cart/coupons/${encodeURIComponent(payload.code)}`, { method: 'DELETE' });
+                break;
+        }
+
+        // Rafraîchit l'affichage panier du thème (mini-cart, compteur header...)
+        if (window.jQuery) window.jQuery(document.body).trigger('wc_fragment_refresh');
+        document.body.dispatchEvent(new CustomEvent('wc-blocks_added_to_cart', { detail: { preserveCartData: true } }));
+    }
+
+    /**
+     * 🆕 Point d'entrée public : empile l'action dans la file au lieu de
+     * l'exécuter immédiatement. Si le LLM déclenche plusieurs hops panier dans
+     * le même tour (ex: ajouter 2 produits puis appliquer un coupon), les
+     * appels Store API s'exécutent dans l'ordre, un par un — sans ça, deux
+     * requêtes concurrentes pourraient se marcher dessus sur le nonce et créer
+     * un état de panier incohérent.
+     */
+    function syncCartWithWooCommerce(payload) {
+        cartSyncQueue = cartSyncQueue
+            .then(() => performCartSync(payload))
+            .catch(e => console.warn('[ELChat] Synchronisation panier WooCommerce échouée', e));
+        return cartSyncQueue;
+    }
+
+    async function remove_many(payload){
+        for (const item of (payload.items || [])) {
+            const key = await wcFindCartItemKey(item.product_id, item.variation_id);
+            if (key) {
+                await wcStoreApiRequest(`/cart/items/${key}`, { method: 'DELETE' });
+            }
+        }
+    }
+
+    /**
+     * 🆕 Redirige le navigateur du visiteur vers l'URL fournie (ex: lien de
+     * paiement). Garde-fou : n'accepte que des URLs http(s) sur la MÊME
+     * origine que le site hôte (le store WooCommerce), pour éviter qu'un
+     * message falsifié ne redirige le visiteur vers un site tiers.
+     */
+    function openExternalLink(payload) {
+        if (!payload || !payload.url) return;
+
+        try {
+            const target = new URL(payload.url, window.location.origin);
+
+            if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+                console.warn('[ELChat] URL refusée (protocole non autorisé):', payload.url);
+                return;
+            }
+
+            if (target.origin !== window.location.origin) {
+                console.warn('[ELChat] URL refusée (origine différente du site):', payload.url);
+                return;
+            }
+
+            window.location.href = target.href;
+        } catch (e) {
+            console.warn('[ELChat] URL invalide reçue pour OPEN_LINK:', payload.url);
+        }
+    }
 
     /* =========================
        6️⃣ Fermer iframe
@@ -216,4 +377,5 @@
         createButton();
         //setupAutoOpen();
     }
+
 })();

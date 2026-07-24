@@ -41,6 +41,6 @@ return [
     ],
 
     'orchestrator' => [
-        'max_hops' => env('MCP_MAX_HOPS', 6),
+        'max_hops' => env('MCP_MAX_HOPS', 8),
     ],
 ];

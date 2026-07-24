@@ -2,29 +2,21 @@
 
 namespace App\Domain\MCP\Orchestration;
 
+use App\Models\Mcp\McpPendingAction;
 use App\Services\cta\ChatResponse;
 
 /**
- * Résultat de la passerelle MCP (App\Services\mcp\MCPActionGateService).
- *
- * - not_applicable : le LLM n'a demandé aucun outil → ce n'est pas une
- *   demande d'action, ChatService doit poursuivre son flux RAG normal
- *   (Single/MultiHop) SANS AUCUN CHANGEMENT.
- * - finished : une ou plusieurs actions ont été exécutées, réponse finale
- *   prête à renvoyer directement au visiteur.
- * - awaiting_confirmation : une action nécessite une validation humaine
- *   avant exécution (mode 'confirm' du PermissionEngine).
+ * - not_applicable : pas une action -> ChatService poursuit son flux RAG normal.
+ * - finished : réponse finale prête.
+ * - awaiting_confirmation : une mcp_pending_actions a été créée ; le visiteur
+ *   OU un agent back-office doit la résoudre (voir McpPendingAction::confirm_actor).
  */
 final readonly class MCPGateResult
 {
     private function __construct(
         public string $status,
         public ?ChatResponse $response = null,
-        public ?string $pendingConnector = null,
-        public ?string $pendingTool = null,
-        public ?array $pendingParams = null,
-        public ?string $pendingToolCallId = null,
-        public ?array $pendingMessages = null,
+        public ?McpPendingAction $pendingAction = null,
         public array $trace = [],
     ) {
     }
@@ -39,22 +31,8 @@ final readonly class MCPGateResult
         return new self(status: 'finished', response: $response, trace: $trace);
     }
 
-    public static function awaitingConfirmation(
-        string $connectorSlug,
-        string $toolName,
-        array $params,
-        string $toolCallId,
-        array $messages,
-        array $trace,
-    ): self {
-        return new self(
-            status: 'awaiting_confirmation',
-            pendingConnector: $connectorSlug,
-            pendingTool: $toolName,
-            pendingParams: $params,
-            pendingToolCallId: $toolCallId,
-            pendingMessages: $messages,
-            trace: $trace,
-        );
+    public static function awaitingConfirmation(McpPendingAction $pendingAction, array $trace): self
+    {
+        return new self(status: 'awaiting_confirmation', pendingAction: $pendingAction, trace: $trace);
     }
 }
