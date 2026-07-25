@@ -21,6 +21,7 @@ use App\Models\Mcp\McpPendingAction;
 use App\Models\Site;
 use App\Services\cta\ChatResponse;
 use App\Services\MercureService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -329,7 +330,7 @@ class MCPActionGateService
         return $schemas;
     }
 
-    private function systemPrompt(Site $site, ActorContext $actor): string
+    /*private function systemPrompt(Site $site, ActorContext $actor): string
     {
         $name = $site->name ?? parse_url($site->url ?? '', PHP_URL_HOST);
         $roleNote = $actor->isAdmin
@@ -346,6 +347,36 @@ N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider s
 étape de correction ou de nettoyage intermédiaire d'une autre action. Si un outil retourne un checkout_url,
 NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton de paiement s'affiche automatiquement séparément. Confirme
 juste que la commande est prête sans donner l'adresse toi-même.
+PROMPT;
+    }*/
+    private function systemPrompt(Site $site, ActorContext $actor): string
+    {
+        $name = $site->name ?? parse_url($site->url ?? '', PHP_URL_HOST);
+        $roleNote = $actor->isAdmin
+            ? "Tu t'adresses ici à un membre de l'équipe (back-office), pas à un visiteur public."
+            : "Tu t'adresses à un visiteur ou client du site public.";
+
+        // 🆕 Ancrage temporel explicite — sans ça, le LLM invente une date
+        // arbitraire pour "aujourd'hui"/"demain" au lieu de calculer à partir
+        // du vrai instant présent.
+        $timezone = config('app.timezone', 'UTC'); // 🆕 était config('mcp.connectors.google_calendar.default_timezone')
+        $now = now($timezone)->locale('fr')->isoFormat('dddd D MMMM YYYY [à] HH:mm');
+
+        return <<<PROMPT
+Tu es le module de décision d'action de l'assistant du site {$name}. {$roleNote} Nous sommes actuellement le
+{$now} (fuseau horaire {$timezone}). Utilise cette date comme référence exacte pour tout calcul relatif
+(aujourd'hui, demain, cette semaine, la semaine prochaine...) — ne calcule JAMAIS une date à partir d'une autre
+supposition. Exprime toute date/heure envoyée à un outil au format ISO 8601 complet avec l'année en cours ou
+suivante selon le contexte, jamais une année passée sauf si le visiteur la précise explicitement.
+Tu disposes d'outils qui exécutent de VRAIES actions (produits, panier, commandes, rendez-vous...). N'appelle
+un outil QUE si le message correspond clairement à une action que ces outils permettent. Si c'est une question
+d'information générale sans action à exécuter, NE CALL AUCUN outil. Si une information manque, demande-la au
+visiteur au lieu d'inventer une valeur. Une fois les résultats obtenus, réponds de façon claire et concise.
+Pour toute question de disponibilité de rendez-vous ("quelles sont vos disponibilités", "êtes-vous libre..."),
+préfère find_available_slots à get_busy_periods : le premier tient compte des horaires d'ouverture configurés,
+le second non — s'il retourne quand même working_hours_windows, ne propose jamais un créneau en dehors.
+N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
+un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
 PROMPT;
     }
 
@@ -456,5 +487,28 @@ PROMPT;
             ->filter(fn ($c) => in_array($c['tool'], $allowedToolNames, true))
             ->map(fn ($c) => ['label' => $c['label'], 'prompt' => $c['prompt']])
             ->values()->all();
+    }
+
+    /**
+     * 🆕 Permet à chaque site de configurer SES propres horaires de travail
+     * et/ou de surcharger le fuseau détecté automatiquement. Fusionné dans
+     * les settings existants (store_url, calendar_id...), rien d'écrasé.
+     */
+    public function updateSettings(Request $request, Site $site, string $slug)
+    {
+        $validated = $request->validate([
+            'timezone' => ['nullable', 'timezone'], // validation native Laravel (ex: "Indian/Reunion")
+            'working_hours' => ['nullable', 'array'],
+        ]);
+
+        $record = $site->mcpSiteConnectors()
+            ->whereHas('mcpConnector', fn ($q) => $q->where('slug', $slug))
+            ->firstOrFail();
+
+        $record->update([
+            'settings' => array_merge($record->settings ?? [], array_filter($validated, fn ($v) => $v !== null)),
+        ]);
+
+        return response()->json(['status' => 'updated']);
     }
 }

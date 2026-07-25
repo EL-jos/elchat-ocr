@@ -144,6 +144,7 @@ Route::prefix('social')->group(function (){
 });
 
 Route::get('/site/{site}/mcp/connectors/{slug}/oauth/callback', [MCPConnectorController::class, 'oauthCallback']);
+Route::get('/mcp/connectors/{slug}/oauth/callback', [MCPConnectorController::class, 'oauthCallback'])->name('mcp.oauth.callback'); // 🆕;
 
 
 Route::get('/app/{any?}', function () {

@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\Mcp\McpConnector;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * API du "marketplace de connecteurs" côté admin site (consommée par le
@@ -90,18 +91,29 @@ class MCPConnectorController extends Controller
      */
     public function oauthRedirect(Request $request, Site $site, string $slug)
     {
+        $clientId = config('mcp.connectors.google_calendar.client_id');
+        $redirectUri = route('mcp.oauth.callback', ['slug' => $slug]); // 🆕 plus jamais désynchronisé de la vraie route
+
+        // 🆕 Échoue explicitement plutôt que d'envoyer une requête incomplète à
+        // Google (ce qui produisait l'erreur "Missing required parameter" côté
+        // visiteur, sans aucune information exploitable dans nos logs).
+        if (!$clientId) {
+            Log::error('MCP: GOOGLE_CALENDAR_CLIENT_ID absent ou config non rechargée.');
+            return response()->json(['message' => "Connecteur Google Calendar mal configuré côté serveur."], 500);
+        }
+
         $state = encrypt(['site_id' => $site->id, 'connector' => $slug]);
 
         $url = match ($slug) {
             'google_calendar' => 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
-                'client_id' => config('mcp.connectors.google_calendar.client_id'),
-                'redirect_uri' => config('mcp.connectors.google_calendar.redirect_uri'),
-                'response_type' => 'code',
-                'access_type' => 'offline',
-                'prompt' => 'consent',
-                'scope' => 'https://www.googleapis.com/auth/calendar',
-                'state' => $state,
-            ]),
+                    'client_id' => $clientId,
+                    'redirect_uri' => $redirectUri,
+                    'response_type' => 'code',
+                    'access_type' => 'offline',
+                    'prompt' => 'consent',
+                    'scope' => 'https://www.googleapis.com/auth/calendar',
+                    'state' => $state,
+                ]),
             default => abort(404, "OAuth non supporté pour {$slug}"),
         };
 
@@ -119,7 +131,7 @@ class MCPConnectorController extends Controller
         $tokenResponse = \Illuminate\Support\Facades\Http::asForm()->post('https://oauth2.googleapis.com/token', [
             'client_id' => config('mcp.connectors.google_calendar.client_id'),
             'client_secret' => config('mcp.connectors.google_calendar.client_secret'),
-            'redirect_uri' => config('mcp.connectors.google_calendar.redirect_uri'),
+            'redirect_uri' => route('mcp.oauth.callback', ['slug' => $slug]), // 🆕 même source, garantit la cohérence
             'code' => $code,
             'grant_type' => 'authorization_code',
         ])->throw()->json();
@@ -137,6 +149,38 @@ class MCPConnectorController extends Controller
             $this->permissions->seedDefaultsIfMissing($site, $this->registry->get($slug)->listTools());
         }
 
-        return redirect(config('app.frontend_url') . '/settings/connectors?connected=' . $slug);
+        return redirect("https://elchat.io/site/{$site->id}/settings/connectors?connected={$slug}");
+    }
+
+    public function getSettings(Request $request, Site $site, string $slug)
+    {
+        $record = $site->mcpSiteConnectors()
+            ->whereHas('mcpConnector', fn ($q) => $q->where('slug', $slug))
+            ->first();
+
+        return response()->json(['settings' => $record->settings ?? []]);
+    }
+
+    /**
+     * 🆕 Permet à chaque site de configurer SES propres horaires de travail
+     * et/ou de surcharger le fuseau détecté automatiquement. Fusionné dans
+     * les settings existants (store_url, calendar_id...), rien d'écrasé.
+     */
+    public function updateSettings(Request $request, Site $site, string $slug)
+    {
+        $validated = $request->validate([
+            'timezone' => ['nullable', 'timezone'], // validation native Laravel (ex: "Indian/Reunion")
+            'working_hours' => ['nullable', 'array'],
+        ]);
+
+        $record = $site->mcpSiteConnectors()
+            ->whereHas('mcpConnector', fn ($q) => $q->where('slug', $slug))
+            ->firstOrFail();
+
+        $record->update([
+            'settings' => array_merge($record->settings ?? [], array_filter($validated, fn ($v) => $v !== null)),
+        ]);
+
+        return response()->json(['status' => 'updated']);
     }
 }

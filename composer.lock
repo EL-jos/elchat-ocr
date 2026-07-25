@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ba462f2a6aea6df21df2663630ae9af2",
+    "content-hash": "a9a36cf8c9b54293dd568c5a03f8cde4",
     "packages": [
         {
             "name": "brick/math",
@@ -6345,6 +6345,72 @@
                 "source": "https://github.com/socialiteproviders/providers"
             },
             "time": "2025-08-26T02:40:52+00:00"
+        },
+        {
+            "name": "spatie/opening-hours",
+            "version": "4.2.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/spatie/opening-hours.git",
+                "reference": "ed5f8ff72b20e8544dad841b8d146796d202726d"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/spatie/opening-hours/zipball/ed5f8ff72b20e8544dad841b8d146796d202726d",
+                "reference": "ed5f8ff72b20e8544dad841b8d146796d202726d",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "kylekatarnls/multi-tester": "^2.5",
+                "phpunit/phpunit": "^11.5.43 || ^12.4.2"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-2.x": "2.x-dev",
+                    "dev-3.x": "3.x-dev",
+                    "dev-master": "4.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Spatie\\OpeningHours\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Sebastian De Deyne",
+                    "email": "sebastian@spatie.be",
+                    "homepage": "https://spatie.be",
+                    "role": "Developer"
+                },
+                {
+                    "name": "kylekatarnls",
+                    "homepage": "https://github.com/kylekatarnls",
+                    "role": "Developer"
+                }
+            ],
+            "description": "A helper to query and format a set of opening hours",
+            "homepage": "https://github.com/spatie/opening-hours",
+            "keywords": [
+                "hours",
+                "opening",
+                "opening-hours",
+                "schedule",
+                "spatie"
+            ],
+            "support": {
+                "issues": "https://github.com/spatie/opening-hours/issues",
+                "source": "https://github.com/spatie/opening-hours/tree/4.2.2"
+            },
+            "time": "2026-07-09T19:41:40+00:00"
         },
         {
             "name": "spatie/pdf-to-text",

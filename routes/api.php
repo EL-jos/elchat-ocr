@@ -130,6 +130,8 @@ Route::prefix('v1')->group(function () {
                 Route::post('/connectors/{slug}/activate', 'activateWithApiKey');
                 Route::post('/connectors/{slug}/deactivate', 'deactivate');
                 Route::get('/connectors/{slug}/oauth/redirect', 'oauthRedirect');
+                Route::put('/connectors/{slug}/settings', 'updateSettings'); // 🆕
+                Route::get('/connectors/{slug}/settings', 'getSettings'); // 🆕
             });
 
             Route::controller(MCPPermissionController::class)->group(function () {
