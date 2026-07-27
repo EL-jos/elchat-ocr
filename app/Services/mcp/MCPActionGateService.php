@@ -3,6 +3,7 @@
 namespace App\Services\mcp;
 
 use App\Domain\MCP\Audit\AuditLogger;
+use App\Domain\MCP\Capability\CapabilityResolver;
 use App\Domain\MCP\Contracts\ToolResult;
 use App\Domain\MCP\Contracts\ToolSchema;
 use App\Domain\MCP\Exceptions\ConfirmationRequiredException;
@@ -40,11 +41,12 @@ class MCPActionGateService
         private readonly OpenRouterToolClient $llm,
         private readonly MercureService $mercureService,
         private readonly VisitorIdentityService $visitorIdentity, // 🆕
+        private readonly CapabilityResolver $capabilities, // 🆕
     ) {
         $this->maxHops = (int) config('mcp.orchestrator.max_hops', 8); // 🆕
     }
 
-    public function tryHandle(Site $site, Conversation $conversation, string $question, array $history): MCPGateResult
+    public function tryHandle(Site $site, Conversation $conversation, string $question, array $history, ?string $intent = null): MCPGateResult
     {
         $actor = ActorContext::fromConversation($conversation);
         $mcpTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
@@ -54,12 +56,12 @@ class MCPActionGateService
         }
 
         $tools = [
-            ...$this->controlTools(), // 🆕
+            ...$this->controlTools(),
             ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), [...$mcpTools, $this->ragTool->schema()]),
         ];
 
         $messages = [
-            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor)],
+            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent)], // 🆕
             ...$history,
             ['role' => 'user', 'content' => $question],
         ];
@@ -337,25 +339,6 @@ class MCPActionGateService
             ? "Tu t'adresses ici à un membre de l'équipe (back-office), pas à un visiteur public."
             : "Tu t'adresses à un visiteur ou client du site public.";
 
-        return <<<PROMPT
-Tu es le module de décision d'action de l'assistant du site {$name}. {$roleNote} Tu disposes d'outils qui
-exécutent de VRAIES actions (produits, panier, commandes...). N'appelle un outil QUE si le message correspond
-clairement à une action que ces outils permettent. Si c'est une question d'information générale sans action à
-exécuter, NE CALL AUCUN outil. Si une information manque (ex: numéro de commande, quantité), demande-la au
-visiteur au lieu d'inventer une valeur. Une fois les résultats obtenus, réponds de façon claire et concise.
-N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier — ce n'est jamais une
-étape de correction ou de nettoyage intermédiaire d'une autre action. Si un outil retourne un checkout_url,
-NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton de paiement s'affiche automatiquement séparément. Confirme
-juste que la commande est prête sans donner l'adresse toi-même.
-PROMPT;
-    }*/
-    private function systemPrompt(Site $site, ActorContext $actor): string
-    {
-        $name = $site->name ?? parse_url($site->url ?? '', PHP_URL_HOST);
-        $roleNote = $actor->isAdmin
-            ? "Tu t'adresses ici à un membre de l'équipe (back-office), pas à un visiteur public."
-            : "Tu t'adresses à un visiteur ou client du site public.";
-
         // 🆕 Ancrage temporel explicite — sans ça, le LLM invente une date
         // arbitraire pour "aujourd'hui"/"demain" au lieu de calculer à partir
         // du vrai instant présent.
@@ -375,9 +358,63 @@ visiteur au lieu d'inventer une valeur. Une fois les résultats obtenus, répond
 Pour toute question de disponibilité de rendez-vous ("quelles sont vos disponibilités", "êtes-vous libre..."),
 préfère find_available_slots à get_busy_periods : le premier tient compte des horaires d'ouverture configurés,
 le second non — s'il retourne quand même working_hours_windows, ne propose jamais un créneau en dehors.
+Si une action nécessite un email de contact (création de ticket, de contact, d'opportunité...) et que tu ne le
+connais pas encore, demande-le dès le début de l'échange plutôt qu'en toute fin, pour éviter d'aller-retour
+inutiles une fois que tu as déjà rassemblé le reste des informations.
+Certaines actions doivent être déclenchées DE TA PROPRE INITIATIVE dès que la situation l'indique clairement,
+sans attendre que le visiteur formule une demande explicite comme "crée un ticket" ou "ouvre une opportunité"
+— c'est à toi de reconnaître le signal et d'agir directement, puis d'informer simplement le visiteur de ce que
+tu as fait. Exemples : un visiteur qui signale un problème ("j'ai un souci avec...", "ça ne fonctionne pas...")
+→ ouvre un ticket de support sans qu'il ait besoin de le demander. Un visiteur qui exprime un intérêt d'achat
+clair et non ambigu ("je suis très intéressé par...", "je veux commander...", en donnant un budget ou un
+produit précis) → crée une opportunité commerciale. Un visiteur qui souhaite être recontacté → crée un contact
+et/ou une tâche de rappel. N'agis ainsi que lorsque le signal est net (pas une simple mention en passant) et
+que l'action correspondante est en mode automatique pour ce site — n'invente jamais une exécution pour une
+action en mode confirmation ou bloquée, contente-toi de l'information dans ce cas. Ne duplique jamais une
+action déjà réalisée dans cette même conversation (ex: ne recrée pas un second ticket pour le même problème
+déjà signalé) — vérifie le fil de la conversation avant d'agir une seconde fois sur le même sujet.
 N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
 PROMPT;
+    }*/
+    private function systemPrompt(Site $site, ActorContext $actor, ?string $intent = null): string
+    {
+        $name = $site->name ?? parse_url($site->url ?? '', PHP_URL_HOST);
+        $roleNote = $actor->isAdmin
+            ? "Tu t'adresses ici à un membre de l'équipe (back-office), pas à un visiteur public."
+            : "Tu t'adresses à un visiteur ou client du site public.";
+
+        // 🆕 Indice fourni par le système de classification en amont — une aide
+        // au jugement, jamais une contrainte : une intention mal classée ne doit
+        // jamais empêcher une action légitime, ni en forcer une non pertinente.
+        $intentHint = $intent
+            ? "Un système de classification amont a détecté l'intention '{$intent}' pour ce message — utilise ça comme indice pour juger s'il s'agit d'une action, sans t'y limiter si le contenu réel du message suggère autre chose."
+            : '';
+
+        $timezone = config('app.timezone', 'UTC');
+        $now = now($timezone)->locale('fr')->isoFormat('dddd D MMMM YYYY [à] HH:mm');
+
+        return <<<PROMPT
+Tu es le module de décision d'action de l'assistant du site {$name}. {$roleNote} {$intentHint} Nous sommes
+actuellement le {$now} (fuseau horaire {$timezone}). Utilise cette date comme référence exacte pour tout calcul
+relatif (aujourd'hui, demain, cette semaine...). Exprime toute date/heure envoyée à un outil au format ISO 8601
+complet, jamais une année passée sauf si le visiteur la précise explicitement.
+Tu disposes d'outils qui exécutent de VRAIES actions (produits, panier, commandes, rendez-vous, CRM...). N'appelle
+un outil QUE si le message correspond clairement à une action que ces outils permettent. Si c'est une question
+d'information générale sans action à exécuter, NE CALL AUCUN outil. Si une information manque, demande-la au
+visiteur au lieu d'inventer une valeur.
+Pour toute question de disponibilité de rendez-vous, préfère find_available_slots à get_busy_periods : le
+premier tient compte des horaires d'ouverture configurés, le second non — s'il retourne quand même
+working_hours_windows, ne propose jamais un créneau en dehors.
+Si une action nécessite un email de contact et que tu ne le connais pas encore, demande-le dès le début de
+l'échange plutôt qu'en toute fin.
+Certaines actions doivent être déclenchées DE TA PROPRE INITIATIVE dès que la situation l'indique clairement
+(ex: un problème signalé → ouvre un ticket ; un intérêt d'achat net → crée une opportunité), sans attendre une
+demande explicite — n'agis ainsi que si le signal est net et que l'action est en mode automatique, et ne
+duplique jamais une action déjà réalisée dans cette même conversation.
+N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
+un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
+PROMPT . $this->workflowGuidance($site);
     }
 
     private function thinkingLabelFor(string $connectorSlug, string $toolName): string
@@ -510,5 +547,46 @@ PROMPT;
         ]);
 
         return response()->json(['status' => 'updated']);
+    }
+
+    /**
+     * 🆕 Construit la section "workflows recommandés" du prompt : pour chaque
+     * recette active de ce site (ou globale si aucune version propre au site),
+     * résout chaque étape (capacité abstraite) vers l'outil concret réellement
+     * disponible sur CE site. Une recette dont une étape obligatoire n'est pas
+     * réalisable est simplement omise plutôt que d'induire le LLM en erreur
+     * avec un plan incomplet.
+     */
+    private function workflowGuidance(Site $site): string
+    {
+        $workflows = \App\Models\Mcp\McpWorkflow::where('is_active', true)
+            ->where(fn ($q) => $q->where('site_id', $site->id)->orWhereNull('site_id'))
+            ->get()
+            ->groupBy('slug')
+            ->map(fn ($group) => $group->firstWhere('site_id', $site->id) ?? $group->first())
+            ->values();
+
+        $lines = [];
+        foreach ($workflows as $workflow) {
+            $steps = [];
+            $blocked = false;
+
+            foreach ($workflow->steps as $step) {
+                $toolName = $this->capabilities->resolveToolName($site, $step['capability']);
+                if (!$toolName) {
+                    if (empty($step['optional'])) { $blocked = true; break; }
+                    continue;
+                }
+                $steps[] = $toolName;
+            }
+
+            if ($blocked || empty($steps)) continue;
+
+            $lines[] = "- « {$workflow->name} » (déclenchée quand : {$workflow->trigger_description}) : " . implode(' → ', $steps);
+        }
+
+        if (empty($lines)) return '';
+
+        return "\n\nWorkflows recommandés pour ce site (suis cette séquence quand la demande du visiteur correspond au déclencheur décrit, en gardant la liberté d'adapter — sauter une étape non pertinente, demander une précision manquante, ou continuer au-delà si besoin) :\n" . implode("\n", $lines);
     }
 }

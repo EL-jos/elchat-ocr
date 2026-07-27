@@ -40,7 +40,7 @@ class GoogleCalendarConnector extends AbstractConnector
                     'date_from' => ['type' => 'string', 'description' => 'Date de début (YYYY-MM-DD), défaut: aujourd\'hui'],
                     'date_to' => ['type' => 'string', 'description' => 'Date de fin (YYYY-MM-DD), défaut: +7 jours'],
                     'duration_minutes' => ['type' => 'integer', 'description' => 'Durée souhaitée du rendez-vous en minutes, défaut 30'],
-                ]], defaultMode: 'auto'),
+                ]], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
             new ToolSchema('google_calendar', 'is_time_available',
                 "Vérifie si un créneau précis (date et heure exactes) est libre.",
@@ -52,13 +52,13 @@ class GoogleCalendarConnector extends AbstractConnector
                 "Retourne les périodes occupées sur une plage de dates, accompagnées des horaires d'ouverture configurés (working_hours_windows) quand ils existent. Si working_hours_windows est présent dans le résultat, ne propose JAMAIS un créneau en dehors de ces fenêtres, même s'il n'apparaît pas dans busy_slots. Pour une réponse directement bornée aux horaires d'ouverture, préfère find_available_slots.",
                 ['type' => 'object', 'properties' => [
                     'date_from' => ['type' => 'string', 'description' => 'ISO 8601'], 'date_to' => ['type' => 'string', 'description' => 'ISO 8601'],
-                ], 'required' => ['date_from', 'date_to']], defaultMode: 'auto'),
+                ], 'required' => ['date_from', 'date_to']], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
             new ToolSchema('google_calendar', 'check_availability',
                 "Alias historique de get_busy_periods.",
                 ['type' => 'object', 'properties' => [
                     'date_from' => ['type' => 'string'], 'date_to' => ['type' => 'string'],
-                ], 'required' => ['date_from', 'date_to']], defaultMode: 'auto'),
+                ], 'required' => ['date_from', 'date_to']], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
             new ToolSchema('google_calendar', 'get_working_hours',
                 "Retourne les horaires de travail configurés (pour éviter de proposer un créneau hors ouverture).",
@@ -71,14 +71,14 @@ class GoogleCalendarConnector extends AbstractConnector
                     'title' => ['type' => 'string'], 'start' => ['type' => 'string', 'description' => 'ISO 8601'], 'end' => ['type' => 'string', 'description' => 'ISO 8601'],
                     'attendee_email' => ['type' => 'string'], 'description' => ['type' => 'string'], 'location' => ['type' => 'string'],
                     'add_google_meet' => ['type' => 'boolean', 'description' => 'Ajouter un lien de visioconférence Google Meet'],
-                ], 'required' => ['title', 'start', 'end', 'attendee_email']], isWriteAction: true, defaultMode: 'auto'),
+                ], 'required' => ['title', 'start', 'end', 'attendee_email']], isWriteAction: true, defaultMode: 'auto', capability: 'scheduling.create_event'),
 
             new ToolSchema('google_calendar', 'create_google_meet',
                 "Crée un rendez-vous avec visioconférence Google Meet automatique. Identique à create_event avec add_google_meet activé.",
                 ['type' => 'object', 'properties' => [
                     'title' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'],
                     'attendee_email' => ['type' => 'string'], 'description' => ['type' => 'string'],
-                ], 'required' => ['title', 'start', 'end', 'attendee_email']], isWriteAction: true, defaultMode: 'auto'),
+                ], 'required' => ['title', 'start', 'end', 'attendee_email']], isWriteAction: true, defaultMode: 'auto', capability: 'scheduling.create_event'),
 
             new ToolSchema('google_calendar', 'update_event',
                 "Modifie un rendez-vous existant (titre, date, lieu, description).",
@@ -86,18 +86,18 @@ class GoogleCalendarConnector extends AbstractConnector
                     'event_id' => ['type' => 'string'], 'title' => ['type' => 'string'],
                     'start' => ['type' => 'string'], 'end' => ['type' => 'string'],
                     'description' => ['type' => 'string'], 'location' => ['type' => 'string'],
-                ], 'required' => ['event_id']], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor'),
+                ], 'required' => ['event_id']], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.update_event'),
 
             new ToolSchema('google_calendar', 'reschedule_event',
                 "Décale un rendez-vous existant à une nouvelle date/heure.",
                 ['type' => 'object', 'properties' => [
                     'event_id' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'],
-                ], 'required' => ['event_id', 'start', 'end']], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor'),
+                ], 'required' => ['event_id', 'start', 'end']], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.update_event'),
 
             new ToolSchema('google_calendar', 'cancel_event',
                 "Annule un rendez-vous existant.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string']], 'required' => ['event_id']],
-                isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor'),
+                isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.cancel_event'),
 
             // ── Recherche (accès admin par défaut : expose le contenu de l'agenda) ──
             new ToolSchema('google_calendar', 'search_events',
@@ -352,7 +352,7 @@ class GoogleCalendarConnector extends AbstractConnector
             'c_timezone_present' => array_key_exists('timezone', $c),
             'c_timezone_value' => $c['timezone'] ?? null,
         ]);
-        
+
         $startDt = $this->parseLocal($p['start'], $timezone);
         $endDt = $this->parseLocal($p['end'], $timezone);
 

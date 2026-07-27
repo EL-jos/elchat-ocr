@@ -18,9 +18,11 @@ use App\Http\Controllers\api\v1\WidgetVisitorController;
 use App\Http\Controllers\api\v2\CtaController;
 use App\Http\Controllers\api\v4\Form\ChatbotFormController;
 use App\Http\Controllers\api\v4\SocialIntegrationController;
+use App\Http\Controllers\api\v5\MCPCapabilityController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
 use App\Http\Controllers\api\v5\MCPPendingActionController;
 use App\Http\Controllers\api\v5\MCPPermissionController;
+use App\Http\Controllers\api\v5\MCPWorkflowController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
 use App\Http\Controllers\web\v4\FacebookWebhookController;
 use App\Http\Controllers\web\v4\InstagramConnectController;
@@ -148,6 +150,18 @@ Route::prefix('v1')->group(function () {
                 // Retirez auth:sanctum ici : l'autorisation fine est faite DANS le contrôleur
                 // selon confirm_actor (voir MCPPendingActionController::resolve).
                 Route::post('/pending-actions/{pendingAction}/resolve', 'resolve');
+            });
+
+            Route::controller(MCPCapabilityController::class)->group(function () {
+                Route::get('/capabilities', 'index');
+                Route::put('/capabilities', 'update');
+            });
+
+            Route::controller(MCPWorkflowController::class)->group(function () {
+                Route::get('/workflows', 'index');
+                Route::post('/workflows', 'store');
+                Route::put('/workflows/{workflow}', 'update');
+                Route::delete('/workflows/{workflow}', 'destroy');
             });
 
         });

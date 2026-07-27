@@ -17,6 +17,7 @@ final readonly class ToolSchema
         public string $defaultActorScope = 'visitor',   // 'visitor' | 'admin'
         public string $defaultMode = 'confirm',          // posture prudente par défaut
         public ?string $defaultConfirmActor = 'admin',   // pertinent seulement si defaultMode === 'confirm'
+        public ?string $capability = null, // 🆕 ex: 'scheduling.create_event'
     ) {
     }
 

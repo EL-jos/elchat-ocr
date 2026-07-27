@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
+use App\Domain\MCP\Connectors\HubSpotConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
 use App\Models\Mcp\McpConnector;
 use Illuminate\Database\Seeder;
@@ -34,6 +35,13 @@ class McpConnectorSeeder extends Seeder
         ]);
 
         // Prochains connecteurs : ajoutez une entrée ici + la classe associée.
-        // McpConnector::updateOrCreate(['slug' => 'stripe'], [...]);
+        McpConnector::updateOrCreate(['slug' => 'hubspot'], [
+            'name' => 'HubSpot',
+            'category' => 'crm',
+            'adapter_class' => HubSpotConnector::class,
+            'auth_type' => 'api_key',
+            'description' => "Contacts, opportunités, tickets et tâches de votre CRM HubSpot.",
+            'is_active' => true,
+        ]);
     }
 }

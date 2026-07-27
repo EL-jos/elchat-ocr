@@ -129,11 +129,11 @@ class WooCommerceConnector extends AbstractConnector
                     'min_price' => ['type' => 'number'],
                     'max_price' => ['type' => 'number'],
                 ],
-            ], defaultMode: 'auto'),
+            ], defaultMode: 'auto', capability: 'commerce.search_products'),
 
             new ToolSchema('woocommerce', 'get_product', "Détails complets d'un produit (description, prix, images, attributs).", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string']], 'required' => ['product_id'],
-            ], defaultMode: 'auto'),
+            ], defaultMode: 'auto', capability: 'commerce.search_products'),
 
             new ToolSchema('woocommerce', 'get_product_variations', "Liste les variantes d'un produit (couleur, taille...).", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string']], 'required' => ['product_id'],
@@ -259,15 +259,15 @@ class WooCommerceConnector extends AbstractConnector
                 'type' => 'object',
                 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string'], 'quantity' => $qty],
                 'required' => ['product_id'],
-            ], defaultMode: 'auto'),
+            ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
             new ToolSchema('woocommerce', 'remove_from_cart', "Retire un produit du panier.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string']], 'required' => ['product_id'],
-            ], defaultMode: 'auto'),
+            ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
             new ToolSchema('woocommerce', 'update_cart_quantity', "Modifie la quantité d'un article du panier.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string'], 'quantity' => ['type' => 'integer', 'minimum' => 0]], 'required' => ['product_id', 'quantity'],
-            ], defaultMode: 'auto'),
+            ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
             new ToolSchema('woocommerce', 'get_cart', "Affiche le contenu actuel du panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'clear_cart', "Vide complètement le panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
+            new ToolSchema('woocommerce', 'clear_cart', "Vide complètement le panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
             new ToolSchema('woocommerce', 'calculate_cart', "Calcule le total du panier (sous-total, remise coupon, total).", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
         ];
     }
@@ -390,7 +390,7 @@ class WooCommerceConnector extends AbstractConnector
                     'billing_email' => ['type' => 'string'], 'billing_firstname' => ['type' => 'string'], 'billing_lastname' => ['type' => 'string'],
                     'product_ids' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Optionnel : ne commander que ces product_id du panier (sinon commande sur tout le panier)'],
                 ],
-            ], isWriteAction: true, defaultMode: 'auto'),
+            ], isWriteAction: true, defaultMode: 'auto', capability: 'commerce.checkout'),
         ];
     }
 
@@ -753,7 +753,7 @@ class WooCommerceConnector extends AbstractConnector
         return [
             new ToolSchema('woocommerce', 'create_customer', "Crée un compte client WooCommerce.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string'], 'firstname' => ['type' => 'string'], 'lastname' => ['type' => 'string'], 'phone' => ['type' => 'string']], 'required' => ['email'],
-            ], isWriteAction: true, defaultMode: 'auto'),
+            ], isWriteAction: true, defaultMode: 'auto', capability: 'commerce.create_account'),
             new ToolSchema('woocommerce', 'find_customer', "Vérifie si un email correspond déjà à un compte client (utile pour la connexion).", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']], 'required' => ['email'],
             ], defaultMode: 'auto'),

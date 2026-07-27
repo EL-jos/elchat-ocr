@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
+use App\Domain\MCP\Connectors\HubSpotConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
 
 return [
@@ -33,6 +34,9 @@ return [
             'client_id' => env('GOOGLE_CLIENT_ID'),
             'client_secret' => env('GOOGLE_CLIENT_SECRET'),
             'redirect_uri' => env('GOOGLE_CALENDAR_REDIRECT_URI'),
+        ],
+        'hubspot' => [
+            'class' => HubSpotConnector::class,
         ],
 
         // Prochains connecteurs (exemple, à activer quand implémentés) :

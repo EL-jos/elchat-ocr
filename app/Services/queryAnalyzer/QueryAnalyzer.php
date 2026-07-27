@@ -613,8 +613,10 @@ class QueryAnalyzer
                                                 "type" => ["string", "null"]
                                             ],
                                             "other" => [
-                                                "type" => "object"
-                                            ]
+                                                "type" => "object",
+                                                "properties" => new \stdClass(), // 🆕 objet vide explicite plutôt qu'un objet "ouvert"
+                                                "additionalProperties" => false,  // 🆕 obligatoire en mode strict, à CHAQUE niveau imbriqué
+                                            ],
                                         ],
                                         "required" => [
                                             "date_range",
@@ -678,7 +680,7 @@ class QueryAnalyzer
                         ]
                     ],
                     "temperature" => 0.2,
-                    "max_tokens" => 400
+                    "max_tokens" => 800
                 ]);
 
                 if (!$response->successful()) {

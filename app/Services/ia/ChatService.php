@@ -193,8 +193,9 @@ class ChatService
         $mcpResult = $this->mcpActionGateService->tryHandle(
             site: $site,
             conversation: $conversation,
-            question: $question,   // texte brut du visiteur, pas $resolvedQuestion
+            question: $question,
             history: $history,
+            intent: $baseQueryPlan->intent, // 🆕 déjà calculé à l'étape 2️⃣, aucun coût supplémentaire
         );
 
         if ($mcpResult->status === 'finished') {
@@ -202,17 +203,20 @@ class ChatService
         }
 
         if ($mcpResult->status === 'awaiting_confirmation') {
+            $pending = $mcpResult->pendingAction;
+
             return new ChatResponse(
-                message: "Avant de continuer, pouvez-vous confirmer cette action ?",
+                message: $pending->confirm_actor === 'visitor'
+                    ? "Avant de continuer, pouvez-vous confirmer cette action ?"
+                    : "Votre demande a été transmise à un conseiller, qui va la valider sous peu.",
                 ctas: [],
                 entities: [],
-                pendingConfirmation: [
-                    'connector' => $mcpResult->pendingConnector,
-                    'tool' => $mcpResult->pendingTool,
-                    'params' => $mcpResult->pendingParams,
-                    'tool_call_id' => $mcpResult->pendingToolCallId,
-                    'messages' => $mcpResult->pendingMessages, // à renvoyer tel quel lors de la confirmation
-                ],
+                pendingConfirmation: $pending->confirm_actor === 'visitor' ? [
+                    'id' => $pending->id,
+                    'connector' => $pending->connector_slug,
+                    'tool' => $pending->tool_name,
+                    'params' => $pending->params,
+                ] : null, // 🔒 rien exposé au visiteur si c'est un admin qui doit valider
             );
         }
 
