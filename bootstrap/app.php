@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EnsureAttemptToken;
 use App\Http\Middleware\EnsureUserIsVerified;
 use App\Http\Middleware\JwtAuthenticate;
@@ -20,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'social/*',
             'webhooks/*',
+            '/paypal/webhook',
+            '/stripe/webhook'
             //'webhooks/facebook',
             //'webhooks/slack',
             //'webhooks/telegram/*',  // ✅ ajout
@@ -29,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'verified' => EnsureUserIsVerified::class,
             'jwt.auth' => JwtAuthenticate::class,
             'widget.origin' => VerifyWidgetOrigin::class,
+            'check.subscription' => CheckSubscription::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -32,6 +32,7 @@
     <link rel="stylesheet" href="{{ asset('assets/css/animate.css')}}">
     <link rel="stylesheet" href="{{ asset('assets/css/magnific-popup.css')}}" type="text/css">
     <link rel="stylesheet" href="{{ asset('assets/css/el-style.css?v=1.0.2')}}" type="text/css">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 
 <body>
@@ -68,7 +69,7 @@
                     </li>
 
                     <li class="nav-item">
-                        <a @class(["nav-link p-0", "active" => $routeName === 'abonnements.page']) href="{{ route('abonnements.page') }}">Tarifs</a>
+                        <a @class(["nav-link p-0", "active" => $routeName === 'tarifs']) href="{{ route('tarifs') }}">Tarifs</a>
                     </li>
                     <li class="nav-item">
                         <a @class(["nav-link p-0", "active" => $routeName === 'faqs.page']) href="{{ route('faqs.page') }}">Faq's</a>
@@ -422,7 +423,7 @@
                                                                           class="text-decoration-none">Services</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('faqs.page') }}"
                                                                           class="text-decoration-none">Faq's</a></li>
-                            <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('abonnements.page') }}"
+                            <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('tarifs') }}"
                                                                           class="text-decoration-none">Abonnements</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('politique_de_confidentialite.page') }}"
                                                                           class="text-decoration-none">Politique de confidentialité</a></li>

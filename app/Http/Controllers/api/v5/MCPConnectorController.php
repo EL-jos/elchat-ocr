@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api\v5;
 
+use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
 use App\Domain\MCP\Registry\ConnectorRegistry;
 use App\Domain\MCP\Security\CredentialVault;
 use App\Domain\MCP\Security\PermissionEngine;
@@ -72,7 +73,11 @@ class MCPConnectorController extends Controller
         // chaque outil (voir ToolSchema::$defaultMode/$defaultActorScope/$defaultConfirmActor).
         // N'écrase jamais une règle déjà configurée.
         if ($this->registry->has($slug)) {
-            $this->permissions->seedDefaultsIfMissing($site, $this->registry->get($slug)->listTools());
+            $connector = $this->registry->get($slug);
+            $tools = $connector instanceof ProvidesSiteScopedTools
+                ? $connector->toolsAvailableFor($this->vault->retrieve($site, $slug) ?? [])
+                : $connector->listTools();
+            $this->permissions->seedDefaultsIfMissing($site, $tools);
         }
 
         return response()->json(['status' => 'connected']);
@@ -114,6 +119,14 @@ class MCPConnectorController extends Controller
                     'scope' => 'https://www.googleapis.com/auth/calendar',
                     'state' => $state,
                 ]),
+            'google_drive' => 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
+                    'client_id' => config('mcp.connectors.google_drive.client_id'), 'redirect_uri' => $redirectUri, 'response_type' => 'code',
+                    'access_type' => 'offline', 'prompt' => 'consent', 'scope' => 'https://www.googleapis.com/auth/drive', 'state' => $state,
+                ]),
+            'onedrive' => 'https://login.microsoftonline.com/' . config('mcp.connectors.onedrive.tenant', 'common') . '/oauth2/v2.0/authorize?' . http_build_query([
+                    'client_id' => config('mcp.connectors.onedrive.client_id'), 'redirect_uri' => $redirectUri, 'response_type' => 'code',
+                    'scope' => 'Files.ReadWrite offline_access', 'state' => $state,
+                ]),
             default => abort(404, "OAuth non supporté pour {$slug}"),
         };
 
@@ -126,14 +139,16 @@ class MCPConnectorController extends Controller
         $site = Site::findOrFail($state['site_id']);
         $code = $request->query('code');
 
-        // Échange du code contre les tokens — logique spécifique à chaque
-        // provider. Exemple minimal pour Google Calendar :
-        $tokenResponse = \Illuminate\Support\Facades\Http::asForm()->post('https://oauth2.googleapis.com/token', [
-            'client_id' => config('mcp.connectors.google_calendar.client_id'),
-            'client_secret' => config('mcp.connectors.google_calendar.client_secret'),
-            'redirect_uri' => route('mcp.oauth.callback', ['slug' => $slug]), // 🆕 même source, garantit la cohérence
-            'code' => $code,
-            'grant_type' => 'authorization_code',
+        $tokenEndpoint = match ($slug) {
+            'google_calendar', 'google_drive' => 'https://oauth2.googleapis.com/token',
+            'onedrive' => 'https://login.microsoftonline.com/' . config('mcp.connectors.onedrive.tenant', 'common') . '/oauth2/v2.0/token',
+        };
+
+        $tokenResponse = \Illuminate\Support\Facades\Http::asForm()->post($tokenEndpoint, [
+            'client_id' => config("mcp.connectors.{$slug}.client_id"),
+            'client_secret' => config("mcp.connectors.{$slug}.client_secret"),
+            'redirect_uri' => route('mcp.oauth.callback', ['slug' => $slug]),
+            'code' => $code, 'grant_type' => 'authorization_code',
         ])->throw()->json();
 
         $this->vault->store($site, $slug, [
@@ -146,10 +161,14 @@ class MCPConnectorController extends Controller
         // chaque outil (voir ToolSchema::$defaultMode/$defaultActorScope/$defaultConfirmActor).
         // N'écrase jamais une règle déjà configurée.
         if ($this->registry->has($slug)) {
-            $this->permissions->seedDefaultsIfMissing($site, $this->registry->get($slug)->listTools());
+            $connector = $this->registry->get($slug);
+            $tools = $connector instanceof ProvidesSiteScopedTools
+                ? $connector->toolsAvailableFor($this->vault->retrieve($site, $slug) ?? [])
+                : $connector->listTools();
+            $this->permissions->seedDefaultsIfMissing($site, $tools);
         }
 
-        return redirect("https://elchat.io/site/{$site->id}/settings/connectors?connected={$slug}");
+        return redirect("https://elchat.io/app/site/{$site->id}/settings/connectors?connected={$slug}");
     }
 
     public function getSettings(Request $request, Site $site, string $slug)

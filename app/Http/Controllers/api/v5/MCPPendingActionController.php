@@ -57,8 +57,9 @@ class MCPPendingActionController extends Controller
      *   du visiteur/utilisateur propriétaire de la conversation concernée
      *   (même vérification que ChatController::ask).
      */
-    public function resolve(Request $request, McpPendingAction $pendingAction)
+    public function resolve(Request $request, Site $site, McpPendingAction $pendingAction)
     {
+        
         $validated = $request->validate(['approved' => ['required', 'boolean']]);
 
         if ($pendingAction->status !== 'pending') {

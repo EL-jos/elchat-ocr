@@ -2,6 +2,9 @@
 
 namespace App\Models\Mcp;
 
+use App\Models\Conversation;
+use App\Models\Site;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 

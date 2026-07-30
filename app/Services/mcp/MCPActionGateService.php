@@ -2,8 +2,11 @@
 
 namespace App\Services\mcp;
 
+use App\Domain\MCP\Agent\AgentSkillResolver;
+use App\Domain\MCP\Agent\AgentSupervisor;
 use App\Domain\MCP\Audit\AuditLogger;
 use App\Domain\MCP\Capability\CapabilityResolver;
+use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
 use App\Domain\MCP\Contracts\ToolResult;
 use App\Domain\MCP\Contracts\ToolSchema;
 use App\Domain\MCP\Exceptions\ConfirmationRequiredException;
@@ -18,7 +21,9 @@ use App\Domain\MCP\Security\CredentialVault;
 use App\Domain\MCP\Security\PermissionEngine;
 use App\Domain\RAG\RAGToolAdapter;
 use App\Models\Conversation;
+use App\Models\Mcp\McpAgent;
 use App\Models\Mcp\McpPendingAction;
+use App\Models\Mcp\McpWorkflow;
 use App\Models\Site;
 use App\Services\cta\ChatResponse;
 use App\Services\MercureService;
@@ -42,6 +47,8 @@ class MCPActionGateService
         private readonly MercureService $mercureService,
         private readonly VisitorIdentityService $visitorIdentity, // 🆕
         private readonly CapabilityResolver $capabilities, // 🆕
+        private readonly AgentSkillResolver $agentSkills, // 🆕
+        private readonly AgentSupervisor $supervisor, // 🆕
     ) {
         $this->maxHops = (int) config('mcp.orchestrator.max_hops', 8); // 🆕
     }
@@ -49,24 +56,109 @@ class MCPActionGateService
     public function tryHandle(Site $site, Conversation $conversation, string $question, array $history, ?string $intent = null): MCPGateResult
     {
         $actor = ActorContext::fromConversation($conversation);
-        $mcpTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
+        $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
 
-        if (empty($mcpTools)) {
+        if (empty($permittedTools)) {
+            return MCPGateResult::notApplicable();
+        }
+
+        $activeAgents = McpAgent::where('site_id', $site->id)->where('is_active', true)->get();
+
+        // Aucun agent configuré : comportement historique, passerelle générique.
+        if ($activeAgents->isEmpty()) {
+            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, null, $intent);
+        }
+
+        $selected = $this->supervisor->route($site, $question, $history, $activeAgents);
+
+        // Le superviseur n'a rien trouvé de spécifique : repli sur l'agent
+        // marqué "par défaut", sinon le premier agent actif du site.
+        if (empty($selected)) {
+            $fallback = $activeAgents->firstWhere('is_default', true) ?? $activeAgents->first();
+            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $fallback, $intent);
+        }
+
+        if (count($selected) === 1) {
+            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $selected[0], $intent);
+        }
+
+        return $this->handleMultiAgent($site, $conversation, $actor, $question, $history, $permittedTools, $selected, $intent);
+    }
+
+    /**
+     * 🆕 Exécution scopée à UN agent (ou générique si $agent est null) —
+     * c'est exactement ce que faisait l'ancien corps de tryHandle().
+     */
+    private function handleForAgent(
+        Site $site, Conversation $conversation, ActorContext $actor, string $question, array $history,
+        array $permittedTools, ?McpAgent $agent, ?string $intent,
+    ): MCPGateResult {
+        $agentAllowedNames = ($agent && !empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
+        $scopedTools = $agentAllowedNames
+            ? array_values(array_filter($permittedTools, fn ($t) => in_array($t->qualifiedName(), $agentAllowedNames, true)))
+            : $permittedTools;
+
+        if (empty($scopedTools)) {
             return MCPGateResult::notApplicable();
         }
 
         $tools = [
             ...$this->controlTools(),
-            ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), [...$mcpTools, $this->ragTool->schema()]),
+            ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), [...$scopedTools, $this->ragTool->schema()]),
         ];
 
         $messages = [
-            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent)], // 🆕
+            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent, $agent, $agentAllowedNames)],
             ...$history,
             ['role' => 'user', 'content' => $question],
         ];
 
-        return $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: 1, trace: [], suggestedActions: []);
+        return $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: 1, trace: [], suggestedActions: [], agent: $agent);
+    }
+
+    /**
+     * 🆕 Plusieurs agents concernés par le même message : chacun traite sa
+     * partie via handleForAgent() — les outils de contrôle lui permettent de
+     * se retirer proprement si sa partie du message ne le concerne pas. Les
+     * réponses obtenues sont ensuite fusionnées en une seule réponse cohérente.
+     */
+    private function handleMultiAgent(
+        Site $site, Conversation $conversation, ActorContext $actor, string $question, array $history,
+        array $permittedTools, array $agents, ?string $intent,
+    ): MCPGateResult {
+        $answers = [];
+        $suggestedActions = [];
+        $processedAgentIds = [];
+        $runningHistory = $history; // 🆕 s'enrichit au fil des agents traités dans ce même tour
+
+        foreach ($agents as $agent) {
+            if (in_array($agent->id, $processedAgentIds, true)) continue;
+            $processedAgentIds[] = $agent->id;
+
+            $result = $this->handleForAgent($site, $conversation, $actor, $question, $runningHistory, $permittedTools, $agent, $intent);
+
+            if ($result->status === 'awaiting_confirmation') {
+                return $result;
+            }
+
+            if ($result->status === 'finished' && trim($result->response->message) !== '') {
+                $answers[] = $result->response->message;
+                $suggestedActions = array_merge($suggestedActions, $result->response->suggestedActions ?? []);
+
+                // 🆕 L'agent suivant voit ce que celui-ci vient de faire — évite
+                // qu'un 2ᵉ agent duplique ou contredise une action déjà traitée
+                // par le 1er pour la même demande. Cette note reste locale à
+                // cette boucle : jamais persistée dans l'historique réel de la
+                // conversation, le visiteur ne la voit jamais.
+                $runningHistory[] = ['role' => 'user', 'content' => $question];
+                $runningHistory[] = ['role' => 'assistant', 'content' => "[Note interne : le collègue {$agent->name} vient de traiter la partie suivante de cette même demande : \"{$result->response->message}\". Ne duplique pas ce qui a déjà été fait — concentre-toi uniquement sur ce qui reste dans ton propre domaine, et si tout est déjà couvert, n'appelle aucun outil.]"];
+            }
+        }
+
+        if (empty($answers)) return MCPGateResult::notApplicable();
+
+        $mergedMessage = count($answers) === 1 ? $answers[0] : implode("\n\n", $answers);
+        return MCPGateResult::finished(new ChatResponse(message: $mergedMessage, ctas: [], entities: [], suggestedActions: $suggestedActions), []);
     }
 
     /**
@@ -80,6 +172,11 @@ class MCPActionGateService
         $messages = $pendingAction->messages_snapshot;
         $suggestedActions = [];
 
+        // 🆕 Reconstruit le même agent (ou aucun) que celui actif au moment de
+        // la demande initiale — sinon la reprise pourrait exécuter l'action
+        // hors du périmètre qui avait motivé la confirmation.
+        $agent = $pendingAction->agent_id ? McpAgent::find($pendingAction->agent_id) : null;
+
         if (!$approved) {
             $messages[] = ['role' => 'tool', 'tool_call_id' => $pendingAction->tool_call_id, 'content' => json_encode(['status' => 'declined'])];
         } else {
@@ -91,16 +188,21 @@ class MCPActionGateService
             }
         }
 
-        $mcpTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
+        $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
+        $agentAllowedNames = ($agent && !empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
+        $scopedTools = $agentAllowedNames
+            ? array_values(array_filter($permittedTools, fn ($t) => in_array($t->qualifiedName(), $agentAllowedNames, true)))
+            : $permittedTools;
+
         $tools = [
             ...$this->controlTools(),
-            ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), [...$mcpTools, $this->ragTool->schema()]),
+            ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), [...$scopedTools, $this->ragTool->schema()]),
         ];
 
-        return $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: $this->maxHops, trace: [], suggestedActions: $suggestedActions);
+        return $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: $this->maxHops, trace: [], suggestedActions: $suggestedActions, agent: $agent);
     }
 
-    private function runLoop(Site $site, Conversation $conversation, ActorContext $actor, array $messages, array $tools, int $hop, array $trace, array $suggestedActions = [], array $executedCalls = []): MCPGateResult
+    private function runLoop(Site $site, Conversation $conversation, ActorContext $actor, array $messages, array $tools, int $hop, array $trace, array $suggestedActions = [], array $executedCalls = [], ?McpAgent $agent = null): MCPGateResult
     {
         while ($hop <= $this->maxHops) {
             if ($hop === 1) {
@@ -177,6 +279,7 @@ class MCPActionGateService
                         'confirm_actor' => $execution['confirm_actor'],
                         'tool_call_id' => $toolCallId,
                         'messages_snapshot' => $messages,
+                        'agent_id' => $agent?->id, // 🆕
                         'status' => 'pending',
                         'expires_at' => now()->addDays(3),
                     ]);
@@ -325,10 +428,23 @@ class MCPActionGateService
     {
         $activeSlugs = $site->mcpSiteConnectors()->where('status', 'connected')->with('mcpConnector')->get()->pluck('mcpConnector.slug');
         $schemas = [];
+
         foreach ($activeSlugs as $slug) {
             if (!$this->registry->has($slug)) continue;
-            array_push($schemas, ...$this->registry->get($slug)->listTools());
+            $connector = $this->registry->get($slug);
+
+            // 🆕 Connecteur à outils dynamiques (Odoo) : filtre selon les modules
+            // réellement installés sur l'instance de ce site.
+            if ($connector instanceof ProvidesSiteScopedTools) {
+                $credentials = $this->vault->retrieve($site, $slug);
+                if (!$credentials) continue;
+                array_push($schemas, ...$connector->toolsAvailableFor($credentials));
+                continue;
+            }
+
+            array_push($schemas, ...$connector->listTools());
         }
+
         return $schemas;
     }
 
@@ -377,7 +493,7 @@ N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider s
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
 PROMPT;
     }*/
-    private function systemPrompt(Site $site, ActorContext $actor, ?string $intent = null): string
+    private function systemPrompt(Site $site, ActorContext $actor, ?string $intent = null, ?McpAgent $agent = null, ?array $agentAllowedNames): string
     {
         $name = $site->name ?? parse_url($site->url ?? '', PHP_URL_HOST);
         $roleNote = $actor->isAdmin
@@ -414,7 +530,7 @@ demande explicite — n'agis ainsi que si le signal est net et que l'action est 
 duplique jamais une action déjà réalisée dans cette même conversation.
 N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
-PROMPT . $this->workflowGuidance($site);
+PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllowedNames);
     }
 
     private function thinkingLabelFor(string $connectorSlug, string $toolName): string
@@ -557,9 +673,9 @@ PROMPT . $this->workflowGuidance($site);
      * réalisable est simplement omise plutôt que d'induire le LLM en erreur
      * avec un plan incomplet.
      */
-    private function workflowGuidance(Site $site): string
+    private function workflowGuidance(Site $site, array $allowedToolNames = []): string // 🆕 param optionnel
     {
-        $workflows = \App\Models\Mcp\McpWorkflow::where('is_active', true)
+        $workflows = McpWorkflow::where('is_active', true)
             ->where(fn ($q) => $q->where('site_id', $site->id)->orWhereNull('site_id'))
             ->get()
             ->groupBy('slug')
@@ -573,7 +689,9 @@ PROMPT . $this->workflowGuidance($site);
 
             foreach ($workflow->steps as $step) {
                 $toolName = $this->capabilities->resolveToolName($site, $step['capability']);
-                if (!$toolName) {
+                $outOfAgentScope = !empty($allowedToolNames) && $toolName && !in_array($toolName, $allowedToolNames, true); // 🆕
+
+                if (!$toolName || $outOfAgentScope) {
                     if (empty($step['optional'])) { $blocked = true; break; }
                     continue;
                 }
@@ -581,12 +699,55 @@ PROMPT . $this->workflowGuidance($site);
             }
 
             if ($blocked || empty($steps)) continue;
-
             $lines[] = "- « {$workflow->name} » (déclenchée quand : {$workflow->trigger_description}) : " . implode(' → ', $steps);
         }
 
         if (empty($lines)) return '';
 
         return "\n\nWorkflows recommandés pour ce site (suis cette séquence quand la demande du visiteur correspond au déclencheur décrit, en gardant la liberté d'adapter — sauter une étape non pertinente, demander une précision manquante, ou continuer au-delà si besoin) :\n" . implode("\n", $lines);
+    }
+
+    /**
+     * 🆕 Agent actif pour ce site (un seul pour l'instant). Retourne null si
+     * aucun n'est publié — dans ce cas, tout continue de fonctionner
+     * exactement comme avant (comportement générique, aucune régression).
+     */
+    private function activeAgent(Site $site): ?McpAgent
+    {
+        return McpAgent::where('site_id', $site->id)
+            ->where('is_active', true)->where('is_default', true)->first();
+    }
+
+    /**
+     * 🆕 Filtre les outils déjà permis par le PermissionEngine selon les
+     * compétences de l'agent actif. Un agent ne peut JAMAIS élargir l'accès —
+     * uniquement le restreindre. Sans agent actif, retourne $tools inchangés.
+     */
+    private function applyAgentScope(Site $site, array $tools, ?McpAgent $agent): array
+    {
+        if (!$agent || empty($agent->skills)) {
+            return $tools;
+        }
+
+        $allowedNames = $this->agentSkills->resolveAllowedToolNames($site, $agent->skills);
+
+        return array_values(array_filter($tools, fn (ToolSchema $t) => in_array($t->qualifiedName(), $allowedNames, true)));
+    }
+
+    private function agentPersona(?McpAgent $agent): string
+    {
+        if (!$agent) return '';
+
+        $toneInstructions = match ($agent->tone) {
+            'friendly' => "Adopte un ton chaleureux et décontracté, comme un ami de confiance.",
+            'concise' => "Sois le plus concis possible, va droit au but, phrases courtes.",
+            'enthusiastic' => "Sois enthousiaste et engageant, transmets de l'énergie positive.",
+            'custom' => $agent->custom_tone_instructions ?? '',
+            default => "Adopte un ton professionnel et posé.",
+        };
+
+        $objective = $agent->objective ? "Ton objectif principal : {$agent->objective}." : '';
+
+        return "\n\nTu incarnes ici l'agent « {$agent->name} ». {$objective} {$toneInstructions}";
     }
 }

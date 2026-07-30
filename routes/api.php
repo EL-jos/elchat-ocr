@@ -18,6 +18,7 @@ use App\Http\Controllers\api\v1\WidgetVisitorController;
 use App\Http\Controllers\api\v2\CtaController;
 use App\Http\Controllers\api\v4\Form\ChatbotFormController;
 use App\Http\Controllers\api\v4\SocialIntegrationController;
+use App\Http\Controllers\api\v5\MCPAgentController;
 use App\Http\Controllers\api\v5\MCPCapabilityController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
 use App\Http\Controllers\api\v5\MCPPendingActionController;
@@ -155,6 +156,7 @@ Route::prefix('v1')->group(function () {
             Route::controller(MCPCapabilityController::class)->group(function () {
                 Route::get('/capabilities', 'index');
                 Route::put('/capabilities', 'update');
+                Route::get('/capabilities/catalog', 'catalog'); // 🆕
             });
 
             Route::controller(MCPWorkflowController::class)->group(function () {
@@ -162,6 +164,17 @@ Route::prefix('v1')->group(function () {
                 Route::post('/workflows', 'store');
                 Route::put('/workflows/{workflow}', 'update');
                 Route::delete('/workflows/{workflow}', 'destroy');
+            });
+
+            Route::controller(MCPAgentController::class)->group(function () {
+                Route::get('/agents/skills-catalog', 'skillsCatalog');
+                Route::get('/agents', 'index');
+                Route::post('/agents', 'store');
+                Route::put('/agents/{agent}', 'update');
+                Route::delete('/agents/{agent}', 'destroy');
+                Route::post('/agents/{agent}/publish', 'publish');
+                Route::post('/agents/{agent}/unpublish', 'unpublish');
+                Route::post('/agents/{agent}/set-fallback', 'setAsFallback'); // 🆕
             });
 
         });
@@ -210,10 +223,10 @@ Route::prefix('v1')->group(function () {
 
     /*Route::post('/conversations/{conversation}/confirm-mcp-action', [
         ChatController::class, 'confirmMcpAction',
-    ]);*/
+    ]);
 
     Route::post('/mcp/pending-actions/{pendingAction}/resolve', [
         MCPPendingActionController::class, 'resolve',
-    ]);
+    ]);*/
 
 });

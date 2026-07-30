@@ -21,6 +21,7 @@ class OpenRouterToolClient
         private readonly string $apiKey,
         private readonly string $model = 'openai/gpt-4.1-mini',
         private readonly int $maxRetries = 3,
+        private readonly int $timeoutSeconds = 45, // 🆕 était 20, trop juste pour une boucle multi-agent
     ) {
     }
 
@@ -38,7 +39,7 @@ class OpenRouterToolClient
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
                 'Content-Type' => 'application/json',
-            ])->timeout(20)->post('https://openrouter.ai/api/v1/chat/completions', [
+            ])->timeout($this->timeoutSeconds)->post('https://openrouter.ai/api/v1/chat/completions', [
                 'model' => $this->model,
                 'messages' => $messages,
                 'tools' => $tools,

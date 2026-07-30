@@ -21,10 +21,13 @@ class MCPWorkflowController extends Controller
 
     public function store(Request $request, Site $site)
     {
+        $validated = $this->validated($request);
+
         $workflow = McpWorkflow::create([
             'id' => (string) Str::uuid(),
             'site_id' => $site->id,
-            ...$this->validated($request),
+            'slug' => Str::slug($validated['name']) . '-' . Str::random(6), // 🆕 unique et jamais vide
+            ...$validated,
         ]);
 
         return response()->json(['data' => $workflow]);
@@ -35,7 +38,8 @@ class MCPWorkflowController extends Controller
     {
         if ($workflow->site_id !== $site->id) {
             $copy = McpWorkflow::create([
-                'id' => (string) Str::uuid(), 'site_id' => $site->id, 'slug' => $workflow->slug,
+                'id' => (string) Str::uuid(), 'site_id' => $site->id,
+                'slug' => $workflow->slug . '-' . Str::random(6), // 🆕 évite un doublon de slug avec l'original
                 ...$this->validated($request),
             ]);
             return response()->json(['data' => $copy]);

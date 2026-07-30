@@ -28,3 +28,6 @@ Schedule::command('youtube:sync-comments')
     ->withoutOverlapping(600)   // verrou 10 min — couvre les syncs longs
     ->onOneServer()             // ✅ évite les doublons si plusieurs workers
     ->runInBackground();
+
+
+Schedule::command('subscriptions:check-trials')->dailyAt('08:00');

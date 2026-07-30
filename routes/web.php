@@ -17,6 +17,15 @@ use App\Http\Controllers\web\v4\TelegramWebhookController;
 use App\Http\Controllers\web\v4\WhatsAppEmbeddedSignupController;
 use App\Http\Controllers\web\v4\WhatsAppWebhookController;
 use App\Http\Controllers\web\v4\YouTubeConnectController;
+use App\Http\Controllers\web\v5\PayPalController;
+use App\Http\Controllers\web\v5\PayPalWebhookController;
+use App\Http\Controllers\web\v5\PricingController;
+use App\Http\Controllers\web\v5\StripeWebhookController;
+use App\Http\Controllers\web\v5\SubscriptionController;
+use App\Http\Controllers\web\v5\WebAuthController;
+use App\Http\Middleware\CheckSubscription;
+use App\Http\Middleware\JwtAuthMiddleware;
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
@@ -156,5 +165,82 @@ Route::get('/app/{any?}', function () {
 Route::get('/widget/{any?}', function () {
     return response()->file(
         public_path('widget/index.html')
+    );
+})->where('any', '.*');
+
+
+
+// ════════════════════════════════════════════════════════════════════
+// PAGES AUTH — publiques (pas de JWT requis)
+// ════════════════════════════════════════════════════════════════════
+Route::prefix('')->name('auth.')->group(function () {
+    Route::get('/connexion',              [WebAuthController::class, 'showLogin'])          ->name('login');
+    Route::get('/inscription',            [WebAuthController::class, 'showRegister'])       ->name('register');
+    Route::get('/verification',           [WebAuthController::class, 'showVerification'])   ->name('verify');
+    Route::get('/mot-de-passe-oublie',    [WebAuthController::class, 'showForgotPassword']) ->name('forgot-password');
+    Route::get('/nouveau-mot-de-passe',   [WebAuthController::class, 'showResetPassword'])  ->name('reset-password');
+
+    // Session sync (appelé par elchat-api.js)
+    Route::post('/auth/sync-token',   [WebAuthController::class, 'syncToken'])   ->name('sync-token');
+    Route::post('/auth/clear-session',[WebAuthController::class, 'clearSession'])->name('clear-session');
+    Route::post('/auth/logout',       [WebAuthController::class, 'logout'])      ->name('logout');
+});
+
+// ════════════════════════════════════════════════════════════════════
+// PAGE TARIFS — publique
+// ════════════════════════════════════════════════════════════════════
+Route::get('/tarifs', [PricingController::class, 'index'])->name('tarifs');
+
+// ════════════════════════════════════════════════════════════════════
+// API DEVISE — publique (AJAX depuis tarifs)
+// ════════════════════════════════════════════════════════════════════
+Route::prefix('api')->group(function () {
+    Route::get('/currency/detect', [PricingController::class, 'detectCurrency'])->name('api.currency.detect');
+    Route::get('/currency/rates',  [PricingController::class, 'getRates'])      ->name('api.currency.rates');
+});
+
+// ════════════════════════════════════════════════════════════════════
+// WEBHOOKS — sans CSRF ni JWT (signatures propres à chaque provider)
+// ════════════════════════════════════════════════════════════════════
+Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle'])
+    ->withoutMiddleware(['web', VerifyCsrfToken::class])
+    ->name('stripe.webhook');
+
+Route::post('/paypal/webhook', [PayPalWebhookController::class, 'handle'])
+    ->withoutMiddleware(['web', VerifyCsrfToken::class])
+    ->name('paypal.webhook');
+
+// ════════════════════════════════════════════════════════════════════
+// ROUTES PROTÉGÉES — JWT requis
+// ════════════════════════════════════════════════════════════════════
+Route::middleware([JwtAuthMiddleware::class])->group(function () {
+
+    // ── Paiement Stripe ──────────────────────────────────────────
+    Route::post('/subscribe/{planSlug}', [SubscriptionController::class, 'checkout'])->name('subscribe');
+    Route::get('/payment/success',       [SubscriptionController::class, 'success']) ->name('payment.success');
+    Route::post('/billing/portal',       [SubscriptionController::class, 'portal'])  ->name('billing.portal');
+
+    // ── Paiement PayPal ──────────────────────────────────────────
+    Route::post('/paypal/subscribe/{planSlug}', [PayPalController::class, 'checkout'])->name('paypal.subscribe');
+    Route::get('/paypal/success',               [PayPalController::class, 'success']) ->name('paypal.success');
+
+    // ── API subscription (consommée par Angular) ─────────────────
+    Route::get('/api/subscription', [SubscriptionController::class, 'current'])->name('api.subscription.current');
+
+    // ── App Angular — JWT + CheckSubscription ────────────────────
+    Route::middleware([CheckSubscription::class])
+        ->prefix('app')
+        ->group(function () {
+            Route::get('/{any?}', function () {
+                return response()->file(
+                    public_path('angular/index.html')
+                );
+            })->where('any', '.*')->name('app');
+        });
+});
+
+Route::get('/app/{any?}', function () {
+    return response()->file(
+        public_path('angular/index.html')
     );
 })->where('any', '.*');

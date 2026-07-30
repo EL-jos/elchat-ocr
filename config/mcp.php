@@ -1,7 +1,15 @@
 <?php
 
+use App\Domain\MCP\Connectors\AsanaConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
+use App\Domain\MCP\Connectors\GoogleDriveConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
+use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
+use App\Domain\MCP\Connectors\NotionConnector;
+use App\Domain\MCP\Connectors\OdooConnector;
+use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\ShopifyConnector;
+use App\Domain\MCP\Connectors\SlackConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
 
 return [
@@ -39,12 +47,28 @@ return [
             'class' => HubSpotConnector::class,
         ],
 
-        // Prochains connecteurs (exemple, à activer quand implémentés) :
-        // 'stripe' => ['class' => \App\Domain\MCP\Connectors\StripeConnector::class],
-        // 'hubspot' => ['class' => \App\Domain\MCP\Connectors\HubspotConnector::class],
+        'shopify' => ['class' => ShopifyConnector::class],
+
+        'google_drive' => [
+            'class' => GoogleDriveConnector::class,
+            'client_id' => env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        ],
+        'onedrive' => [
+            'class' => OneDriveConnector::class,
+            'client_id' => env('MICROSOFT_CLIENT_ID'),
+            'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
+            'tenant' => env('MICROSOFT_TENANT', 'common'),
+        ],
+        'slack' => ['class' => SlackConnector::class],
+        'microsoft_teams' => ['class' => MicrosoftTeamsConnector::class],
+        'asana' => ['class' => AsanaConnector::class],
+        'notion' => ['class' => NotionConnector::class],
+
+        'odoo' => ['class' => OdooConnector::class],
     ],
 
     'orchestrator' => [
-        'max_hops' => env('MCP_MAX_HOPS', 8),
+        'max_hops' => env('MCP_MAX_HOPS', 12),
     ],
 ];

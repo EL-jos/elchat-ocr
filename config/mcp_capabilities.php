@@ -26,4 +26,15 @@ return [
     'commerce.manage_cart' => 'Gérer le panier',
     'commerce.checkout' => 'Finaliser une commande',
     'commerce.create_account' => 'Créer un compte client',
+
+    // Ajouter à la liste existante :
+    'storage.search_file' => 'Rechercher un fichier',
+    'storage.upload_file' => 'Téléverser un fichier',
+    'storage.share_file' => 'Partager un fichier',
+    'communication.notify_team' => "Notifier l'équipe",
+    'documentation.create_page' => 'Créer une page de documentation',
+    'documentation.search' => 'Rechercher dans la documentation',
+
+    'inventory.check_stock' => 'Vérifier le stock',
+    'commerce.create_quote' => 'Créer un devis',
 ];
