@@ -4,13 +4,18 @@ namespace Database\Seeders;
 
 use App\Domain\MCP\Connectors\AsanaConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
+use App\Domain\MCP\Connectors\GoogleAdsConnector;
+use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
 use App\Domain\MCP\Connectors\GoogleDriveConnector;
+use App\Domain\MCP\Connectors\GoogleSearchConsoleConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
+use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
@@ -111,6 +116,41 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => ElchatPlatformConnector::class,
             'description' => "Copilote interne : conversations, visiteurs, statistiques et pilotage de vos agents/workflows ELChat.",
             'icon_url' => 'https://elchat.io/assets/images/logo.svg', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'google_analytics'], [
+            'name' => 'Google Analytics', 'category' => 'analytics', 'auth_type' => 'oauth2',
+            'adapter_class' => GoogleAnalyticsConnector::class,
+            'description' => "Trafic, sources d'acquisition, conversions et audience de votre site (GA4).",
+            'icon_url' => 'https://cdn.simpleicons.org/googleanalytics/E37400', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'google_search_console'], [
+            'name' => 'Google Search Console', 'category' => 'seo', 'auth_type' => 'oauth2',
+            'adapter_class' => GoogleSearchConsoleConnector::class,
+            'description' => "Performance de recherche Google (clics, impressions, positions) et statut d'indexation de vos pages.",
+            'icon_url' => 'https://cdn.simpleicons.org/googlesearchconsole/458CF5', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'google_ads'], [
+            'name' => 'Google Ads', 'category' => 'advertising', 'auth_type' => 'oauth2',
+            'adapter_class' => GoogleAdsConnector::class,
+            'description' => "Performance de vos campagnes Google Ads, et pilotage (pause, budget) sous confirmation d'un conseiller.",
+            'icon_url' => 'https://cdn.simpleicons.org/googleads/4285F4', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'meta_ads'], [
+            'name' => 'Meta Ads', 'category' => 'advertising', 'auth_type' => 'oauth2',
+            'adapter_class' => MetaAdsConnector::class,
+            'description' => "Performance de vos campagnes Facebook/Instagram Ads, et pilotage (pause, budget) sous confirmation d'un conseiller.",
+            'icon_url' => 'https://cdn.simpleicons.org/meta/0866FF', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'semrush'], [
+            'name' => 'Semrush', 'category' => 'seo', 'auth_type' => 'api_key',
+            'adapter_class' => SemrushConnector::class,
+            'description' => "Analyse SEO concurrentielle : mots-clés, trafic organique, backlinks et concurrents.",
+            'icon_url' => 'https://cdn.simpleicons.org/semrush/FF642D', 'is_active' => true,
         ]);
     }
 }

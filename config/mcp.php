@@ -2,13 +2,18 @@
 
 use App\Domain\MCP\Connectors\AsanaConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
+use App\Domain\MCP\Connectors\GoogleAdsConnector;
+use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
 use App\Domain\MCP\Connectors\GoogleDriveConnector;
+use App\Domain\MCP\Connectors\GoogleSearchConsoleConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
+use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
@@ -69,6 +74,47 @@ return [
         'odoo' => ['class' => OdooConnector::class],
 
         'elchat_platform' => ['class' => ElchatPlatformConnector::class],
+
+        // ── 🆕 Analytics & Ads ──────────────────────────────────────────
+
+        // Réutilise le même client OAuth Google que google_calendar/drive :
+        // un seul projet Google Cloud, plusieurs scopes autorisés dessus.
+        // Le scope demandé (voir MCPConnectorController::oauthRedirect)
+        // détermine ce à quoi le jeton donne accès, pas le client_id.
+        'google_analytics' => [
+            'class' => GoogleAnalyticsConnector::class,
+            'client_id' => env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+            'redirect_uri' => env('GOOGLE_ANALYTICS_REDIRECT_URI'),
+        ],
+        'google_search_console' => [
+            'class' => GoogleSearchConsoleConnector::class,
+            'client_id' => env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+            'redirect_uri' => env('GOOGLE_SEARCH_CONSOLE_REDIRECT_URI'),
+        ],
+        'google_ads' => [
+            'class' => GoogleAdsConnector::class,
+            'client_id' => env('GOOGLE_CLIENT_ID'),
+            'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+            // Jeton développeur attribué par Google au Manager Account (MCC)
+            // ELChat — une seule valeur pour toute la plateforme, jamais par
+            // site. Demande d'accès "Standard" nécessaire côté Google Ads
+            // pour dépasser le quota "Test" (15 comptes clients max).
+            'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
+        ],
+
+        // Facebook Marketing API — app dédiée distincte du client OAuth
+        // Google, avec son propre app_id/app_secret enregistrés sur
+        // developers.facebook.com (produit "Marketing API").
+        'meta_ads' => [
+            'class' => MetaAdsConnector::class,
+            'app_id' => env('META_ADS_APP_ID'),
+            'app_secret' => env('META_ADS_APP_SECRET'),
+        ],
+
+        // Clé API statique (Semrush > Profil > API Units), pas d'OAuth.
+        'semrush' => ['class' => SemrushConnector::class],
     ],
 
     'orchestrator' => [
