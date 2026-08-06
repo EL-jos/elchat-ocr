@@ -121,7 +121,8 @@ class WooCommerceConnector extends AbstractConnector
     private function productTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'search_products', "Recherche des produits par mot-clé, catégorie ou fourchette de prix.", [
+            new ToolSchema('woocommerce', 'search_products',
+                "Recherche les produits publiés correspondant aux critères fournis (mot-clé, catégorie, prix minimum et/ou maximum). Utiliser cet outil lorsqu'un visiteur recherche un produit sans connaître son identifiant. Ne jamais supposer qu'un produit existe. Utiliser uniquement les résultats retournés pour recommander ou sélectionner un produit.", [
                 'type' => 'object',
                 'properties' => [
                     'query' => ['type' => 'string'],
@@ -131,19 +132,23 @@ class WooCommerceConnector extends AbstractConnector
                 ],
             ], defaultMode: 'auto', capability: 'commerce.search_products'),
 
-            new ToolSchema('woocommerce', 'get_product', "Détails complets d'un produit (description, prix, images, attributs).", [
+            new ToolSchema('woocommerce', 'get_product',
+                "Récupère les informations complètes d'un produit identifié : description, prix actuel, promotions, disponibilité, images et variantes éventuelles. Utiliser cet outil avant toute décision nécessitant les informations exactes d'un produit. Ne jamais compléter ou deviner les données manquantes.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'commerce.search_products'),
 
-            new ToolSchema('woocommerce', 'get_product_variations', "Liste les variantes d'un produit (couleur, taille...).", [
+            new ToolSchema('woocommerce', 'get_product_variations',
+                "Liste toutes les variantes disponibles d'un produit variable (taille, couleur, capacité, etc.) avec leurs identifiants et disponibilités. Utiliser cet outil lorsqu'un produit possède plusieurs variantes avant toute tentative d'ajout au panier. Ne jamais choisir une variante à la place du visiteur.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('woocommerce', 'get_product_stock', "Vérifie la disponibilité en stock d'un produit ou d'une variante.", [
+            new ToolSchema('woocommerce', 'get_product_stock',
+                "Vérifie la disponibilité réelle d'un produit ou d'une variante spécifique. Utiliser cet outil lorsqu'un visiteur demande si un article est disponible ou avant une opération sensible nécessitant un stock valide. Ne jamais déduire le stock à partir d'informations anciennes.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('woocommerce', 'recommend_products', "Suggère des produits similaires ou complémentaires à un produit donné.", [
+            new ToolSchema('woocommerce', 'recommend_products',
+                "Recherche des produits similaires, complémentaires ou liés à un produit existant ou à une recherche utilisateur. Les recommandations doivent exclusivement provenir des résultats retournés par l'outil. Ne jamais inventer de recommandations.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'query' => ['type' => 'string']],
             ], defaultMode: 'auto'),
         ];
@@ -255,20 +260,26 @@ class WooCommerceConnector extends AbstractConnector
     {
         $qty = ['type' => 'integer', 'minimum' => 1];
         return [
-            new ToolSchema('woocommerce', 'add_to_cart', "Ajoute un produit (ou une variante) au panier du visiteur.", [
+            new ToolSchema('woocommerce', 'add_to_cart',
+                "Ajoute un produit ou une variante au panier courant du visiteur. Vérifier auparavant que le produit existe et qu'une variante obligatoire a été choisie si nécessaire. Ne jamais ajouter automatiquement une variante. Éviter les ajouts répétés du même produit sauf si le visiteur demande explicitement d'augmenter la quantité.", [
                 'type' => 'object',
                 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string'], 'quantity' => $qty],
                 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
-            new ToolSchema('woocommerce', 'remove_from_cart', "Retire un produit du panier.", [
+            new ToolSchema('woocommerce', 'remove_from_cart',
+                "Retire un produit ou une variante du panier courant. Utiliser uniquement si l'article est présent dans le panier ou si le visiteur demande explicitement sa suppression.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
-            new ToolSchema('woocommerce', 'update_cart_quantity', "Modifie la quantité d'un article du panier.", [
+            new ToolSchema('woocommerce', 'update_cart_quantity',
+                "Modifie la quantité d'un article déjà présent dans le panier. Utiliser cette opération plutôt qu'un nouvel ajout lorsqu'il s'agit simplement d'augmenter ou diminuer une quantité.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string'], 'quantity' => ['type' => 'integer', 'minimum' => 0]], 'required' => ['product_id', 'quantity'],
             ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
-            new ToolSchema('woocommerce', 'get_cart', "Affiche le contenu actuel du panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'clear_cart', "Vide complètement le panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
-            new ToolSchema('woocommerce', 'calculate_cart', "Calcule le total du panier (sous-total, remise coupon, total).", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
+            new ToolSchema('woocommerce', 'get_cart',
+                "Retourne le contenu actuel du panier local, y compris les articles et le coupon éventuellement appliqué. Utiliser cet outil avant de répondre à une question concernant le panier ou avant une opération dépendant de son contenu.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
+            new ToolSchema('woocommerce', 'clear_cart',
+                "Vide entièrement le panier courant. Utiliser uniquement lorsque le visiteur demande explicitement de supprimer tous les articles.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
+            new ToolSchema('woocommerce', 'calculate_cart',
+                "Calcule le montant actuel du panier à partir de son contenu réel et du coupon éventuellement appliqué. Retourne le sous-total, les remises et le total estimé. Ce calcul ne crée aucune commande et n'effectue aucun paiement.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
         ];
     }
 
@@ -380,11 +391,14 @@ class WooCommerceConnector extends AbstractConnector
     private function checkoutTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'apply_coupon', "Applique un code promo au panier.", [
+            new ToolSchema('woocommerce', 'apply_coupon',
+                "Vérifie puis applique un code promotionnel valide au panier courant. Utiliser uniquement lorsque le visiteur fournit un code. Ne jamais inventer ni suggérer un coupon inexistant.", [
                 'type' => 'object', 'properties' => ['code' => ['type' => 'string']], 'required' => ['code'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'remove_coupon', "Retire le code promo appliqué.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'generate_checkout', "Crée la commande à partir du panier et retourne le lien de paiement à envoyer au visiteur. Par défaut sur tout le panier ; renseigne product_ids pour ne commander qu'une sélection de produits du panier.", [
+            new ToolSchema('woocommerce', 'remove_coupon',
+                "Supprime le coupon actuellement appliqué au panier sans modifier les autres articles.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
+            new ToolSchema('woocommerce', 'generate_checkout',
+                "Crée une commande WooCommerce à partir du panier courant (ou d'une sélection d'articles) puis retourne l'URL officielle de paiement. Cette opération ne prélève aucun paiement mais génère une véritable commande en attente. Vérifier que le panier n'est pas vide avant l'exécution. Éviter toute génération répétée d'une même commande sans demande explicite du visiteur.", [
                 'type' => 'object',
                 'properties' => [
                     'billing_email' => ['type' => 'string'], 'billing_firstname' => ['type' => 'string'], 'billing_lastname' => ['type' => 'string'],
@@ -557,31 +571,40 @@ class WooCommerceConnector extends AbstractConnector
     private function orderTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'get_order_status', "Statut, contenu et livraison d'une commande.", [
+            new ToolSchema('woocommerce', 'get_order_status',
+                "Récupère l'état réel d'une commande : statut, montant, date, méthode de livraison et informations de suivi disponibles. Utiliser uniquement avec un identifiant de commande valide.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string']], 'required' => ['order_id'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'search_orders_by_email', "Recherche les commandes récentes liées à un email.", [
+            new ToolSchema('woocommerce', 'search_orders_by_email',
+                "Recherche les commandes récentes associées à une adresse email. Utiliser lorsque le visiteur ne connaît pas son numéro de commande. Ne retourner que les commandes réellement trouvées.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']], 'required' => ['email'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'get_customer_orders', "Historique des commandes du client identifié par email.", [
+            new ToolSchema('woocommerce', 'get_customer_orders',
+                "Retourne l'historique des commandes du client identifié par son adresse email. Utiliser lorsqu'un visiteur souhaite consulter ses achats passés.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']], 'required' => ['email'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'track_order', "Informations de suivi de livraison d'une commande.", [
+            new ToolSchema('woocommerce', 'track_order',
+                "Recherche les informations de suivi disponibles pour une commande existante. Si aucun numéro de suivi n'est disponible, l'indiquer clairement sans en inventer un.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string']], 'required' => ['order_id'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'download_invoice', "Lien de facture d'une commande, si disponible.", [
+            new ToolSchema('woocommerce', 'download_invoice',
+                "Retourne le lien officiel de téléchargement de la facture lorsqu'il est disponible pour cette boutique.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string']], 'required' => ['order_id'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'request_return', "Enregistre une demande de retour sur une commande (note interne pour l'équipe).", [
+            new ToolSchema('woocommerce', 'request_return',
+                "Enregistre une demande de retour à destination de l'équipe commerciale. Cette opération ne valide pas automatiquement le retour ni le remboursement.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string'], 'reason' => ['type' => 'string']], 'required' => ['order_id', 'reason'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'request_refund', "Demande un remboursement — nécessite la validation d'un conseiller avant tout mouvement financier réel.", [
+            new ToolSchema('woocommerce', 'request_refund',
+                "Enregistre une demande de remboursement qui devra être validée selon les règles de la boutique. Cette opération ne déclenche jamais automatiquement un remboursement financier.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string'], 'amount' => ['type' => 'number'], 'reason' => ['type' => 'string']], 'required' => ['order_id', 'reason'],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'admin'),
-            new ToolSchema('woocommerce', 'update_shipping_address', "Modifie l'adresse de livraison d'une commande pas encore expédiée.", [
+            new ToolSchema('woocommerce', 'update_shipping_address',
+                "Met à jour l'adresse de livraison d'une commande uniquement si celle-ci est encore modifiable. Utiliser après confirmation explicite du client.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string'], 'address_1' => ['type' => 'string'], 'city' => ['type' => 'string'], 'postcode' => ['type' => 'string'], 'country' => ['type' => 'string']], 'required' => ['order_id'],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor'),
-            new ToolSchema('woocommerce', 'cancel_order', "Annule une commande. Irréversible.", [
+            new ToolSchema('woocommerce', 'cancel_order',
+                "Demande l'annulation d'une commande. Cette opération est irréversible et peut être refusée selon l'état actuel de la commande. Toujours demander confirmation avant exécution.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string'], 'reason' => ['type' => 'string']], 'required' => ['order_id'],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'admin'),
         ];
@@ -713,13 +736,64 @@ class WooCommerceConnector extends AbstractConnector
     private function wishlistTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'add_to_wishlist', "Ajoute un produit à la liste de souhaits.", [
+            new ToolSchema('woocommerce', 'add_to_wishlist',
+                "Ajoute un produit à la liste de souhaits du visiteur.
+
+Utiliser cet outil uniquement lorsque l'utilisateur exprime clairement son intention de sauvegarder un produit pour plus tard, de le retrouver ultérieurement ou de le comparer plus tard.
+
+Avant l'appel :
+
+- vérifier que le produit concerné est clairement identifié ;
+- si plusieurs produits correspondent à la demande, demander lequel choisir ;
+- si le produit possède des variantes et qu'aucune variante n'a encore été sélectionnée alors qu'elle est nécessaire (taille, couleur, etc.), demander la variante avant d'ajouter le produit.
+
+Ne jamais inventer un product_id ni un variation_id.
+
+Si le produit est déjà présent dans la liste de souhaits, éviter un nouvel ajout et informer simplement l'utilisateur.
+
+Ne pas utiliser cet outil pour ajouter un article au panier.
+
+Après succès, confirmer que le produit a bien été ajouté à la liste de souhaits.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'remove_from_wishlist', "Retire un produit de la liste de souhaits.", [
+            new ToolSchema('woocommerce', 'remove_from_wishlist',
+                "Retire un produit de la liste de souhaits du visiteur.
+
+Utiliser uniquement lorsque l'utilisateur souhaite supprimer un produit enregistré.
+
+Avant l'appel :
+
+- identifier précisément le produit ;
+- si plusieurs produits correspondent, demander lequel retirer ;
+- si plusieurs variantes du même produit existent dans la liste, identifier la bonne variante.
+
+Ne jamais supprimer un produit sans certitude.
+
+Ne jamais supprimer plusieurs éléments si un seul est demandé.
+
+Si le produit n'existe pas dans la liste de souhaits, éviter l'appel inutile et informer l'utilisateur.
+
+Après succès, confirmer la suppression.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'get_wishlist', "Affiche la liste de souhaits.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
+            new ToolSchema('woocommerce', 'get_wishlist',
+                "Retourne la liste actuelle des produits enregistrés dans la liste de souhaits du visiteur.
+
+Utiliser cet outil lorsque l'utilisateur souhaite :
+
+- consulter sa wishlist ;
+- retrouver un produit enregistré ;
+- voir les produits sauvegardés ;
+- choisir un produit à ajouter au panier ;
+- gérer sa liste de souhaits.
+
+Ne pas utiliser cet outil si la conversation contient déjà une version récente de la wishlist et qu'aucune modification n'a eu lieu depuis.
+
+Présenter les résultats de manière claire et structurée.
+
+Si la liste est vide, informer simplement l'utilisateur et ne rien inventer.
+
+Ne jamais déduire la présence d'un produit sans utiliser cet outil.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
         ];
     }
 
@@ -751,13 +825,16 @@ class WooCommerceConnector extends AbstractConnector
     private function accountTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'create_customer', "Crée un compte client WooCommerce.", [
+            new ToolSchema('woocommerce', 'create_customer',
+                "Crée un nouveau compte client WooCommerce à partir des informations fournies. Vérifier auparavant qu'aucun compte n'existe déjà pour cette adresse email.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string'], 'firstname' => ['type' => 'string'], 'lastname' => ['type' => 'string'], 'phone' => ['type' => 'string']], 'required' => ['email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'commerce.create_account'),
-            new ToolSchema('woocommerce', 'find_customer', "Vérifie si un email correspond déjà à un compte client (utile pour la connexion).", [
+            new ToolSchema('woocommerce', 'find_customer',
+                "Vérifie si une adresse email correspond à un compte client existant. Pour des raisons de confidentialité, ne jamais révéler d'informations personnelles autres que celles explicitement retournées par l'outil.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']], 'required' => ['email'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'update_customer', "Modifie les informations du compte du client déjà identifié dans la conversation.", [
+            new ToolSchema('woocommerce',
+                'update_customer', "Met à jour les informations du compte actuellement identifié. Utiliser uniquement après identification du client et confirmation explicite des modifications.", [
                 'type' => 'object', 'properties' => ['firstname' => ['type' => 'string'], 'lastname' => ['type' => 'string'], 'phone' => ['type' => 'string']],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor'),
         ];
@@ -835,10 +912,12 @@ class WooCommerceConnector extends AbstractConnector
     private function reviewTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'create_review', "Publie un avis sur un produit (soumis à modération).", [
+            new ToolSchema('woocommerce', 'create_review',
+                "Publie un avis sur un produit. L'avis peut être soumis à une modération avant publication. Ne jamais prétendre qu'il est déjà visible publiquement.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'rating' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 5], 'comment' => ['type' => 'string'], 'reviewer_name' => ['type' => 'string'], 'reviewer_email' => ['type' => 'string']], 'required' => ['product_id', 'rating', 'comment'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'get_reviews', "Liste les avis existants sur un produit.", [
+            new ToolSchema('woocommerce', 'get_reviews',
+                "Récupère les avis réellement publiés sur un produit. Utiliser exclusivement les commentaires retournés par l'outil.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto'),
         ];
@@ -878,11 +957,14 @@ class WooCommerceConnector extends AbstractConnector
     private function shippingTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'get_shipping_methods', "Liste les méthodes de livraison disponibles.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'estimate_shipping', "Estime les frais de livraison pour un pays donné.", [
+            new ToolSchema('woocommerce', 'get_shipping_methods',
+                "Retourne les méthodes de livraison configurées pour la boutique. Ne jamais déduire les modes de livraison sans interroger l'outil.", ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
+            new ToolSchema('woocommerce', 'estimate_shipping',
+                "Estime les frais de livraison en fonction du pays fourni et de la configuration actuelle de la boutique. Cette estimation peut varier selon le contenu réel du panier et ne constitue pas un montant garanti.", [
                 'type' => 'object', 'properties' => ['country' => ['type' => 'string'], 'postcode' => ['type' => 'string']], 'required' => ['country'],
             ], defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'track_package', "Suivi d'un colis à partir du numéro de commande.", [
+            new ToolSchema('woocommerce', 'track_package',
+                "Retourne les informations de suivi disponibles pour le colis associé à une commande lorsque celles-ci existent.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string']], 'required' => ['order_id'],
             ], defaultMode: 'auto'),
         ];
@@ -947,16 +1029,20 @@ class WooCommerceConnector extends AbstractConnector
     private function adminTools(): array
     {
         return [
-            new ToolSchema('woocommerce', 'issue_refund', "Exécute un remboursement réel sur une commande.", [
+            new ToolSchema('woocommerce', 'issue_refund',
+                "Exécute un remboursement réel sur une commande. Cette opération a un impact financier irréversible. Utiliser uniquement après toutes les validations requises et ne jamais l'exécuter plusieurs fois pour une même demande.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string'], 'amount' => ['type' => 'number'], 'reason' => ['type' => 'string']], 'required' => ['order_id', 'amount'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'update_order_status', "Change directement le statut d'une commande.", [
+            new ToolSchema('woocommerce', 'update_order_status',
+                "Modifie le statut d'une commande existante. Vérifier que le nouveau statut est autorisé par le workflow métier avant l'exécution.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string'], 'status' => ['type' => 'string']], 'required' => ['order_id', 'status'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'adjust_stock', "Ajuste le stock d'un produit ou d'une variante.", [
+            new ToolSchema('woocommerce', 'adjust_stock',
+                "Met à jour le stock réel d'un produit ou d'une variante. Cette opération affecte immédiatement la disponibilité des produits. Utiliser uniquement lorsque la nouvelle quantité est connue avec certitude.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string'], 'stock_quantity' => ['type' => 'integer']], 'required' => ['product_id', 'stock_quantity'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
-            new ToolSchema('woocommerce', 'update_product_price', "Modifie le prix d'un produit ou d'une variante.", [
+            new ToolSchema('woocommerce', 'update_product_price',
+                "Met à jour le prix réel d'un produit ou d'une variante. Vérifier les nouvelles valeurs avant exécution afin d'éviter toute modification tarifaire involontaire.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variation_id' => ['type' => 'string'], 'regular_price' => ['type' => 'string'], 'sale_price' => ['type' => 'string']], 'required' => ['product_id', 'regular_price'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

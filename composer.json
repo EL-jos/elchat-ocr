@@ -26,7 +26,6 @@
         "spatie/opening-hours": "^4.2",
         "spatie/pdf-to-text": "^1.54",
         "staudenmeir/eloquent-has-many-deep": "^1.21",
-        "stripe/stripe-php": "^21.0",
         "symfony/browser-kit": "^7.2",
         "symfony/http-client": "^6.2",
         "tymon/jwt-auth": "^2.2",

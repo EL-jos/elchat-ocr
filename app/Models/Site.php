@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Mcp\McpCapability;
 use App\Models\Mcp\McpSiteConnector;
 use App\Models\Social\SocialAccount;
 use Illuminate\Database\Eloquent\Model;
@@ -79,5 +80,9 @@ class Site extends BaseModel
     }
     public function mcpSiteConnectors(){
         return $this->hasMany(McpSiteConnector::class);
+    }
+
+    public function mcpSiteCapabilities(){
+        return $this->hasMany(McpCapability::class);
     }
 }

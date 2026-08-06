@@ -25,26 +25,38 @@ class AsanaConnector extends AbstractConnector
     public function listTools(): array
     {
         return [
-            new ToolSchema('asana', 'create_task', "Crée une tâche (ex: le commercial doit rappeler demain).", [
+            new ToolSchema('asana',
+                'create_task',
+                "Crée une nouvelle tâche Asana lorsqu'aucune tâche existante ne correspond à la demande de l'utilisateur. Utiliser uniquement pour une nouvelle action à planifier. Si l'utilisateur souhaite modifier, terminer ou commenter une tâche existante, utiliser l'outil approprié. Si la demande est ambiguë ou incomplète (nom, échéance, contexte), demander les informations manquantes avant de créer la tâche. Ne jamais créer de doublon volontairement.", [
                 'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'notes' => ['type' => 'string'], 'due_date' => ['type' => 'string']], 'required' => ['name'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_task'),
 
-            new ToolSchema('asana', 'update_task', "Modifie une tâche existante.", [
+            new ToolSchema('asana',
+                'update_task',
+                "Met à jour une tâche Asana existante identifiée de manière unique par son task_gid. Si seul un nom ou une description est fourni, rechercher d'abord la tâche. En cas de plusieurs correspondances, demander une clarification avant toute modification. Modifier uniquement les champs explicitement demandés par l'utilisateur.", [
                 'type' => 'object', 'properties' => ['task_gid' => ['type' => 'string'], 'name' => ['type' => 'string'], 'notes' => ['type' => 'string'], 'due_date' => ['type' => 'string']], 'required' => ['task_gid'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('asana', 'complete_task', "Marque une tâche comme terminée.", [
+            new ToolSchema('asana',
+                'complete_task',
+                "Marque une tâche Asana existante comme terminée. Utiliser uniquement lorsque l'utilisateur exprime clairement l'intention de clôturer ou terminer une tâche. Si la tâche n'est pas identifiée de manière unique, effectuer une recherche puis demander une clarification si nécessaire avant de la terminer.", [
                 'type' => 'object', 'properties' => ['task_gid' => ['type' => 'string']], 'required' => ['task_gid'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('asana', 'list_tasks', "Liste les tâches du projet configuré.", ['type' => 'object', 'properties' => []],
+            new ToolSchema('asana',
+                'list_tasks',
+                "Retourne la liste des tâches du projet Asana configuré. Utiliser lorsque l'utilisateur souhaite consulter, parcourir ou résumer les tâches du projet sans appliquer de filtre spécifique. Pour une recherche ciblée, utiliser search_tasks.", ['type' => 'object', 'properties' => []],
                 defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('asana', 'search_tasks', "Recherche libre de tâches.", [
+            new ToolSchema('asana',
+                'search_tasks',
+                "Recherche des tâches Asana correspondant à un texte libre fourni par l'utilisateur. Utiliser pour localiser une tâche avant une mise à jour, un commentaire ou une clôture, ou lorsque l'utilisateur ne connaît pas son identifiant. Ne pas supposer qu'un résultat unique existe ; demander une clarification si plusieurs tâches pertinentes sont trouvées.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('asana', 'add_comment', "Ajoute un commentaire à une tâche.", [
+            new ToolSchema('asana',
+                'add_comment',
+                "Ajoute un commentaire à une tâche Asana existante. Utiliser uniquement lorsque l'utilisateur souhaite ajouter une information sans modifier les propriétés de la tâche. Si la tâche n'est pas identifiée de manière unique, rechercher la tâche puis demander une clarification avant d'ajouter le commentaire.", [
                 'type' => 'object', 'properties' => ['task_gid' => ['type' => 'string'], 'text' => ['type' => 'string']], 'required' => ['task_gid', 'text'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

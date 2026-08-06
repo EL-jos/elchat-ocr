@@ -81,6 +81,7 @@ class ChatController extends Controller
 
         }
 
+
         // ─────────────────────────────
         // 🖼️ Pièce jointe image (upload visiteur pendant la conversation)
         // ─────────────────────────────
@@ -133,6 +134,12 @@ class ChatController extends Controller
         if ($enrichedQuestion === '') {
             // Image envoyée mais non analysable (décorative/illisible) et pas de texte
             $enrichedQuestion = "Le visiteur a envoyé une image, mais son contenu n'a pas pu être analysé. Demande-lui de préciser sa question.";
+        }
+
+        // 🆕 Titre auto pour les conversations authentifiées (admin/copilote interne),
+        // dérivé du premier message — jamais écrasé une fois posé.
+        if (!$conversation->title && $userId) {
+            $conversation->update(['title' => Str::limit($rawQuestion ?: 'Nouvelle conversation', 60)]);
         }
 
         // Sauvegarder la question

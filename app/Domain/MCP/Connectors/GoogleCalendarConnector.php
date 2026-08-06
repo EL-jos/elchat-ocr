@@ -35,7 +35,7 @@ class GoogleCalendarConnector extends AbstractConnector
         return [
             // ── Disponibilités ──
             new ToolSchema('google_calendar', 'find_available_slots',
-                "Trouve les créneaux libres sur une période, en respectant les horaires de travail configurés. À utiliser quand le visiteur demande un rendez-vous sans préciser d'heure exacte.",
+                "Recherche les créneaux réellement disponibles correspondant aux critères demandés en tenant compte des horaires de travail configurés et des événements existants. Utiliser lorsque l'utilisateur souhaite planifier un rendez-vous mais n'a pas encore choisi d'horaire précis ou demande des propositions de créneaux. Ne pas utiliser pour vérifier un créneau déjà défini ; utiliser check_availability dans ce cas.",
                 ['type' => 'object', 'properties' => [
                     'date_from' => ['type' => 'string', 'description' => 'Date de début (YYYY-MM-DD), défaut: aujourd\'hui'],
                     'date_to' => ['type' => 'string', 'description' => 'Date de fin (YYYY-MM-DD), défaut: +7 jours'],
@@ -43,30 +43,30 @@ class GoogleCalendarConnector extends AbstractConnector
                 ]], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
             new ToolSchema('google_calendar', 'is_time_available',
-                "Vérifie si un créneau précis (date et heure exactes) est libre.",
+                "Vérifie si un créneau précis est disponible. Utiliser uniquement lorsque la date et l'heure de début ainsi que de fin sont déjà connues. Pour proposer des créneaux alternatifs, utiliser find_available_slots.",
                 ['type' => 'object', 'properties' => [
                     'start' => ['type' => 'string', 'description' => 'ISO 8601'], 'end' => ['type' => 'string', 'description' => 'ISO 8601'],
                 ], 'required' => ['start', 'end']], defaultMode: 'auto'),
 
             new ToolSchema('google_calendar', 'get_busy_periods',
-                "Retourne les périodes occupées sur une plage de dates, accompagnées des horaires d'ouverture configurés (working_hours_windows) quand ils existent. Si working_hours_windows est présent dans le résultat, ne propose JAMAIS un créneau en dehors de ces fenêtres, même s'il n'apparaît pas dans busy_slots. Pour une réponse directement bornée aux horaires d'ouverture, préfère find_available_slots.",
+                "Retourne les périodes déjà occupées dans une plage de dates. Utiliser lorsque l'utilisateur souhaite connaître les indisponibilités, visualiser les créneaux occupés ou analyser le planning existant. Ne pas utiliser pour vérifier un créneau précis ni pour proposer des créneaux disponibles. Utiliser uniquement les périodes réellement retournées par l'outil et ne jamais déduire la disponibilité d'autres horaires.",
                 ['type' => 'object', 'properties' => [
                     'date_from' => ['type' => 'string', 'description' => 'ISO 8601'], 'date_to' => ['type' => 'string', 'description' => 'ISO 8601'],
                 ], 'required' => ['date_from', 'date_to']], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
             new ToolSchema('google_calendar', 'check_availability',
-                "Alias historique de get_busy_periods.",
+                "Vérifie si un créneau précis est disponible. Utiliser uniquement lorsque la date, l'heure de début et l'heure de fin sont déjà connues. Retourner uniquement le résultat fourni par l'outil. Si l'utilisateur n'a pas encore choisi d'horaire ou souhaite obtenir des propositions, utiliser find_available_slots plutôt que cet outil.",
                 ['type' => 'object', 'properties' => [
                     'date_from' => ['type' => 'string'], 'date_to' => ['type' => 'string'],
                 ], 'required' => ['date_from', 'date_to']], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
             new ToolSchema('google_calendar', 'get_working_hours',
-                "Retourne les horaires de travail configurés (pour éviter de proposer un créneau hors ouverture).",
+                "Retourne les horaires de travail configurés pour le calendrier (jours travaillés, heures d'ouverture et éventuelles règles associées). Utiliser lorsque l'utilisateur souhaite connaître ses horaires de disponibilité théorique ou lorsque ces informations sont nécessaires avant une planification. Cet outil ne tient pas compte des événements existants et ne permet pas de déterminer si un créneau est réellement libre.",
                 ['type' => 'object', 'properties' => []], defaultMode: 'auto'),
 
             // ── Rendez-vous ──
             new ToolSchema('google_calendar', 'create_event',
-                "Crée un rendez-vous et envoie l'invitation au(x) participant(s).",
+                "Crée un nouveau rendez-vous et envoie les invitations aux participants. Utiliser uniquement lorsque toutes les informations nécessaires sont connues (titre, horaire, participant). Si l'utilisateur n'a pas encore choisi un horaire, rechercher d'abord des disponibilités. Ne jamais créer un rendez-vous sur la base d'informations incomplètes ou supposées. Utiliser le résultat réel retourné par l'outil sans inventer d'identifiants, de liens ou de disponibilités.",
                 ['type' => 'object', 'properties' => [
                     'title' => ['type' => 'string'], 'start' => ['type' => 'string', 'description' => 'ISO 8601'], 'end' => ['type' => 'string', 'description' => 'ISO 8601'],
                     'attendee_email' => ['type' => 'string'], 'description' => ['type' => 'string'], 'location' => ['type' => 'string'],
@@ -74,14 +74,14 @@ class GoogleCalendarConnector extends AbstractConnector
                 ], 'required' => ['title', 'start', 'end', 'attendee_email']], isWriteAction: true, defaultMode: 'auto', capability: 'scheduling.create_event'),
 
             new ToolSchema('google_calendar', 'create_google_meet',
-                "Crée un rendez-vous avec visioconférence Google Meet automatique. Identique à create_event avec add_google_meet activé.",
+                "Crée un rendez-vous incluant automatiquement une visioconférence Google Meet. Utiliser uniquement lorsque l'utilisateur demande explicitement une réunion en ligne, un appel vidéo ou un lien Google Meet. Dans les autres cas, utiliser create_event.",
                 ['type' => 'object', 'properties' => [
                     'title' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'],
                     'attendee_email' => ['type' => 'string'], 'description' => ['type' => 'string'],
                 ], 'required' => ['title', 'start', 'end', 'attendee_email']], isWriteAction: true, defaultMode: 'auto', capability: 'scheduling.create_event'),
 
             new ToolSchema('google_calendar', 'update_event',
-                "Modifie un rendez-vous existant (titre, date, lieu, description).",
+                "Met à jour un rendez-vous existant identifié de manière unique. Modifier uniquement les champs explicitement demandés. Si l'identifiant est inconnu, rechercher d'abord le rendez-vous. En présence de plusieurs correspondances, demander une clarification avant toute modification.",
                 ['type' => 'object', 'properties' => [
                     'event_id' => ['type' => 'string'], 'title' => ['type' => 'string'],
                     'start' => ['type' => 'string'], 'end' => ['type' => 'string'],
@@ -89,52 +89,52 @@ class GoogleCalendarConnector extends AbstractConnector
                 ], 'required' => ['event_id']], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.update_event'),
 
             new ToolSchema('google_calendar', 'reschedule_event',
-                "Décale un rendez-vous existant à une nouvelle date/heure.",
+                "Déplace un rendez-vous existant vers une nouvelle date ou heure. Utiliser uniquement lorsque l'utilisateur souhaite modifier la planification du rendez-vous. Vérifier que le nouvel horaire est clairement défini avant d'effectuer la modification.",
                 ['type' => 'object', 'properties' => [
                     'event_id' => ['type' => 'string'], 'start' => ['type' => 'string'], 'end' => ['type' => 'string'],
                 ], 'required' => ['event_id', 'start', 'end']], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.update_event'),
 
             new ToolSchema('google_calendar', 'cancel_event',
-                "Annule un rendez-vous existant.",
+                "Annule un rendez-vous existant identifié de manière unique. Ne jamais annuler un rendez-vous sur la base d'une supposition. Si plusieurs rendez-vous correspondent à la demande, demander une clarification avant l'annulation.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string']], 'required' => ['event_id']],
                 isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.cancel_event'),
 
             // ── Recherche (accès admin par défaut : expose le contenu de l'agenda) ──
             new ToolSchema('google_calendar', 'search_events',
-                "Recherche des rendez-vous sur une période, éventuellement filtrés par mot-clé.",
+                "Recherche des rendez-vous selon une période et/ou un mot-clé. Utiliser pour retrouver un rendez-vous avant une consultation, une modification, une annulation ou une gestion des participants lorsque son identifiant est inconnu. Ne jamais déduire un identifiant d'événement sans utiliser cette recherche.",
                 ['type' => 'object', 'properties' => [
                     'date_from' => ['type' => 'string'], 'date_to' => ['type' => 'string'], 'query' => ['type' => 'string'],
                 ]], defaultActorScope: 'admin', defaultMode: 'auto'),
 
             new ToolSchema('google_calendar', 'get_event',
-                "Détails complets d'un rendez-vous (participants, lieu, description).",
+                "Récupère les informations complètes d'un rendez-vous identifié de manière unique, y compris les participants, le lieu, la description et les informations de visioconférence. Utiliser lorsque des détails supplémentaires sont nécessaires avant une autre action.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string']], 'required' => ['event_id']],
                 defaultActorScope: 'admin', defaultMode: 'auto'),
 
             // ── Participants (accès admin par défaut) ──
             new ToolSchema('google_calendar', 'add_attendee',
-                "Ajoute un participant à un rendez-vous existant.",
+                "Ajoute un participant à un rendez-vous existant. Utiliser uniquement lorsque l'événement est identifié de manière unique et que l'utilisateur souhaite inviter une nouvelle personne. Ne pas utiliser pour modifier les autres propriétés du rendez-vous.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string'], 'email' => ['type' => 'string']], 'required' => ['event_id', 'email']],
                 isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
             new ToolSchema('google_calendar', 'remove_attendee',
-                "Retire un participant d'un rendez-vous existant.",
+                "Retire un participant d'un rendez-vous existant. Utiliser uniquement lorsque l'événement est identifié de manière unique et que l'utilisateur demande explicitement de retirer ce participant.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string'], 'email' => ['type' => 'string']], 'required' => ['event_id', 'email']],
                 isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
             new ToolSchema('google_calendar', 'list_attendees',
-                "Liste les participants d'un rendez-vous.",
+                "Retourne la liste des participants d'un rendez-vous identifié de manière unique. Utiliser lorsque l'utilisateur souhaite consulter les invités sans modifier le rendez-vous.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string']], 'required' => ['event_id']],
                 defaultActorScope: 'admin', defaultMode: 'auto'),
 
             // ── Notifications ──
             new ToolSchema('google_calendar', 'send_invitation',
-                "Renvoie l'invitation d'un rendez-vous à tous les participants.",
+                "Renvoie les invitations aux participants d'un rendez-vous existant. Utiliser uniquement lorsque l'utilisateur souhaite renvoyer les notifications sans modifier le contenu du rendez-vous.",
                 ['type' => 'object', 'properties' => ['event_id' => ['type' => 'string']], 'required' => ['event_id']],
                 defaultActorScope: 'admin', defaultMode: 'auto'),
 
             new ToolSchema('google_calendar', 'reminder_settings',
-                "Configure un rappel avant le rendez-vous.",
+                "Configure ou met à jour les rappels d'un rendez-vous existant. Utiliser uniquement lorsque l'utilisateur souhaite modifier les notifications précédant le rendez-vous.",
                 ['type' => 'object', 'properties' => [
                     'event_id' => ['type' => 'string'], 'minutes_before' => ['type' => 'integer'],
                     'method' => ['type' => 'string', 'enum' => ['email', 'popup']],

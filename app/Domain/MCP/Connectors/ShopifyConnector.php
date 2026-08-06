@@ -37,44 +37,218 @@ class ShopifyConnector extends AbstractConnector
     public function listTools(): array
     {
         return [
-            new ToolSchema('shopify', 'search_products', "Recherche des produits par mot-clé.", [
+            new ToolSchema('shopify', 'search_products',
+                "Recherche un ou plusieurs produits Shopify.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• trouver un produit
+• rechercher par mot-clé
+• rechercher une catégorie
+• rechercher une marque
+• rechercher une collection
+• trouver un produit selon un besoin
+• obtenir des recommandations
+• comparer plusieurs produits
+
+Bonnes pratiques :
+
+- Comprendre l'intention de l'utilisateur avant la recherche.
+- Retourner uniquement les produits les plus pertinents.
+- Présenter le nom, le prix, la disponibilité et la variante principale lorsqu'elle existe.
+- Si plusieurs produits correspondent, les classer du plus pertinent au moins pertinent.
+- Si aucun produit n'est trouvé, l'indiquer clairement et proposer une recherche alternative.
+- Ne jamais inventer un produit inexistant.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultMode: 'auto', capability: 'commerce.search_products'),
 
-            new ToolSchema('shopify', 'get_product', "Détails d'un produit.", [
+            new ToolSchema('shopify', 'get_product',
+                "Récupère les informations détaillées d'un produit Shopify.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• consulter un produit
+• connaître les caractéristiques
+• connaître le prix
+• consulter les variantes
+• voir les tailles
+• voir les couleurs
+• vérifier les options disponibles
+
+Bonnes pratiques :
+
+- Retourner toutes les variantes disponibles.
+- Expliquer clairement les différences entre les variantes.
+- Mettre en évidence les promotions lorsqu'elles existent.
+- Indiquer la disponibilité du stock.
+- Ne jamais masquer une rupture de stock.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'commerce.search_products'),
 
-            new ToolSchema('shopify', 'get_product_stock', "Vérifie le stock d'un produit ou d'une variante.", [
+            new ToolSchema('shopify', 'get_product_stock',
+                "Vérifie la disponibilité d'un produit ou d'une variante.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• vérifier le stock
+• savoir si une taille est disponible
+• savoir si une couleur est disponible
+• connaître les quantités restantes
+
+Bonnes pratiques :
+
+- Vérifier la variante demandée lorsqu'elle est précisée.
+- Si aucune variante n'est fournie, utiliser la variante par défaut.
+- Expliquer clairement si le produit est disponible.
+- Si le produit est en rupture, proposer une alternative lorsque cela est possible.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variant_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('shopify', 'add_to_cart', "Ajoute un produit au panier.", [
+            new ToolSchema('shopify', 'add_to_cart',
+                "Ajoute un produit au panier du visiteur.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• acheter un produit
+• ajouter un article
+• préparer une commande
+
+Bonnes pratiques :
+
+- Vérifier que le produit existe.
+- Vérifier que la variante existe.
+- Vérifier le stock avant l'ajout.
+- Si plusieurs variantes existent et qu'aucune n'est choisie, demander la couleur, la taille ou l'option souhaitée avant d'ajouter au panier.
+- Ajouter uniquement la quantité demandée.
+- Confirmer clairement le contenu ajouté.
+- Ne jamais ajouter automatiquement une variante incorrecte.", [
                 'type' => 'object', 'properties' => [
                     'product_id' => ['type' => 'string'], 'variant_id' => ['type' => 'string'], 'quantity' => ['type' => 'integer'],
                 ], 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
 
-            new ToolSchema('shopify', 'remove_from_cart', "Retire un produit du panier.", [
+            new ToolSchema('shopify', 'remove_from_cart',
+                "Retire un article du panier.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• supprimer un produit
+• retirer un article
+• annuler un ajout
+
+Bonnes pratiques :
+
+- Vérifier que l'article est présent.
+- Supprimer uniquement l'article demandé.
+- Confirmer la suppression.
+- Si l'article est absent, l'indiquer clairement.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variant_id' => ['type' => 'string']], 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
 
-            new ToolSchema('shopify', 'update_cart_quantity', "Modifie la quantité d'un article du panier.", [
+            new ToolSchema('shopify', 'update_cart_quantity',
+                "Met à jour la quantité d'un article dans le panier.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• modifier une quantité
+• augmenter une quantité
+• diminuer une quantité
+
+Bonnes pratiques :
+
+- Vérifier que l'article est présent.
+- Vérifier la disponibilité du stock.
+- Si la quantité demandée dépasse le stock, informer l'utilisateur.
+- Confirmer la nouvelle quantité.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'string'], 'variant_id' => ['type' => 'string'], 'quantity' => ['type' => 'integer']], 'required' => ['product_id', 'quantity'],
             ], defaultMode: 'auto', capability: 'commerce.manage_cart'),
 
-            new ToolSchema('shopify', 'get_cart', "Affiche le panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
-            new ToolSchema('shopify', 'clear_cart', "Vide le panier.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
+            new ToolSchema('shopify', 'get_cart',
+                "Affiche le contenu actuel du panier.
 
-            new ToolSchema('shopify', 'generate_checkout', "Crée une commande brouillon et retourne le lien de paiement.", [
+À utiliser lorsque l'utilisateur souhaite :
+
+• consulter son panier
+• vérifier sa commande
+• connaître le total avant paiement
+
+Bonnes pratiques :
+
+- Présenter chaque article clairement.
+- Afficher les quantités.
+- Afficher les prix unitaires.
+- Afficher le sous-total.
+- Si le panier est vide, l'indiquer clairement.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
+            new ToolSchema('shopify', 'clear_cart',
+                "Vide complètement le panier.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• recommencer ses achats
+• supprimer tous les articles
+• annuler le panier
+
+Bonnes pratiques :
+
+- Vérifier que le panier contient des articles.
+- Confirmer que le panier est désormais vide.", ['type' => 'object', 'properties' => []], defaultMode: 'auto', capability: 'commerce.manage_cart'),
+
+            new ToolSchema('shopify', 'generate_checkout',
+                "Génère un lien de paiement Shopify.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• passer commande
+• payer son panier
+• finaliser son achat
+
+Bonnes pratiques :
+
+- Vérifier que le panier n'est pas vide.
+- Vérifier que tous les produits sont encore disponibles.
+- Générer le lien de paiement.
+- Expliquer que le paiement sera effectué sur Shopify.
+- Ne jamais prétendre que le paiement est déjà effectué.
+- Après création du checkout, fournir le lien au visiteur.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'commerce.checkout'),
 
-            new ToolSchema('shopify', 'get_order_status', "Statut d'une commande.", [
+            new ToolSchema('shopify', 'get_order_status',
+                "Consulte le statut d'une commande Shopify.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• suivre une commande
+• connaître son statut
+• savoir si elle est expédiée
+• vérifier le paiement
+
+Bonnes pratiques :
+
+- Expliquer le statut financier.
+- Expliquer le statut d'expédition.
+- Afficher le total de la commande.
+- Si la commande est introuvable, l'indiquer clairement.
+- Ne jamais divulguer les informations d'une autre commande.", [
                 'type' => 'object', 'properties' => ['order_id' => ['type' => 'string']], 'required' => ['order_id'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('shopify', 'create_customer', "Crée un compte client.", [
+            new ToolSchema('shopify', 'create_customer',
+                "Crée un nouveau compte client Shopify.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• créer un compte
+• devenir client
+• enregistrer ses informations
+
+Bonnes pratiques :
+
+- Vérifier que l'adresse email est valide.
+- Vérifier qu'aucun compte n'existe déjà.
+- Créer le compte avec les informations fournies.
+- Informer clairement l'utilisateur du résultat.
+- Ne jamais créer plusieurs comptes pour la même adresse email.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string'], 'first_name' => ['type' => 'string'], 'last_name' => ['type' => 'string']], 'required' => ['email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'commerce.create_account'),
         ];

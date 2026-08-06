@@ -69,7 +69,7 @@
                     </li>
 
                     <li class="nav-item">
-                        <a @class(["nav-link p-0", "active" => $routeName === 'tarifs']) href="{{ route('tarifs') }}">Tarifs</a>
+                        <a @class(["nav-link p-0", "active" => $routeName === 'tarifs']) href="{{ route('abonnements.page') }}">Tarifs</a>
                     </li>
                     <li class="nav-item">
                         <a @class(["nav-link p-0", "active" => $routeName === 'faqs.page']) href="{{ route('faqs.page') }}">Faq's</a>
@@ -423,7 +423,7 @@
                                                                           class="text-decoration-none">Services</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('faqs.page') }}"
                                                                           class="text-decoration-none">Faq's</a></li>
-                            <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('tarifs') }}"
+                            <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('abonnements.page') }}"
                                                                           class="text-decoration-none">Abonnements</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('politique_de_confidentialite.page') }}"
                                                                           class="text-decoration-none">Politique de confidentialité</a></li>

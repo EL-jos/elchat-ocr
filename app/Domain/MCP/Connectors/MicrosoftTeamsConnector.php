@@ -32,7 +32,52 @@ class MicrosoftTeamsConnector extends AbstractConnector
     public function listTools(): array
     {
         return [
-            new ToolSchema('microsoft_teams', 'send_message', "Envoie une notification dans un canal Teams (ex: prévenir l'équipe d'une demande importante).", [
+            new ToolSchema('microsoft_teams', 'send_message',
+                "Envoie une notification dans un canal Microsoft Teams via le webhook configuré.
+
+Utiliser cet outil uniquement lorsqu'une information mérite d'être transmise à une équipe humaine.
+
+Cas d'usage typiques :
+
+- escalade vers une équipe ;
+- incident ou erreur importante ;
+- demande nécessitant une intervention humaine ;
+- alerte métier ;
+- validation attendue ;
+- notification opérationnelle ;
+- partage d'une information importante.
+
+Ne pas utiliser cet outil pour :
+
+- répondre directement à l'utilisateur ;
+- envoyer des messages de conversation ordinaires ;
+- publier chaque échange ;
+- envoyer des notifications redondantes ;
+- remplacer une action réalisable par un autre outil.
+
+Avant l'appel :
+
+- vérifier qu'une notification est réellement utile ;
+- regrouper plusieurs informations liées dans un seul message lorsque cela est pertinent ;
+- éviter plusieurs notifications successives pour le même événement ;
+- produire un titre court et explicite ;
+- produire un message clair, structuré et directement exploitable par l'équipe.
+
+Ne jamais inventer :
+
+- un incident ;
+- un résultat ;
+- un identifiant ;
+- un utilisateur ;
+- une décision métier.
+
+Après un échec du webhook :
+
+- informer l'utilisateur si cela impacte sa demande ;
+- ne pas réessayer en boucle ;
+- ne pas envoyer plusieurs fois la même notification.
+
+Après succès, confirmer uniquement que la notification a été transmise.", [
                 'type' => 'object', 'properties' => ['title' => ['type' => 'string'], 'message' => ['type' => 'string']], 'required' => ['message'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'communication.notify_team'),
         ];

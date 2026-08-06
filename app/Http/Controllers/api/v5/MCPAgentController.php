@@ -71,6 +71,7 @@ class MCPAgentController extends Controller
             'tone' => ['required', 'in:professional,friendly,concise,enthusiastic,custom'],
             'custom_tone_instructions' => ['nullable', 'string'],
             'skills' => ['array'],
+            'workflow_ids' => ['nullable', 'array'], // 🆕
             'is_active' => ['boolean'],
         ]);
     }

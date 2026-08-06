@@ -91,16 +91,19 @@ class MCPActionGateService
      */
     private function handleForAgent(
         Site $site, Conversation $conversation, ActorContext $actor, string $question, array $history,
-        array $permittedTools, ?McpAgent $agent, ?string $intent,
+        array $permittedTools, ?\App\Models\Mcp\McpAgent $agent, ?string $intent,
     ): MCPGateResult {
         $agentAllowedNames = ($agent && !empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
         $scopedTools = $agentAllowedNames
             ? array_values(array_filter($permittedTools, fn ($t) => in_array($t->qualifiedName(), $agentAllowedNames, true)))
             : $permittedTools;
 
-        if (empty($scopedTools)) {
-            return MCPGateResult::notApplicable();
-        }
+        if (empty($scopedTools)) return MCPGateResult::notApplicable();
+
+        // 🆕 Un agent explicite n'utilise QUE les workflows cochés — aucun coché
+        // = aucun workflow pour lui. Seule l'absence totale d'agent (site sans
+        // Agent Studio configuré) continue de voir tous les workflows du site.
+        $agentWorkflowIds = $agent ? ($agent->workflow_ids ?? []) : null;
 
         $tools = [
             ...$this->controlTools(),
@@ -108,7 +111,7 @@ class MCPActionGateService
         ];
 
         $messages = [
-            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent, $agent, $agentAllowedNames)],
+            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent, $agent, $agentAllowedNames, $agentWorkflowIds)],
             ...$history,
             ['role' => 'user', 'content' => $question],
         ];
@@ -366,7 +369,7 @@ class MCPActionGateService
         }
 
         $credentials = $this->vault->retrieve($site, $connectorSlug);
-        if (!$credentials) {
+        if ($credentials === null) {
             return ToolResult::fail('not_connected', "Le connecteur {$connectorSlug} n'est pas configuré pour ce site.");
         }
 
@@ -493,7 +496,7 @@ N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider s
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
 PROMPT;
     }*/
-    private function systemPrompt(Site $site, ActorContext $actor, ?string $intent = null, ?McpAgent $agent = null, ?array $agentAllowedNames): string
+    private function systemPrompt(Site $site, ActorContext $actor, ?string $intent = null, ?McpAgent $agent = null, array $agentAllowedNames = [], ?array $agentWorkflowIds = null): string
     {
         $name = $site->name ?? parse_url($site->url ?? '', PHP_URL_HOST);
         $roleNote = $actor->isAdmin
@@ -530,7 +533,7 @@ demande explicite — n'agis ainsi que si le signal est net et que l'action est 
 duplique jamais une action déjà réalisée dans cette même conversation.
 N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
-PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllowedNames);
+PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllowedNames, $agentWorkflowIds);
     }
 
     private function thinkingLabelFor(string $connectorSlug, string $toolName): string
@@ -673,14 +676,17 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
      * réalisable est simplement omise plutôt que d'induire le LLM en erreur
      * avec un plan incomplet.
      */
-    private function workflowGuidance(Site $site, array $allowedToolNames = []): string // 🆕 param optionnel
+    private function workflowGuidance(Site $site, array $allowedToolNames = [], ?array $agentWorkflowIds = null): string
     {
-        $workflows = McpWorkflow::where('is_active', true)
+        $workflows = \App\Models\Mcp\McpWorkflow::where('is_active', true)
             ->where(fn ($q) => $q->where('site_id', $site->id)->orWhereNull('site_id'))
             ->get()
             ->groupBy('slug')
             ->map(fn ($group) => $group->firstWhere('site_id', $site->id) ?? $group->first())
-            ->values();
+            ->values()
+            // 🆕 null = pas d'agent, tous les workflows visibles (inchangé) ;
+            // un tableau (même vide) = liste explicite, jamais de repli "tout".
+            ->when($agentWorkflowIds !== null, fn ($c) => $c->filter(fn ($w) => in_array($w->id, $agentWorkflowIds, true))); // 🆕
 
         $lines = [];
         foreach ($workflows as $workflow) {

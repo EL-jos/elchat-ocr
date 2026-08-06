@@ -478,30 +478,7 @@
                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Widget personnalisable</li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 50 messages / mois</li>
                             </ul>
-
-                            {{-- ── CTA Starter ── --}}
-                            <div class="elc-cta-wrap">
-
-                                {{-- Stripe --}}
-                                {{--<form method="POST" action="{{ route('subscribe', 'starter') }}" class="elc-stripe-form">
-                                    @csrf
-                                    <input type="hidden" name="billing_cycle" class="elc-cycle-input" value="annual">
-                                    <button type="submit" class="elc-btn-stripe">
-                                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                                        Payer par carte
-                                    </button>
-                                </form>
-                                <div class="elc-separator">ou</div>--}}
-                                {{-- PayPal --}}
-                                <form method="POST" action="{{ route('paypal.subscribe', 'starter') }}" class="elc-paypal-form">
-                                    @csrf
-                                    <input type="hidden" name="billing_cycle" class="elc-cycle-input" value="annual">
-                                    <button type="submit" class="elc-btn-paypal">
-                                        @include('partials._paypal-logo')
-                                    </button>
-                                </form>
-
-                            </div>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
                         </div>
                     </div>
                 </div>
@@ -536,27 +513,7 @@
                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 150 messages / mois</li>
                             </ul>
 
-                            {{-- ── CTA Business ── --}}
-                            <div class="elc-cta-wrap">
-
-                                {{--<form method="POST" action="{{ route('subscribe', 'business') }}" class="elc-stripe-form">
-                                    @csrf
-                                    <input type="hidden" name="billing_cycle" class="elc-cycle-input" value="annual">
-                                    <button type="submit" class="elc-btn-stripe">
-                                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                                        Payer par carte
-                                    </button>
-                                </form>
-                                <div class="elc-separator">ou</div>--}}
-                                <form method="POST" action="{{ route('paypal.subscribe', 'business') }}" class="elc-paypal-form">
-                                    @csrf
-                                    <input type="hidden" name="billing_cycle" class="elc-cycle-input" value="annual">
-                                    <button type="submit" class="elc-btn-paypal">
-                                        @include('partials._paypal-logo')
-                                    </button>
-                                </form>
-
-                            </div>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
                         </div>
                     </div>
                 </div>
@@ -591,31 +548,7 @@
                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 300 messages / mois (GLOBAL)</li>
                             </ul>
 
-                            {{-- ── CTA Pro ── --}}
-                            <div class="elc-cta-wrap">
-                               {{-- @auth--}}
-                                    {{--<form method="POST" action="{{ route('subscribe', 'pro') }}" class="elc-stripe-form">
-                                        @csrf
-                                        <input type="hidden" name="billing_cycle" class="elc-cycle-input" value="annual">
-                                        <button type="submit" class="elc-btn-stripe">
-                                            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                                            Payer par carte
-                                        </button>
-                                    </form>
-                                    <div class="elc-separator">ou</div>--}}
-                                    <form method="POST" action="{{ route('paypal.subscribe', 'pro') }}" class="elc-paypal-form">
-                                        @csrf
-                                        <input type="hidden" name="billing_cycle" class="elc-cycle-input" value="annual">
-                                        <button type="submit" class="elc-btn-paypal">
-                                            @include('partials._paypal-logo')
-                                        </button>
-                                    </form>
-                                {{--@else
-                                    <a href="{{ url('https://elchat.io/app/sign-in') }}?plan=pro" class="elc-btn-stripe">
-                                        🎉 Essai gratuit {{ $trialDays ?? 7 }}j
-                                    </a>
-                                @endauth--}}
-                            </div>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
                         </div>
                     </div>
                 </div>
@@ -651,17 +584,7 @@
                                 <li class="position-relative"><i class="fa-solid fa-check"></i> White-label option</li>
                             </ul>
 
-                            {{-- ── CTA Enterprise — contact direct ── --}}
-                            <div class="elc-cta-wrap">
-                                <a href="mailto:{{ config('stripe.enterprise_email', 'contact@elchat.io') }}?subject=Demande%20offre%20Enterprise%20ELChat"
-                                   class="elc-btn-enterprise">
-                                    ✉️ Nous contacter
-                                </a>
-                                <a href="{{ route('contact.page') }}" class="text-decoration-none text-center"
-                                   style="font-size:12px; color:#94a3b8; margin-top:4px;">
-                                    ou via le formulaire de contact
-                                </a>
-                            </div>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
                         </div>
                     </div>
                 </div>
@@ -691,67 +614,6 @@
             </p>
 
         </div>{{-- /container --}}
-    </section>
-
-    {{-- ══════════════════════════════════════════════════════════════════
-         STATISTICS SECTION — intact à 100%
-         ══════════════════════════════════════════════════════════════════ --}}
-    <section class="float-left w-100 statistics-con position-relative padding-top padding-bottom main-box">
-        <div class="container">
-            <div class="row">
-                <div class="col-lg-6 col-md-6 wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">
-                    <div class="statistics-content-con">
-                        <div class="heading-title-con mb-0">
-                            <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">Performance & Impact</span>
-                            <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                                Conçu pour les équipes,<br>pensé pour la scalabilité
-                            </h2>
-                            <p class="wow fadeInLeft p-0" data-wow-duration="2s" data-wow-delay="0.6s">
-                                ELChat est utilisé pour gérer des volumes élevés d'interactions sur les réseaux sociaux,
-                                les sites web et les canaux de support client. Grâce à son moteur de connaissance et
-                                son système d'automatisation, les entreprises peuvent répondre instantanément,
-                                qualifier leurs prospects et améliorer l'expérience client à grande échelle.
-                            </p>
-                            <a href="about.html" class="text-decoration-none primary_btn d-inline-block wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Commencer</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-6 col-md-6 wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.2s">
-                    <div class="statistics-outer-con">
-                        <div class="row">
-                            <div class="col-lg-6 col-md-6 d-flex">
-                                <div class="statistics-box w-100">
-                                    <figure><img src="{{ asset('assets/images/statistics-icon1.png') }}" alt="icon" class="img-fluid"></figure>
-                                    <span class="d-inline-block black-text counter">95 </span><sup class="d-inline-block black-text">%</sup>
-                                    <span class="span-text d-block">Réduction du temps de réponse</span>
-                                </div>
-                            </div>
-                            <div class="col-lg-6 col-md-6 d-flex">
-                                <div class="statistics-box w-100">
-                                    <figure><img src="{{ asset('assets/images/statistics-icon2.png') }}" alt="icon" class="img-fluid"></figure>
-                                    <span class="d-inline-block black-text">24/7 </span>
-                                    <span class="span-text d-block">Disponibilité continue</span>
-                                </div>
-                            </div>
-                            <div class="col-lg-6 col-md-6 d-flex">
-                                <div class="statistics-box w-100">
-                                    <figure><img src="{{ asset('assets/images/statistics-icon3.png') }}" alt="icon" class="img-fluid"></figure>
-                                    <sup class="d-inline-block black-text">+</sup><span class="d-inline-block black-text counter">40 </span><sup class="d-inline-block black-text">%</sup>
-                                    <span class="span-text d-block">Augmentation de l'engagement</span>
-                                </div>
-                            </div>
-                            <div class="col-lg-6 col-md-6 d-flex">
-                                <div class="statistics-box w-100">
-                                    <figure><img src="{{ asset('assets/images/statistics-icon4.png') }}" alt="icon" class="img-fluid"></figure>
-                                    <span class="d-inline-block black-text counter">10000 </span><sup class="d-inline-block black-text">+</sup>
-                                    <span class="span-text d-block">Conversations gérées quotidiennement</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </section>
 
     {{-- Toast --}}

@@ -61,11 +61,17 @@ class MCPConnectorController extends Controller
     public function activateWithApiKey(Request $request, Site $site, string $slug)
     {
         $validated = $request->validate([
-            'credentials' => ['required', 'array'],
+            'credentials' => ['present', 'array'], // 🆕 'present' au lieu de 'required' : autorise un tableau vide (connecteurs internes)
             'settings' => ['array'],
         ]);
 
-        $connector = McpConnector::where('slug', $slug)->where('auth_type', 'api_key')->firstOrFail();
+        //$connector = McpConnector::where('slug', $slug)->where('auth_type', 'api_key')->firstOrFail();
+
+        $connector = McpConnector::where('slug', $slug)->firstOrFail();
+
+        if (! in_array($connector->auth_type, ['api_key', 'internal'])) {
+            abort(400, 'Ce connecteur ne peut pas être activé via cette route.');
+        }
 
         $this->vault->store($site, $slug, $validated['credentials'], $validated['settings'] ?? []);
 

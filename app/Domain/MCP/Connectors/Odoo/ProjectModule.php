@@ -12,19 +12,23 @@ class ProjectModule implements OdooModuleInterface
     public function listTools(): array
     {
         return [
-            new ToolSchema('odoo', 'project_create_task', "Crée une tâche projet.", [
+            new ToolSchema('odoo', 'project_create_task',
+                "Crée une nouvelle tâche dans un projet Odoo. Utiliser uniquement lorsqu'une nouvelle tâche doit être ajoutée et qu'aucune tâche existante ne correspond déjà à la demande. Vérifier que le nom de la tâche est disponible. Si le projet n'est pas identifié de manière certaine, demander une clarification avant la création. Ajouter uniquement les informations explicitement fournies (description, échéance, projet). Ne jamais créer volontairement de tâches en double ni inventer un identifiant de projet.", [
                 'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'project_id' => ['type' => 'integer'], 'description' => ['type' => 'string'], 'due_date' => ['type' => 'string']], 'required' => ['name'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_task'),
 
-            new ToolSchema('odoo', 'project_update_task', "Modifie une tâche existante.", [
+            new ToolSchema('odoo', 'project_update_task',
+                "Met à jour une tâche Odoo existante identifiée de manière unique. Modifier uniquement les propriétés explicitement demandées par l'utilisateur. Si l'identifiant est inconnu, rechercher d'abord la tâche. En cas de plusieurs correspondances, demander une clarification avant toute modification. Ne jamais remplacer des informations non demandées.", [
                 'type' => 'object', 'properties' => ['task_id' => ['type' => 'integer'], 'name' => ['type' => 'string'], 'description' => ['type' => 'string']], 'required' => ['task_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'project_list_tasks', "Liste les tâches d'un projet.", [
+            new ToolSchema('odoo', 'project_list_tasks',
+                "Retourne les tâches appartenant à un projet identifié de manière unique. Utiliser lorsque l'utilisateur souhaite consulter ou résumer les tâches d'un projet spécifique. Pour retrouver une tâche particulière sans connaître son projet, utiliser project_search_tasks.", [
                 'type' => 'object', 'properties' => ['project_id' => ['type' => 'integer']], 'required' => ['project_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'project_search_tasks', "Recherche libre de tâches.", [
+            new ToolSchema('odoo', 'project_search_tasks',
+                "Recherche des tâches Odoo à partir d'un nom ou d'un texte fourni par l'utilisateur. Utiliser lorsqu'une tâche doit être retrouvée avant une consultation ou une modification, ou lorsque son identifiant est inconnu. Si plusieurs tâches correspondent, demander une clarification avant toute action. Ne jamais supposer qu'une tâche est unique.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

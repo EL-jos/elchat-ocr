@@ -28,41 +28,20 @@ class AgentSkillResolver
      */
     public function catalogFor(Site $site): array
     {
-        $capabilityLabels = config('mcp_capabilities', []); // 🆕 chargé une seule fois, en tableau plat
-        $activeSlugs = $site->mcpSiteConnectors()->where('status', 'connected')->with('mcpConnector')->get()->pluck('mcpConnector.slug');
-        $names = McpConnector::whereIn('slug', $activeSlugs)->get()->keyBy('slug');
+        $allTools = $this->capabilities->availableToolsCatalog($site);
+        $definitions = $this->capabilities->definitionsFor($site);
+        $groupedToolNames = $definitions->flatMap(fn ($c) => $c->tool_names)->all();
 
-        $allTools = [];
-        foreach ($activeSlugs as $slug) {
-            if (!$this->registry->has($slug)) continue;
-            array_push($allTools, ...$this->registry->get($slug)->listTools());
+        $entries = [];
+        foreach ($definitions as $capability) {
+            $resolvedSlug = $this->capabilities->resolve($site, $capability->key);
+            $connectorInfo = $resolvedSlug ? collect($allTools)->first(fn ($t) => $t['connector']['slug'] === $resolvedSlug)['connector'] ?? null : null;
+            $entries[] = ['key' => $capability->key, 'type' => 'capability', 'label' => $capability->label, 'connector' => $connectorInfo];
         }
 
-        $seenCapabilities = [];
-        $entries = [];
-
         foreach ($allTools as $tool) {
-            /** @var ToolSchema $tool */
-            if ($tool->capability) {
-                if (isset($seenCapabilities[$tool->capability])) continue;
-                $seenCapabilities[$tool->capability] = true;
-
-                $resolvedSlug = $this->capabilities->resolve($site, $tool->capability);
-                $entries[] = [
-                    'key' => $tool->capability,
-                    'type' => 'capability',
-                    'label' => $capabilityLabels[$tool->capability] ?? $tool->capability, // 🆕 lookup direct, plus de config() à points
-                    'connector' => $resolvedSlug ? ['slug' => $resolvedSlug, 'name' => $names[$resolvedSlug]->name ?? $resolvedSlug, 'icon_url' => $names[$resolvedSlug]->icon_url ?? null] : null,
-                ];
-                continue;
-            }
-
-            $entries[] = [
-                'key' => $tool->qualifiedName(),
-                'type' => 'tool',
-                'label' => $tool->description,
-                'connector' => ['slug' => $tool->connectorSlug, 'name' => $names[$tool->connectorSlug]->name ?? $tool->connectorSlug, 'icon_url' => $names[$tool->connectorSlug]->icon_url ?? null],
-            ];
+            if (in_array($tool['tool_name'], $groupedToolNames, true)) continue; // déjà couvert par une capacité admin
+            $entries[] = ['key' => $tool['tool_name'], 'type' => 'tool', 'label' => $tool['label'], 'connector' => $tool['connector']];
         }
 
         return $entries;
@@ -76,11 +55,11 @@ class AgentSkillResolver
      */
     public function resolveAllowedToolNames(Site $site, array $skills): array
     {
-        $capabilityKeys = config('mcp_capabilities', []); // 🆕
+        $definitionKeys = $this->capabilities->definitionsFor($site)->pluck('key')->all(); // 🆕 remplace le config()
 
         $resolved = [];
         foreach ($skills as $skill) {
-            if (array_key_exists($skill, $capabilityKeys)) { // 🆕 vérifie la clé plate exacte, pas un chemin imbriqué
+            if (in_array($skill, $definitionKeys, true)) {
                 $toolName = $this->capabilities->resolveToolName($site, $skill);
                 if ($toolName) $resolved[] = $toolName;
                 continue;

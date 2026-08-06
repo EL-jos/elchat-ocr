@@ -12,19 +12,23 @@ class AccountingModule implements OdooModuleInterface
     public function listTools(): array
     {
         return [
-            new ToolSchema('odoo', 'accounting_get_invoice_status', "Statut et montant d'une facture.", [
+            new ToolSchema('odoo', 'accounting_get_invoice_status',
+                "Récupère les informations détaillées d'une facture identifiée de manière unique, notamment son état, son statut de paiement et son montant total. Utiliser lorsque l'identifiant de la facture est connu ou après une recherche ayant permis d'identifier une seule facture. Ne jamais inventer un identifiant de facture ni déduire son état.", [
                 'type' => 'object', 'properties' => ['invoice_id' => ['type' => 'integer']], 'required' => ['invoice_id'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'accounting_search_invoices', "Recherche des factures liées à un email.", [
+            new ToolSchema('odoo', 'accounting_search_invoices',
+                "Recherche les factures associées à un contact identifié par son adresse e-mail. Utiliser lorsqu'un utilisateur souhaite retrouver une facture avant de consulter son état ou d'enregistrer un paiement, ou lorsque l'identifiant de la facture est inconnu. Si aucune facture n'est trouvée, ne pas supposer son existence. Utiliser uniquement les résultats retournés par l'ERP.", [
                 'type' => 'object', 'properties' => ['contact_email' => ['type' => 'string']], 'required' => ['contact_email'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'accounting_create_invoice', "Crée une facture pour un contact.", [
+            new ToolSchema('odoo', 'accounting_create_invoice',
+                "Crée une nouvelle facture client en brouillon pour un contact existant et un produit identifié. Utiliser uniquement lorsque le client et le produit sont connus avec certitude. Si le contact ou le produit ne sont pas identifiés de manière unique, effectuer une recherche ou demander une clarification avant la création. Vérifier que les informations essentielles (client, produit, quantité) sont disponibles. Ne jamais créer une facture à partir d'informations supposées ni créer volontairement des factures en double. Utiliser uniquement les identifiants et données retournés par l'ERP.", [
                 'type' => 'object', 'properties' => ['contact_email' => ['type' => 'string'], 'product_id' => ['type' => 'integer'], 'quantity' => ['type' => 'integer']], 'required' => ['contact_email', 'product_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'confirm', defaultConfirmActor: 'admin'),
 
-            new ToolSchema('odoo', 'accounting_record_payment', "Enregistre un paiement sur une facture.", [
+            new ToolSchema('odoo', 'accounting_record_payment',
+                "Enregistre un paiement sur une facture existante identifiée de manière unique. Utiliser uniquement lorsque l'utilisateur indique explicitement qu'un paiement a été reçu et que le montant à enregistrer est connu. Vérifier que la facture existe avant l'enregistrement. Ne jamais inventer un montant, enregistrer un paiement approximatif ou enregistrer plusieurs paiements sans instruction explicite. Utiliser exclusivement les données retournées par l'ERP.", [
                 'type' => 'object', 'properties' => ['invoice_id' => ['type' => 'integer'], 'amount' => ['type' => 'number']], 'required' => ['invoice_id', 'amount'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'confirm', defaultConfirmActor: 'admin'),
         ];

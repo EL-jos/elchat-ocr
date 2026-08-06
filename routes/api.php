@@ -18,12 +18,15 @@ use App\Http\Controllers\api\v1\WidgetVisitorController;
 use App\Http\Controllers\api\v2\CtaController;
 use App\Http\Controllers\api\v4\Form\ChatbotFormController;
 use App\Http\Controllers\api\v4\SocialIntegrationController;
+use App\Http\Controllers\api\v5\AdminCopilotController;
 use App\Http\Controllers\api\v5\MCPAgentController;
 use App\Http\Controllers\api\v5\MCPCapabilityController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
 use App\Http\Controllers\api\v5\MCPPendingActionController;
 use App\Http\Controllers\api\v5\MCPPermissionController;
 use App\Http\Controllers\api\v5\MCPWorkflowController;
+use App\Http\Controllers\api\v5\ModuleCatalogController;
+use App\Http\Controllers\api\v5\ModuleSubscriptionController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
 use App\Http\Controllers\web\v4\FacebookWebhookController;
 use App\Http\Controllers\web\v4\InstagramConnectController;
@@ -154,9 +157,91 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::controller(MCPCapabilityController::class)->group(function () {
+                Route::get('/capabilities/tools-catalog', 'toolsCatalog'); // 🆕
+                Route::get('/capabilities/definitions', 'definitions'); // 🆕
+                Route::post('/capabilities/definitions', 'store'); // 🆕
+                Route::put('/capabilities/definitions/{capability}', 'update'); // 🆕
+                Route::delete('/capabilities/definitions/{capability}', 'destroy'); // 🆕
+                Route::post('/capabilities/suggest', 'suggest'); // 🆕
                 Route::get('/capabilities', 'index');
-                Route::put('/capabilities', 'update');
-                Route::get('/capabilities/catalog', 'catalog'); // 🆕
+                Route::get('/capabilities/catalog', 'catalog');
+                Route::put('/capabilities', 'updatePreference'); // 🆕 renommé (était 'update', conflit de nom résolu)
+            });
+
+            Route::controller(MCPWorkflowController::class)->group(function () {
+                Route::get('/workflows', 'index');
+                Route::post('/workflows', 'store');
+                Route::put('/workflows/{workflow}', 'update');
+                Route::delete('/workflows/{workflow}', 'destroy');
+            });
+
+            Route::controller(MCPAgentController::class)->group(function () {
+                Route::get('/agents/skills-catalog', 'skillsCatalog');
+                Route::get('/agents', 'index');
+                Route::post('/agents', 'store');
+                Route::put('/agents/{agent}', 'update');
+                Route::delete('/agents/{agent}', 'destroy');
+                Route::post('/agents/{agent}/publish', 'publish');
+                Route::post('/agents/{agent}/unpublish', 'unpublish');
+                Route::post('/agents/{agent}/set-fallback', 'setAsFallback'); // 🆕
+            });
+
+        });
+
+        Route::controller(ModuleCatalogController::class)->group(function () {
+            Route::get('/modules/catalog',       'index')->name('modules.catalog');
+            Route::get('/subscription/summary',  'summary')->name('subscription.summary');
+        });
+
+        Route::controller(ModuleSubscriptionController::class)->group(function () {
+            // Activation / désactivation / upgrade
+            Route::post('/modules/{slug}/trial',    'startTrial')->name('modules.trial');
+            Route::post('/modules/{slug}/purchase', 'purchase')->name('modules.purchase');
+            Route::post('/modules/{slug}/deactivate', 'deactivate')->name('modules.deactivate');
+            Route::post('/modules/{slug}/upgrade',    'upgrade')->name('modules.upgrade');
+
+            // Coupons
+            Route::post('/subscription/coupon', 'applyCoupon')->name('subscription.coupon');
+            // Conversion trial → payant
+            Route::post('/subscription/trial/convert', 'convertTrial')->name('subscription.trial.convert');
+        });
+
+        Route::prefix('/site/{site}/admin-copilot')->group(function () {
+
+            Route::controller(AdminCopilotController::class)->group(function () {
+                Route::get('/conversations', 'conversations');
+                Route::get('/conversations/{conversation}', 'show');
+                Route::put('/conversations/{conversation}/title', 'rename');
+                Route::delete('/conversations/{conversation}', 'destroy');
+                Route::post('/ask', 'ask');
+            });
+
+            Route::controller(MCPPermissionController::class)->group(function () {
+                Route::get('/permissions', 'index');
+                Route::put('/permissions', 'update');
+            });
+
+            Route::controller(MCPPendingActionController::class)->group(function () {
+                // 🆕 File d'attente back-office des actions à valider par un admin
+                Route::get('/pending-actions', 'index');
+                // 🆕 Résolution d'une action en attente — accessible à la fois au widget
+                // visiteur (confirm_actor='visitor', pas d'auth requise, vérifié par
+                // possession de la conversation) et à l'admin authentifié (confirm_actor='admin').
+                // Retirez auth:sanctum ici : l'autorisation fine est faite DANS le contrôleur
+                // selon confirm_actor (voir MCPPendingActionController::resolve).
+                Route::post('/pending-actions/{pendingAction}/resolve', 'resolve');
+            });
+
+            Route::controller(MCPCapabilityController::class)->group(function () {
+                Route::get('/capabilities/tools-catalog', 'toolsCatalog'); // 🆕
+                Route::get('/capabilities/definitions', 'definitions'); // 🆕
+                Route::post('/capabilities/definitions', 'store'); // 🆕
+                Route::put('/capabilities/definitions/{capability}', 'update'); // 🆕
+                Route::delete('/capabilities/definitions/{capability}', 'destroy'); // 🆕
+                Route::post('/capabilities/suggest', 'suggest'); // 🆕
+                Route::get('/capabilities', 'index');
+                Route::get('/capabilities/catalog', 'catalog');
+                Route::put('/capabilities', 'updatePreference'); // 🆕 renommé (était 'update', conflit de nom résolu)
             });
 
             Route::controller(MCPWorkflowController::class)->group(function () {

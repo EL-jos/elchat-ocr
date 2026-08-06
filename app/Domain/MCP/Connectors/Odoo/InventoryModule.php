@@ -12,14 +12,17 @@ class InventoryModule implements OdooModuleInterface
     public function listTools(): array
     {
         return [
-            new ToolSchema('odoo', 'inventory_check_stock', "Vérifie la quantité disponible d'un produit.", [
+            new ToolSchema('odoo', 'inventory_check_stock',
+                "Retourne les niveaux de stock actuels d'un produit identifié de manière unique, y compris les quantités disponibles et, lorsque l'ERP les fournit, les quantités réservées, prévues ou virtuelles. Utiliser uniquement lorsque le produit est déjà identifié (product_id) ou après une recherche ayant permis d'identifier un seul produit. Si plusieurs produits correspondent ou si le produit ne peut pas être identifié de manière certaine, demander une clarification avant l'appel. Cet outil sert à consulter l'état actuel du stock et ne doit pas être utilisé pour analyser l'historique des mouvements ou rechercher des produits. Ne jamais inventer une quantité, une disponibilité ou un identifiant produit ; utiliser exclusivement les données retournées par l'ERP.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'integer']], 'required' => ['product_id'],
             ], defaultMode: 'auto', capability: 'inventory.check_stock'),
 
-            new ToolSchema('odoo', 'inventory_search_warehouses', "Liste les entrepôts configurés.", ['type' => 'object', 'properties' => []],
+            new ToolSchema('odoo', 'inventory_search_warehouses',
+                "Retourne la liste des entrepôts configurés dans Odoo avec leurs informations principales. Utiliser lorsque l'utilisateur souhaite consulter les entrepôts disponibles ou lorsqu'une opération logistique nécessite d'identifier un entrepôt. Cet outil ne retourne ni les produits ni les niveaux de stock.", ['type' => 'object', 'properties' => []],
                 defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'inventory_get_stock_moves', "Historique des mouvements de stock d'un produit.", [
+            new ToolSchema('odoo', 'inventory_get_stock_moves',
+                "Retourne l'historique des mouvements de stock d'un produit identifié de manière unique (entrées, sorties et mouvements internes selon les données disponibles). Utiliser lorsque l'utilisateur souhaite analyser les mouvements ou comprendre l'évolution du stock. Ne pas utiliser pour connaître uniquement la disponibilité actuelle ; utiliser inventory_check_stock dans ce cas. Ne jamais tirer de conclusion sur le stock actuel à partir des seuls mouvements si cette information n'est pas explicitement retournée.", [
                 'type' => 'object', 'properties' => ['product_id' => ['type' => 'integer']], 'required' => ['product_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

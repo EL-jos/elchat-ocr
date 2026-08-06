@@ -66,15 +66,26 @@ class OdooConnector extends AbstractConnector implements ProvidesSiteScopedTools
     {
         $cacheKey = 'mcp:odoo:installed_modules:' . md5(($credentials['url'] ?? '') . ($credentials['db'] ?? ''));
 
-        return Cache::remember($cacheKey, now()->addHours(6), function () use ($credentials) {
+        return Cache::remember($cacheKey, now()->addHours(6), function () use ($credentials, $cacheKey) {
+            Log::info('MCP Odoo: tentative de détection des modules', [
+                'cache_key' => $cacheKey,
+                'url' => $credentials['url'] ?? '(absent)',
+                'db' => $credentials['db'] ?? '(absent)',
+                'username' => $credentials['username'] ?? '(absent)',
+                'has_api_key' => !empty($credentials['api_key']),
+            ]);
+
             try {
                 $client = new OdooClient($credentials);
                 $technicalNames = collect($this->modules)->map(fn ($m) => $m->technicalModuleName())->all();
                 $rows = $client->searchRead('ir.module.module', [['name', 'in', $technicalNames], ['state', '=', 'installed']], ['name']);
-                return collect($rows)->pluck('name')->all();
+                $result = collect($rows)->pluck('name')->all();
+
+                Log::info('MCP Odoo: modules détectés', ['modules' => $result]); // 🆕
+                return $result;
             } catch (\Throwable $e) {
-                Log::warning('MCP Odoo: détection des modules installés échouée', ['error' => $e->getMessage()]);
-                return []; // fail-closed
+                Log::warning('MCP Odoo: détection des modules installés échouée', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]); // 🆕 trace complète
+                return [];
             }
         });
     }

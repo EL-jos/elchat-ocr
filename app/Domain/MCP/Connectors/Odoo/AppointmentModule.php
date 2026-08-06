@@ -14,15 +14,18 @@ class AppointmentModule implements OdooModuleInterface
     public function listTools(): array
     {
         return [
-            new ToolSchema('odoo', 'appointment_check_availability', "Vérifie les créneaux disponibles pour un type de rendez-vous.", [
+            new ToolSchema('odoo', 'appointment_check_availability',
+                "Recherche les créneaux réellement disponibles pour un type de rendez-vous sur une période donnée en tenant compte des disponibilités configurées dans Odoo Appointment. Utiliser lorsque l'utilisateur souhaite prendre un rendez-vous mais n'a pas encore choisi un créneau précis. Si aucune période n'est indiquée, utiliser les valeurs par défaut du connecteur. Ne pas utiliser pour réserver un rendez-vous ni pour vérifier un rendez-vous déjà existant. Utiliser uniquement les créneaux retournés par l'outil et ne jamais en inventer.", [
                 'type' => 'object', 'properties' => ['appointment_type_id' => ['type' => 'integer'], 'date_from' => ['type' => 'string'], 'date_to' => ['type' => 'string']], 'required' => ['appointment_type_id'],
             ], defaultMode: 'auto', capability: 'scheduling.check_availability'),
 
-            new ToolSchema('odoo', 'appointment_book', "Réserve un rendez-vous.", [
+            new ToolSchema('odoo', 'appointment_book',
+                "Réserve un rendez-vous Odoo Appointment pour un type de rendez-vous, un créneau de début et un contact identifiés. Utiliser uniquement lorsque le créneau choisi est connu et que les informations nécessaires (type de rendez-vous, heure de début et adresse e-mail du participant) sont disponibles. Si aucun créneau n'a encore été sélectionné, rechercher d'abord les disponibilités. Ne jamais réserver un créneau supposé ou non retourné par l'outil de disponibilité. Utiliser exclusivement les données fournies par l'utilisateur et les résultats des outils.", [
                 'type' => 'object', 'properties' => ['appointment_type_id' => ['type' => 'integer'], 'start' => ['type' => 'string'], 'contact_email' => ['type' => 'string']], 'required' => ['appointment_type_id', 'start', 'contact_email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'scheduling.create_event'),
 
-            new ToolSchema('odoo', 'appointment_cancel', "Annule un rendez-vous.", [
+            new ToolSchema('odoo', 'appointment_cancel',
+                "Annule un rendez-vous Odoo Appointment identifié de manière unique. Utiliser uniquement lorsque l'utilisateur exprime clairement son intention d'annuler un rendez-vous existant. Si l'identifiant du rendez-vous est inconnu, rechercher ou identifier le rendez-vous avant l'annulation. Ne jamais annuler un rendez-vous sur la base d'une supposition ni annuler plusieurs rendez-vous sans confirmation explicite. Utiliser uniquement le résultat réel retourné par l'outil.", [
                 'type' => 'object', 'properties' => ['event_id' => ['type' => 'integer']], 'required' => ['event_id'],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.cancel_event'),
         ];

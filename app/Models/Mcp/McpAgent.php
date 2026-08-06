@@ -9,6 +9,6 @@ class McpAgent extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['site_id', 'name', 'objective', 'tone', 'custom_tone_instructions', 'skills', 'is_active', 'is_default'];
-    protected $casts = ['skills' => 'array', 'is_active' => 'boolean', 'is_default' => 'boolean'];
+    protected $fillable = ['site_id', 'name', 'objective', 'tone', 'custom_tone_instructions', 'skills', 'workflow_ids', 'is_active', 'is_default'];
+    protected $casts = ['skills' => 'array', 'workflow_ids' => 'array', 'is_active' => 'boolean', 'is_default' => 'boolean'];
 }

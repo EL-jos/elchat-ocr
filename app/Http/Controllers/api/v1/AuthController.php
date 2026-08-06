@@ -9,7 +9,7 @@ use App\Models\Message;
 use App\Models\Role;
 use App\Models\Site;
 use App\Models\Visitor;
-use App\Services\payment\SubscriptionService;
+use App\Services\payment\SubscriptionOrchestrator;
 use Facebook\Exceptions\FacebookResponseException;
 use Facebook\Exceptions\FacebookSDKException;
 use Facebook\Facebook;
@@ -113,7 +113,8 @@ class AuthController extends Controller
                         'owner_user_id' => $user->id,
                     ]);
 
-                    app(SubscriptionService::class)->createTrialSubscription($account);
+                    app(SubscriptionOrchestrator::class)
+                        ->createTrialSubscription($account);
                 }
 
                 if ($user->isVisitor()) {

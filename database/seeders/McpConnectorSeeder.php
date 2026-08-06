@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Domain\MCP\Connectors\AsanaConnector;
+use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
 use App\Domain\MCP\Connectors\GoogleDriveConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
@@ -103,6 +104,13 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => OdooConnector::class,
             'description' => "CRM, ventes, stock, comptabilité, support, rendez-vous, projets et plus — selon les modules Odoo installés sur votre instance.",
             'icon_url' => 'https://cdn.simpleicons.org/odoo/714B67', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'elchat_platform'], [
+            'name' => 'ELChat Platform', 'category' => 'internal', 'auth_type' => 'internal', // 🆕 nouveau type, aucune donnée tierce
+            'adapter_class' => ElchatPlatformConnector::class,
+            'description' => "Copilote interne : conversations, visiteurs, statistiques et pilotage de vos agents/workflows ELChat.",
+            'icon_url' => 'https://elchat.io/assets/images/logo.svg', 'is_active' => true,
         ]);
     }
 }

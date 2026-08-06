@@ -27,23 +27,116 @@ class NotionConnector extends AbstractConnector
     public function listTools(): array
     {
         return [
-            new ToolSchema('notion', 'create_page', "Crée une page dans la base de connaissances Notion (ex: compte-rendu d'un échange visiteur).", [
+            new ToolSchema('notion', 'create_page',
+                "Crée une nouvelle page dans Notion.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• créer une documentation
+• créer un compte-rendu
+• enregistrer une réunion
+• documenter une procédure
+• créer une FAQ
+• enregistrer une idée
+• créer une note
+• créer une fiche client
+• documenter un incident
+• conserver une trace d'une conversation importante
+
+Bonnes pratiques :
+
+- Produire un titre clair et explicite.
+- Organiser le contenu proprement.
+- Transformer automatiquement des notes brutes en texte lisible.
+- Préserver les listes, étapes et titres lorsqu'ils existent.
+- Si aucune base Notion n'est configurée, expliquer que l'administrateur doit connecter une base.
+
+Ne jamais créer plusieurs pages pour la même demande sauf instruction explicite.", [
                 'type' => 'object', 'properties' => ['title' => ['type' => 'string'], 'content' => ['type' => 'string']], 'required' => ['title'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'documentation.create_page'),
 
-            new ToolSchema('notion', 'search_pages', "Recherche des pages par mot-clé.", [
+            new ToolSchema('notion', 'search_pages',
+                "Recherche une ou plusieurs pages Notion.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• retrouver une documentation
+• retrouver une procédure
+• retrouver une réunion
+• retrouver une note
+• retrouver une idée
+• retrouver une FAQ
+• retrouver une page par mot-clé
+• savoir si une documentation existe déjà
+
+Bonnes pratiques :
+
+- Effectuer une recherche la plus pertinente possible.
+- Retourner uniquement les pages réellement pertinentes.
+- Si plusieurs résultats existent, les classer du plus pertinent au moins pertinent.
+- Si aucune page n'est trouvée, le dire clairement.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto', capability: 'documentation.search'),
 
-            new ToolSchema('notion', 'get_page', "Contenu d'une page.", [
+            new ToolSchema('notion', 'get_page',
+                "Récupère le contenu complet d'une page Notion.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• lire une documentation
+• consulter une procédure
+• afficher une réunion
+• afficher une note
+• consulter une FAQ
+• lire un compte-rendu
+• afficher une fiche
+
+Bonnes pratiques :
+
+- Toujours restituer le contenu de manière structurée.
+- Respecter l'ordre logique de la page.
+- Ne pas inventer du contenu absent.
+- Si la page est vide, l'indiquer.", [
                 'type' => 'object', 'properties' => ['page_id' => ['type' => 'string']], 'required' => ['page_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('notion', 'update_page', "Modifie le titre d'une page existante.", [
+            new ToolSchema('notion', 'update_page',
+                "Met à jour le titre d'une page Notion existante.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• renommer une page
+• corriger un titre
+• rendre un titre plus explicite
+• harmoniser une documentation
+
+Bonnes pratiques :
+
+- Modifier uniquement le titre.
+- Conserver tout le contenu existant.
+- Vérifier que la page existe avant modification.", [
                 'type' => 'object', 'properties' => ['page_id' => ['type' => 'string'], 'title' => ['type' => 'string']], 'required' => ['page_id', 'title'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('notion', 'append_to_page', "Ajoute du contenu à la fin d'une page existante.", [
+            new ToolSchema('notion', 'append_to_page',
+                "Ajoute du contenu à la fin d'une page existante.
+
+À utiliser lorsque l'utilisateur souhaite :
+
+• compléter une documentation
+• ajouter une réunion
+• ajouter des décisions
+• ajouter une procédure
+• compléter une FAQ
+• ajouter un historique
+• enrichir une note
+
+Bonnes pratiques :
+
+- Ajouter uniquement les nouvelles informations.
+- Ne jamais supprimer le contenu existant.
+- Préserver la structure de la page.
+- Si le texte est brut, le reformater automatiquement pour une lecture agréable.", [
                 'type' => 'object', 'properties' => ['page_id' => ['type' => 'string'], 'content' => ['type' => 'string']], 'required' => ['page_id', 'content'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

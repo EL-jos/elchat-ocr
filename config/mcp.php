@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\MCP\Connectors\AsanaConnector;
+use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
 use App\Domain\MCP\Connectors\GoogleDriveConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
@@ -66,6 +67,8 @@ return [
         'notion' => ['class' => NotionConnector::class],
 
         'odoo' => ['class' => OdooConnector::class],
+
+        'elchat_platform' => ['class' => ElchatPlatformConnector::class],
     ],
 
     'orchestrator' => [

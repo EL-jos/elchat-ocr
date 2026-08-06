@@ -29,5 +29,5 @@ Schedule::command('youtube:sync-comments')
     ->onOneServer()             // ✅ évite les doublons si plusieurs workers
     ->runInBackground();
 
-
-Schedule::command('subscriptions:check-trials')->dailyAt('08:00');
+Schedule::command('subscriptions:finalize-cancellations')->dailyAt('02:00');
+Schedule::command('subscriptions:check-expired-trials')->dailyAt('08:00');

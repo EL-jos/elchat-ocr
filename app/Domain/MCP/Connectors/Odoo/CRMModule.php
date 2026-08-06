@@ -12,31 +12,38 @@ class CRMModule implements OdooModuleInterface
     public function listTools(): array
     {
         return [
-            new ToolSchema('odoo', 'crm_create_contact', "Crée ou retrouve un contact à partir de son email.", [
+            new ToolSchema('odoo', 'crm_create_contact',
+                "Crée un nouveau contact Odoo ou retourne le contact existant lorsque l'adresse e-mail est déjà enregistrée. Utiliser lorsque l'utilisateur souhaite ajouter un nouveau contact et qu'une adresse e-mail valide est disponible. Cet outil évite automatiquement les doublons à partir de l'adresse e-mail. Ne pas appeler crm_find_contact au préalable sauf si l'utilisateur souhaite uniquement vérifier l'existence d'un contact sans le créer. Ne jamais inventer une adresse e-mail ou créer un contact à partir d'informations incomplètes.", [
                 'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company_name' => ['type' => 'string']], 'required' => ['email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_or_update_contact'),
 
-            new ToolSchema('odoo', 'crm_find_contact', "Vérifie si un contact existe pour cet email.", [
+            new ToolSchema('odoo', 'crm_find_contact',
+                "Vérifie si un contact associé à une adresse e-mail existe dans Odoo sans créer ni modifier de données. Utiliser lorsque l'utilisateur souhaite uniquement confirmer l'existence d'un contact ou obtenir cette information avant une décision métier. Ne pas utiliser pour créer un contact ; utiliser crm_create_contact dans ce cas.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']], 'required' => ['email'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'crm_create_lead', "Crée une opportunité commerciale (ex: intérêt exprimé par le visiteur).", [
+            new ToolSchema('odoo', 'crm_create_lead',
+                "Crée une nouvelle opportunité commerciale dans Odoo. Si une adresse e-mail est fournie et qu'un contact correspondant existe, l'opportunité sera automatiquement associée à ce contact ; sinon, l'adresse e-mail sera enregistrée comme prospect. Utiliser uniquement lorsqu'une nouvelle opportunité doit être créée. Vérifier que le nom de l'opportunité est connu avant l'appel. Ne jamais créer plusieurs opportunités identiques sans demande explicite.", [
                 'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'contact_email' => ['type' => 'string'], 'description' => ['type' => 'string'], 'expected_revenue' => ['type' => 'number']], 'required' => ['name'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_opportunity'),
 
-            new ToolSchema('odoo', 'crm_qualify_lead', "Qualifie un prospect (chaud/tiède/froid).", [
+            new ToolSchema('odoo', 'crm_qualify_lead',
+                "Met à jour la qualification commerciale d'une opportunité existante (chaud, tiède ou froid). Utiliser uniquement lorsqu'une opportunité est identifiée de manière unique et que l'utilisateur souhaite modifier sa qualification. Ne jamais qualifier une opportunité par déduction ou sans instruction explicite.", [
                 'type' => 'object', 'properties' => ['lead_id' => ['type' => 'integer'], 'temperature' => ['type' => 'string', 'enum' => ['chaud', 'tiède', 'froid']]], 'required' => ['lead_id', 'temperature'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.qualify_lead'),
 
-            new ToolSchema('odoo', 'crm_get_lead', "Détails d'une opportunité.", [
+            new ToolSchema('odoo', 'crm_get_lead',
+                "Récupère les informations détaillées d'une opportunité identifiée de manière unique, notamment son client associé, son étape commerciale, sa probabilité de succès et son chiffre d'affaires prévisionnel. Utiliser lorsque l'utilisateur souhaite consulter l'état d'une opportunité avant une autre action. Ne jamais inventer un identifiant d'opportunité.", [
                 'type' => 'object', 'properties' => ['lead_id' => ['type' => 'integer']], 'required' => ['lead_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'crm_search_leads', "Recherche libre d'opportunités.", [
+            new ToolSchema('odoo', 'crm_search_leads',
+                "Recherche des opportunités commerciales selon leur nom ou un texte fourni par l'utilisateur. Utiliser pour retrouver une opportunité avant une consultation, une qualification ou une autre action lorsque son identifiant est inconnu. Si plusieurs opportunités correspondent, demander une clarification avant de poursuivre. Ne jamais supposer qu'une opportunité est unique.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'crm_log_activity', "Journalise une note sur une opportunité.", [
+            new ToolSchema('odoo', 'crm_log_activity',
+                "Ajoute une note ou un commentaire à une opportunité existante afin d'enrichir son historique. Utiliser lorsque l'utilisateur souhaite enregistrer une information, un échange ou un suivi sans modifier les propriétés de l'opportunité. Vérifier que l'opportunité est identifiée de manière unique avant l'ajout.", [
                 'type' => 'object', 'properties' => ['lead_id' => ['type' => 'integer'], 'note' => ['type' => 'string']], 'required' => ['lead_id', 'note'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto', capability: 'crm.log_activity'),
         ];

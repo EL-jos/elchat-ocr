@@ -5,148 +5,106 @@ namespace App\Models\Payment;
 use App\Models\Account;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class Subscription extends Model
 {
-    protected $keyType    = 'string';
-    public    $incrementing = false;
+    protected $table = 'subscriptions';
+    protected $keyType = 'string';
+    public $incrementing = false;
 
     protected $fillable = [
-        // Commun
-        'account_id', 'plan_id',
-        'billing_cycle', 'status',
+        'account_id', 'payment_provider', 'provider_customer_id', 'provider_subscription_id',
+        'status', 'billing_cycle', 'currency',
         'trial_ends_at', 'current_period_start', 'current_period_end',
-        'canceled_at', 'ends_at',
-        'currency', 'amount', 'metadata',
-
-        // Provider
-        'payment_provider',
-
-        // Stripe (inchangé)
-        'stripe_customer_id', 'stripe_subscription_id', 'stripe_price_id',
-
-        // PayPal (nouveau)
-        'paypal_subscription_id', 'paypal_plan_id',
-        'paypal_payer_id', 'paypal_order_id',
+        'canceled_at', 'ends_at', 'metadata',
     ];
 
     protected $casts = [
         'trial_ends_at'        => 'datetime',
         'current_period_start' => 'datetime',
         'current_period_end'   => 'datetime',
-        'canceled_at'          => 'datetime',
-        'ends_at'              => 'datetime',
-        'metadata'             => 'array',
+        'canceled_at'           => 'datetime',
+        'ends_at'                => 'datetime',
+        'metadata'                => 'array',
     ];
 
     protected static function boot(): void
     {
         parent::boot();
-        static::creating(fn ($m) => $m->id = $m->id ?? Str::uuid());
+        static::creating(fn ($m) => $m->id = $m->id ?? (string) Str::uuid());
     }
-
-    // ─── Relations ────────────────────────────────────────────────────────────
 
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
     }
 
-    public function plan(): BelongsTo
+    public function items(): HasMany
     {
-        return $this->belongsTo(Plan::class);
+        return $this->hasMany(SubscriptionItem::class);
     }
 
-    // ─── Provider helpers ─────────────────────────────────────────────────────
-
-    public function isStripe(): bool
+    public function activeItems(): HasMany
     {
-        return $this->payment_provider === 'stripe';
+        return $this->items()->whereIn('status', ['trialing', 'active', 'pending_cancellation']);
     }
 
-    public function isPayPal(): bool
+    public function coupons(): HasMany
     {
-        return $this->payment_provider === 'paypal';
+        return $this->hasMany(SubscriptionCoupon::class);
     }
 
-    // ─── Statuts ─────────────────────────────────────────────────────────────
-
-    public function isActive(): bool
-    {
-        return in_array($this->status, ['active', 'trialing']);
-    }
+    // ─── États ───────────────────────────────────────────────────────────────
 
     public function isTrialing(): bool
     {
-        return $this->status === 'trialing'
-            && $this->trial_ends_at
-            && $this->trial_ends_at->isFuture();
+        return $this->status === 'trialing' && $this->trial_ends_at && $this->trial_ends_at->isFuture();
     }
 
     public function trialExpired(): bool
     {
-        return $this->status === 'trialing'
-            && $this->trial_ends_at
-            && $this->trial_ends_at->isPast();
-    }
-
-    public function isCanceled(): bool
-    {
-        return $this->status === 'canceled';
-    }
-
-    public function isPastDue(): bool
-    {
-        return $this->status === 'past_due';
+        return $this->status === 'trialing' && $this->trial_ends_at && $this->trial_ends_at->isPast();
     }
 
     public function isUsable(): bool
     {
-        if ($this->status === 'active') return true;
-        if ($this->isTrialing())        return true;
-
-        // Annulé mais encore dans la période payée
-        if ($this->status === 'canceled'
-            && $this->ends_at
-            && $this->ends_at->isFuture()) {
-            return true;
-        }
-
+        if (in_array($this->status, ['active'])) return true;
+        if ($this->isTrialing()) return true;
+        if ($this->status === 'canceled' && $this->ends_at && $this->ends_at->isFuture()) return true;
         return false;
     }
 
-    // ─── Accesseurs ──────────────────────────────────────────────────────────
-
-    public function trialDaysRemaining(): int
+    /**
+     * Montant total mensuel/annuel actuel = somme des lignes actives (hors pending_cancellation
+     * qui restent facturées jusqu'à la fin de la période déjà payée).
+     */
+    public function currentTotalCents(): int
     {
-        if (!$this->trial_ends_at || !$this->isTrialing()) return 0;
-        return max(0, (int) now()->diffInDays($this->trial_ends_at, false));
+        return (int) $this->activeItems()->sum('unit_price_eur');
     }
 
-    public function daysUntilRenewal(): int
+    public function getCurrentTotalFormattedAttribute(): string
     {
-        if (!$this->current_period_end) return 0;
-        return max(0, (int) now()->diffInDays($this->current_period_end, false));
+        return number_format($this->currentTotalCents() / 100, 0, ',', ' ') . ' €';
     }
 
-    public function getFormattedAmountAttribute(): string
+    /**
+     * Le compte a-t-il déjà activé un module donné (par slug) — actif ou en trial ?
+     */
+    public function hasModule(string $moduleSlug): bool
     {
-        if (!$this->amount) return '—';
-        $symbol = strtoupper($this->currency) === 'USD' ? '$' : '€';
-        return $symbol . number_format($this->amount / 100, 2);
+        return $this->activeItems()
+            ->whereHas('module', fn ($q) => $q->where('slug', $moduleSlug))
+            ->exists();
     }
 
-    public function getBillingCycleLabelAttribute(): string
+    public function itemForModule(string $moduleSlug): ?SubscriptionItem
     {
-        return $this->billing_cycle === 'annual' ? 'Annuel' : 'Mensuel';
-    }
-
-    public function getProviderLabelAttribute(): string
-    {
-        return match ($this->payment_provider) {
-            'paypal' => 'PayPal',
-            default  => 'Carte bancaire',
-        };
+        return $this->items()
+            ->whereHas('module', fn ($q) => $q->where('slug', $moduleSlug))
+            ->whereIn('status', ['trialing', 'active', 'pending_cancellation'])
+            ->first();
     }
 }

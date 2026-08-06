@@ -110,7 +110,8 @@ class HubSpotConnector extends AbstractConnector
     private function contactTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'create_contact', "Crée un nouveau contact CRM (ex: le visiteur souhaite être rappelé).", [
+            new ToolSchema('hubspot', 'create_contact',
+                "Crée un nouveau contact HubSpot uniquement lorsqu'aucun contact existant ne correspond à la personne décrite par l'utilisateur. Si un email, un numéro de téléphone ou un nom est fourni sans identifiant HubSpot, rechercher d'abord les contacts existants afin d'éviter les doublons. Vérifier que les informations obligatoires sont disponibles avant la création. Ne jamais créer un contact à partir d'informations supposées ou incomplètes. Utiliser exclusivement les données fournies par l'utilisateur et retourner uniquement le résultat réel de l'outil.", [
                 'type' => 'object',
                 'properties' => [
                     'firstname' => ['type' => 'string'], 'lastname' => ['type' => 'string'],
@@ -118,22 +119,26 @@ class HubSpotConnector extends AbstractConnector
                 ], 'required' => ['email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_or_update_contact'),
 
-            new ToolSchema('hubspot', 'find_contact', "Vérifie si un email correspond déjà à un contact existant (utile pour savoir si le visiteur est déjà client).", [
+            new ToolSchema('hubspot', 'find_contact',
+                "Recherche et identifie un contact HubSpot à partir d'un nom, d'une adresse e-mail, d'un numéro de téléphone ou d'autres informations connues. Utiliser avant toute opération nécessitant un contact lorsque son identifiant est inconnu. Si plusieurs contacts correspondent, demander une clarification avant de poursuivre. Ne jamais supposer qu'un contact est unique.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string']], 'required' => ['email'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'update_contact', "Modifie les informations du contact déjà identifié dans la conversation (téléphone, email, entreprise, adresse).", [
+            new ToolSchema('hubspot', 'update_contact',
+                "Met à jour un contact HubSpot existant identifié de manière unique. Modifier uniquement les propriétés explicitement demandées par l'utilisateur et préserver toutes les autres informations. Si l'identifiant est inconnu, rechercher d'abord le contact. En cas de plusieurs correspondances, demander une clarification avant toute modification.", [
                 'type' => 'object', 'properties' => [
                     'phone' => ['type' => 'string'], 'email' => ['type' => 'string'],
                     'company' => ['type' => 'string'], 'address' => ['type' => 'string'],
                 ],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'crm.create_or_update_contact'),
 
-            new ToolSchema('hubspot', 'search_contacts', "Recherche libre de contacts par mot-clé.", [
+            new ToolSchema('hubspot', 'search_contacts',
+                "Recherche un ou plusieurs contacts HubSpot à partir d'un nom, d'une adresse e-mail, d'un numéro de téléphone ou d'autres informations connues. Utiliser cet outil pour retrouver un contact avant toute consultation, modification ou création lorsqu'un identifiant HubSpot n'est pas disponible. Si plusieurs contacts correspondent, demander une clarification avant toute action. Ne jamais supposer qu'un résultat est unique.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'get_contact', "Retourne toutes les informations connues d'un contact.", [
+            new ToolSchema('hubspot', 'get_contact',
+                "Récupère les informations complètes d'un contact HubSpot identifié de manière unique. Utiliser lorsque l'identifiant du contact est connu ou après une recherche ayant permis d'identifier un seul contact. Ne jamais inventer ou déduire un identifiant HubSpot.", [
                 'type' => 'object', 'properties' => ['contact_id' => ['type' => 'string']], 'required' => ['contact_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -240,29 +245,34 @@ class HubSpotConnector extends AbstractConnector
     private function dealTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'create_deal', "Crée une opportunité commerciale (ex: le visiteur se dit intéressé par une offre). Utilisée automatiquement au pipeline par défaut du portail.", [
+            new ToolSchema('hubspot', 'create_deal',
+                "Crée une nouvelle transaction (deal) HubSpot lorsqu'une nouvelle opportunité commerciale doit être enregistrée. Avant la création, vérifier si une transaction équivalente existe déjà afin d'éviter les doublons. Associer la transaction au contact ou à l'entreprise appropriés lorsque ces informations sont disponibles. Ne jamais créer une transaction à partir d'informations supposées.", [
                 'type' => 'object', 'properties' => [
                     'name' => ['type' => 'string'], 'amount' => ['type' => 'number'],
                     'contact_email' => ['type' => 'string', 'description' => "Email du contact à associer à l'opportunité"],
                 ], 'required' => ['name'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_opportunity'),
 
-            new ToolSchema('hubspot', 'update_deal', "Modifie une opportunité existante (montant, pipeline, étape).", [
+            new ToolSchema('hubspot', 'update_deal',
+                "Met à jour une transaction HubSpot existante identifiée de manière unique. Modifier uniquement les propriétés explicitement demandées par l'utilisateur. Si la transaction n'est pas identifiée de manière unique, effectuer une recherche puis demander une clarification si nécessaire avant toute modification.", [
                 'type' => 'object', 'properties' => [
                     'deal_id' => ['type' => 'string'], 'name' => ['type' => 'string'],
                     'amount' => ['type' => 'number'], 'pipeline' => ['type' => 'string'], 'stage' => ['type' => 'string'],
                 ], 'required' => ['deal_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'get_deal', "Détails d'une opportunité.", [
+            new ToolSchema('hubspot', 'get_deal',
+                "Récupère les informations détaillées d'une transaction HubSpot identifiée de manière unique. Utiliser lorsque l'utilisateur souhaite consulter son état, son montant, son pipeline, ses associations ou ses propriétés avant une autre action. Ne jamais inventer un identifiant de transaction.", [
                 'type' => 'object', 'properties' => ['deal_id' => ['type' => 'string']], 'required' => ['deal_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'search_deals', "Recherche libre d'opportunités.", [
+            new ToolSchema('hubspot', 'search_deals',
+                "Recherche des transactions HubSpot selon leur nom ou d'autres critères. Utiliser avant toute consultation, modification ou changement d'étape lorsqu'aucun identifiant n'est disponible. Si plusieurs transactions correspondent, demander une clarification.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'close_deal', "Clôture une opportunité (gagnée ou perdue).", [
+            new ToolSchema('hubspot', 'close_deal',
+                "Marque une transaction HubSpot comme gagnée ou perdue selon la demande explicite de l'utilisateur. Vérifier que la transaction est identifiée de manière unique avant toute modification. Si plusieurs transactions correspondent, demander une clarification. Ne jamais modifier l'état d'une transaction par supposition.", [
                 'type' => 'object', 'properties' => [
                     'deal_id' => ['type' => 'string'], 'outcome' => ['type' => 'string', 'enum' => ['won', 'lost']],
                 ], 'required' => ['deal_id', 'outcome'],
@@ -389,13 +399,15 @@ class HubSpotConnector extends AbstractConnector
     private function noteTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'add_note', "Ajoute une note interne au dossier d'un contact (ex: le client souhaite être rappelé demain).", [
+            new ToolSchema('hubspot', 'add_note',
+                "Ajoute une note à un contact, une entreprise ou une transaction HubSpot existante. Utiliser uniquement pour enregistrer une nouvelle information sans modifier les autres propriétés de l'objet. Vérifier que l'objet est identifié de manière unique avant d'ajouter la note.", [
                 'type' => 'object', 'properties' => [
                     'contact_email' => ['type' => 'string'], 'content' => ['type' => 'string'],
                 ], 'required' => ['contact_email', 'content'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.log_activity'),
 
-            new ToolSchema('hubspot', 'list_notes', "Liste les notes existantes d'un contact.", [
+            new ToolSchema('hubspot', 'list_notes',
+                "Retourne les notes associées à un contact, une entreprise ou une transaction HubSpot. Utiliser lorsque l'utilisateur souhaite consulter l'historique des échanges ou des informations enregistrées sans modifier les données existantes.", [
                 'type' => 'object', 'properties' => ['contact_id' => ['type' => 'string']], 'required' => ['contact_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -450,24 +462,28 @@ class HubSpotConnector extends AbstractConnector
     private function taskTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'create_task', "Crée une tâche pour l'équipe (ex: le commercial doit rappeler demain).", [
+            new ToolSchema('hubspot', 'create_task',
+                "Crée une tâche HubSpot associée à un contact, une entreprise ou une transaction afin de planifier une action future. Utiliser uniquement lorsqu'une nouvelle tâche doit être créée. Vérifier que les objets associés sont correctement identifiés avant l'appel. Ne pas utiliser pour modifier une tâche existante.", [
                 'type' => 'object', 'properties' => [
                     'title' => ['type' => 'string'], 'due_date' => ['type' => 'string', 'description' => 'ISO 8601'],
                     'contact_email' => ['type' => 'string'], 'notes' => ['type' => 'string'],
                 ], 'required' => ['title'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_task'),
 
-            new ToolSchema('hubspot', 'update_task', "Modifie une tâche existante.", [
+            new ToolSchema('hubspot', 'update_task',
+                "Met à jour une tâche HubSpot existante identifiée de manière unique. Modifier uniquement les propriétés explicitement demandées par l'utilisateur. Si l'identifiant est inconnu, rechercher d'abord la tâche correspondante. En cas de plusieurs résultats, demander une clarification avant toute modification. Ne jamais créer une nouvelle tâche à la place d'une mise à jour.", [
                 'type' => 'object', 'properties' => [
                     'task_id' => ['type' => 'string'], 'title' => ['type' => 'string'], 'due_date' => ['type' => 'string'],
                 ], 'required' => ['task_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'complete_task', "Marque une tâche comme terminée.", [
+            new ToolSchema('hubspot', 'complete_task',
+                "Marque une tâche HubSpot comme terminée. Utiliser uniquement lorsque l'utilisateur souhaite clôturer une tâche existante. Si la tâche n'est pas identifiée de manière unique, rechercher la tâche puis demander une clarification si nécessaire. Ne jamais terminer plusieurs tâches sans confirmation explicite.", [
                 'type' => 'object', 'properties' => ['task_id' => ['type' => 'string']], 'required' => ['task_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'list_tasks', "Liste les tâches en cours (éventuellement filtrées par contact).", [
+            new ToolSchema('hubspot', 'list_tasks',
+                "Retourne la liste des tâches HubSpot selon les critères demandés (propriétaire, statut, échéance ou autres filtres disponibles). Utiliser lorsque l'utilisateur souhaite consulter ses tâches ou obtenir un aperçu de son travail. Pour retrouver une tâche précise avant une modification, privilégier search_tasks si disponible.", [
                 'type' => 'object', 'properties' => ['contact_id' => ['type' => 'string']],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -553,18 +569,21 @@ class HubSpotConnector extends AbstractConnector
     private function meetingTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'create_meeting', "Planifie un rendez-vous dans le CRM. Si le connecteur Google Calendar est actif sur ce site, préfère-le pour la gestion des rendez-vous.", [
+            new ToolSchema('hubspot', 'create_meeting',
+                "Crée une réunion HubSpot associée aux objets concernés (contact, entreprise ou transaction). Utiliser uniquement lorsque la date, l'heure et les informations essentielles sont connues. Si les participants ou l'horaire sont incomplets, demander les informations manquantes avant la création.", [
                 'type' => 'object', 'properties' => [
                     'title' => ['type' => 'string'], 'start' => ['type' => 'string', 'description' => 'ISO 8601'],
                     'end' => ['type' => 'string', 'description' => 'ISO 8601'], 'contact_email' => ['type' => 'string'],
                 ], 'required' => ['title', 'start', 'end', 'contact_email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'scheduling.create_event'),
 
-            new ToolSchema('hubspot', 'cancel_meeting', "Annule un rendez-vous planifié.", [
+            new ToolSchema('hubspot', 'cancel_meeting',
+                "Annule une réunion HubSpot existante identifiée de manière unique. Si la réunion ne peut pas être identifiée de manière certaine, effectuer une recherche puis demander une clarification avant de l'annuler.", [
                 'type' => 'object', 'properties' => ['meeting_id' => ['type' => 'string']], 'required' => ['meeting_id'],
             ], isWriteAction: true, defaultMode: 'confirm', defaultConfirmActor: 'visitor', capability: 'scheduling.cancel_event'),
 
-            new ToolSchema('hubspot', 'search_meetings', "Recherche des rendez-vous planifiés.", [
+            new ToolSchema('hubspot', 'search_meetings',
+                "Recherche des réunions HubSpot selon leur sujet, leur période ou leurs associations. Utiliser avant toute consultation, modification ou annulation lorsqu'aucun identifiant de réunion n'est disponible.", [
                 'type' => 'object', 'properties' => ['contact_id' => ['type' => 'string']],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -636,13 +655,15 @@ class HubSpotConnector extends AbstractConnector
     private function emailTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'log_email', "Enregistre un email dans l'historique du contact (sans l'envoyer).", [
+            new ToolSchema('hubspot', 'log_email',
+                "Enregistre un e-mail comme activité HubSpot liée à un contact, une entreprise ou une transaction. Utiliser uniquement pour consigner un échange déjà réalisé. Ne pas utiliser pour envoyer un nouvel e-mail.", [
                 'type' => 'object', 'properties' => [
                     'contact_email' => ['type' => 'string'], 'subject' => ['type' => 'string'], 'body' => ['type' => 'string'],
                 ], 'required' => ['contact_email', 'subject'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto', capability: 'crm.log_activity'),
 
-            new ToolSchema('hubspot', 'send_email', "Envoie un VRAI email au contact via un modèle HubSpot configuré (nécessite Marketing Hub avec l'envoi transactionnel activé).", [
+            new ToolSchema('hubspot', 'send_email',
+                "Envoie un nouvel e-mail aux destinataires indiqués et enregistre l'envoi dans HubSpot si cette fonctionnalité est prise en charge. Vérifier que les destinataires, l'objet et le contenu sont disponibles avant l'envoi. Ne jamais inventer une adresse e-mail ni envoyer un message incomplet.", [
                 'type' => 'object', 'properties' => [
                     'contact_email' => ['type' => 'string'], 'template_id' => ['type' => 'string'],
                 ], 'required' => ['contact_email', 'template_id'],
@@ -688,7 +709,8 @@ class HubSpotConnector extends AbstractConnector
     private function callTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'log_call', "Enregistre un appel téléphonique dans l'historique du contact.", [
+            new ToolSchema('hubspot', 'log_call',
+                "Enregistre un appel téléphonique comme activité HubSpot associée aux objets concernés. Utiliser uniquement pour consigner un appel déjà effectué. Ne pas utiliser pour planifier ou lancer un appel.", [
                 'type' => 'object', 'properties' => [
                     'contact_email' => ['type' => 'string'], 'summary' => ['type' => 'string'],
                     'duration_minutes' => ['type' => 'integer'], 'outcome' => ['type' => 'string'],
@@ -724,29 +746,34 @@ class HubSpotConnector extends AbstractConnector
     private function ticketTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'create_ticket', "Ouvre un ticket de support (ex: le visiteur signale un problème).", [
+            new ToolSchema('hubspot', 'create_ticket',
+                "Crée un nouveau ticket HubSpot lorsqu'une nouvelle demande de support ou un nouvel incident doit être enregistré. Vérifier qu'un ticket équivalent n'existe pas déjà afin d'éviter les doublons. Associer le ticket aux objets concernés lorsque ces informations sont disponibles.", [
                 'type' => 'object', 'properties' => [
                     'subject' => ['type' => 'string'], 'description' => ['type' => 'string'],
                     'contact_email' => ['type' => 'string'], 'priority' => ['type' => 'string', 'enum' => ['LOW', 'MEDIUM', 'HIGH']],
                 ], 'required' => ['subject', 'description', 'contact_email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'support.create_ticket'),
 
-            new ToolSchema('hubspot', 'update_ticket', "Modifie un ticket existant.", [
+            new ToolSchema('hubspot', 'update_ticket',
+                "Met à jour un ticket HubSpot existant identifié de manière unique. Modifier uniquement les propriétés explicitement demandées. Si le ticket n'est pas identifié de manière certaine, effectuer une recherche puis demander une clarification avant la modification.", [
                 'type' => 'object', 'properties' => [
                     'ticket_id' => ['type' => 'string'], 'description' => ['type' => 'string'],
                     'priority' => ['type' => 'string', 'enum' => ['LOW', 'MEDIUM', 'HIGH']],
                 ], 'required' => ['ticket_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'get_ticket', "Statut et détails d'un ticket (utile pour que le visiteur suive sa demande).", [
+            new ToolSchema('hubspot', 'get_ticket',
+                "Récupère les informations détaillées d'un ticket HubSpot identifié de manière unique. Utiliser lorsque l'utilisateur souhaite consulter son état, sa priorité, son propriétaire ou ses propriétés avant une autre action.", [
                 'type' => 'object', 'properties' => ['ticket_id' => ['type' => 'string']], 'required' => ['ticket_id'],
             ], defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'search_tickets', "Recherche libre de tickets.", [
+            new ToolSchema('hubspot', 'search_tickets',
+                "Recherche des tickets HubSpot selon leur titre, leur identifiant ou d'autres critères disponibles. Utiliser avant toute consultation, modification ou clôture lorsqu'aucun identifiant n'est connu. Si plusieurs tickets correspondent, demander une clarification avant de poursuivre.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'close_ticket', "Clôture un ticket de support.", [
+            new ToolSchema('hubspot', 'close_ticket',
+                "Clôture un ticket HubSpot existant. Utiliser uniquement lorsque l'utilisateur demande explicitement de résoudre ou fermer un ticket. Vérifier que le ticket est identifié de manière unique avant toute modification.", [
                 'type' => 'object', 'properties' => ['ticket_id' => ['type' => 'string']], 'required' => ['ticket_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -843,11 +870,13 @@ class HubSpotConnector extends AbstractConnector
     private function fileTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'upload_file', "Enregistre l'URL d'un fichier déjà hébergé (ELChat ne transfère pas de binaire, seulement une référence).", [
+            new ToolSchema('hubspot', 'upload_file',
+                "Téléverse un nouveau fichier dans HubSpot afin qu'il puisse être associé à des contacts, entreprises, transactions ou tickets. Utiliser uniquement lorsqu'un nouveau fichier doit être importé. Ne pas utiliser pour remplacer ou modifier un fichier existant.", [
                 'type' => 'object', 'properties' => ['file_url' => ['type' => 'string'], 'file_name' => ['type' => 'string']], 'required' => ['file_url'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'attach_file_to_contact', "Associe un fichier déjà uploadé au dossier d'un contact.", [
+            new ToolSchema('hubspot', 'attach_file_to_contact',
+                "Associe un fichier existant à un contact HubSpot identifié de manière unique. Vérifier que le fichier et le contact sont tous deux correctement identifiés avant de créer l'association. Ne jamais créer de liaison par supposition.", [
                 'type' => 'object', 'properties' => ['file_id' => ['type' => 'string'], 'contact_email' => ['type' => 'string']], 'required' => ['file_id', 'contact_email'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -875,26 +904,30 @@ class HubSpotConnector extends AbstractConnector
     private function aiTools(): array
     {
         return [
-            new ToolSchema('hubspot', 'qualify_lead', "Qualifie le prospect (chaud/tiède/froid) sur la base de la conversation, et met à jour sa fiche HubSpot.", [
+            new ToolSchema('hubspot', 'qualify_lead',
+                "Met à jour le statut de qualification d'un prospect selon les informations fournies par l'utilisateur ou les règles métier. Utiliser uniquement lorsque l'objectif est de qualifier ou requalifier un prospect existant. Ne jamais qualifier automatiquement un prospect sans instruction explicite ou règle définie.", [
                 'type' => 'object', 'properties' => [
                     'contact_email' => ['type' => 'string'], 'temperature' => ['type' => 'string', 'enum' => ['chaud', 'tiède', 'froid']],
                 ], 'required' => ['contact_email', 'temperature'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.qualify_lead'),
 
-            new ToolSchema('hubspot', 'score_lead', "Attribue un score (0-100) au prospect selon la qualité perçue de son intérêt.", [
+            new ToolSchema('hubspot', 'score_lead',
+                "Calcule ou met à jour le score d'un prospect selon les critères configurés dans HubSpot. Utiliser uniquement lorsque l'utilisateur souhaite obtenir ou recalculer le score d'un prospect existant. Ne jamais inventer un score ni modifier les règles de notation.", [
                 'type' => 'object', 'properties' => [
                     'contact_email' => ['type' => 'string'], 'score' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 100],
                 ], 'required' => ['contact_email', 'score'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.qualify_lead'),
 
-            new ToolSchema('hubspot', 'assign_owner', "Assigne automatiquement un commercial à un contact ou une opportunité (répartition équitable si aucun n'est précisé).", [
+            new ToolSchema('hubspot', 'assign_owner',
+                "Attribue un propriétaire (commercial ou responsable) à un contact, une entreprise, une transaction ou un ticket HubSpot. Vérifier que l'objet et le propriétaire sont identifiés de manière unique avant l'attribution. Si plusieurs propriétaires correspondent, demander une clarification.", [
                 'type' => 'object', 'properties' => [
                     'entity_type' => ['type' => 'string', 'enum' => ['contact', 'deal']], 'entity_id' => ['type' => 'string'],
                     'owner_email' => ['type' => 'string', 'description' => 'Optionnel : email du commercial à assigner explicitement'],
                 ], 'required' => ['entity_type', 'entity_id'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('hubspot', 'summarize_contact', "Récupère l'historique complet d'un contact (opportunités, tickets, notes, tâches) pour que tu puisses en faire un résumé.", [
+            new ToolSchema('hubspot', 'summarize_contact',
+                "Génère un résumé fidèle d'un contact HubSpot à partir des informations réellement enregistrées (propriétés, activités, notes, tickets, transactions et interactions disponibles). Ne jamais inventer de faits, compléter les informations manquantes ou déduire des éléments non présents dans les données retournées. Indiquer clairement lorsqu'une information n'est pas disponible.", [
                 'type' => 'object', 'properties' => ['contact_id' => ['type' => 'string']], 'required' => ['contact_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

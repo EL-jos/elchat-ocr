@@ -25,14 +25,45 @@ class SlackConnector extends AbstractConnector
     public function listTools(): array
     {
         return [
-            new ToolSchema('slack', 'send_message', "Envoie un message à un canal Slack (ex: notifier l'équipe d'une demande de rendez-vous ou d'un lead qualifié).", [
+            new ToolSchema('slack', 'send_message',
+                "Envoie un message dans un canal Slack afin d'informer une équipe ou un service d'un événement nécessitant une attention humaine.
+Utilise cet outil lorsqu'une notification interne est plus utile qu'une réponse au visiteur.
+
+Cas d'utilisation :
+- notifier un nouveau lead qualifié à l'équipe commerciale ;
+- prévenir le support d'un incident ou d'une panne signalée ;
+- envoyer une demande urgente à une équipe interne ;
+- partager un résumé d'une conversation importante ;
+- transmettre une demande de devis, de partenariat ou de recrutement ;
+- avertir d'une commande inhabituelle ou d'un risque détecté ;
+- escalader une situation nécessitant une intervention humaine.
+
+Ne pas utiliser pour répondre directement au visiteur.
+Le paramètre 'channel' doit contenir le canal Slack cible (ex : #sales, #support, #marketing).", [
                 'type' => 'object', 'properties' => ['channel' => ['type' => 'string', 'description' => 'Nom du canal, ex: #ventes'], 'message' => ['type' => 'string']], 'required' => ['channel', 'message'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'communication.notify_team'),
 
-            new ToolSchema('slack', 'list_channels', "Liste les canaux disponibles.", ['type' => 'object', 'properties' => []],
+            new ToolSchema('slack', 'list_channels',
+                "Liste tous les canaux Slack accessibles par le bot.
+
+Utilise cet outil lorsqu'il faut :
+- retrouver le bon canal avant d'envoyer une notification ;
+- proposer les canaux disponibles à un administrateur ;
+- vérifier qu'un canal existe.
+
+À utiliser uniquement lorsqu'une information sur les canaux est réellement nécessaire.", ['type' => 'object', 'properties' => []],
                 defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('slack', 'create_channel', "Crée un nouveau canal.", [
+            new ToolSchema('slack', 'create_channel',
+                "Crée un nouveau canal Slack pour organiser une collaboration ou un projet.
+
+Cas d'utilisation :
+- création d'un canal dédié à un nouveau client ;
+- ouverture d'un canal pour un projet ;
+- création d'un espace pour un événement ;
+- mise en place d'un canal de crise ou d'incident.
+
+À utiliser uniquement lorsqu'un nouveau canal est réellement nécessaire et qu'aucun canal existant n'est approprié.", [
                 'type' => 'object', 'properties' => ['name' => ['type' => 'string']], 'required' => ['name'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
         ];

@@ -12,15 +12,18 @@ class ManufacturingModule implements OdooModuleInterface
     public function listTools(): array
     {
         return [
-            new ToolSchema('odoo', 'manufacturing_get_production_status', "Statut d'un ordre de fabrication.", [
+            new ToolSchema('odoo', 'manufacturing_get_production_status',
+                "Récupère les informations détaillées d'un ordre de fabrication identifié de manière unique, notamment son état, la quantité à produire et la date de démarrage planifiée. Utiliser lorsque le production_id est connu ou après une recherche ayant identifié un seul ordre. Si l'identifiant est inconnu, utiliser manufacturing_search_orders avant cet outil. Ne jamais inventer un identifiant d'ordre de fabrication.", [
                 'type' => 'object', 'properties' => ['production_id' => ['type' => 'integer']], 'required' => ['production_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'manufacturing_search_orders', "Recherche des ordres de fabrication.", [
+            new ToolSchema('odoo', 'manufacturing_search_orders',
+                "Recherche des ordres de fabrication Odoo à partir d'un numéro, d'un nom ou d'un texte fourni par l'utilisateur. Utiliser lorsque l'utilisateur souhaite retrouver un ordre avant de consulter son état ou ses composants. Si plusieurs ordres correspondent, demander une clarification avant toute autre action. Ne jamais supposer qu'un ordre est unique ni inventer un production_id.", [
                 'type' => 'object', 'properties' => ['query' => ['type' => 'string']], 'required' => ['query'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
-            new ToolSchema('odoo', 'manufacturing_check_component_availability', "Vérifie la disponibilité des composants d'un ordre de fabrication.", [
+            new ToolSchema('odoo', 'manufacturing_check_component_availability',
+                "Retourne les composants et leurs états associés à un ordre de fabrication identifié de manière unique afin d'évaluer la disponibilité des matières premières nécessaires à la production. Utiliser lorsque l'utilisateur souhaite vérifier si les composants requis sont prêts ou identifier d'éventuels blocages. Si l'ordre de fabrication n'est pas identifié de manière unique, effectuer une recherche puis demander une clarification avant de poursuivre. Ne pas utiliser cet outil pour consulter le stock global d'un produit ; utiliser les outils du module Inventory pour cela.", [
                 'type' => 'object', 'properties' => ['production_id' => ['type' => 'integer']], 'required' => ['production_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
