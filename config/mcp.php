@@ -1,13 +1,18 @@
 <?php
 
 use App\Domain\MCP\Connectors\AsanaConnector;
+use App\Domain\MCP\Connectors\BrevoConnector;
+use App\Domain\MCP\Connectors\BufferConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleAdsConnector;
 use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
 use App\Domain\MCP\Connectors\GoogleDriveConnector;
 use App\Domain\MCP\Connectors\GoogleSearchConsoleConnector;
+use App\Domain\MCP\Connectors\HootsuiteConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
+use App\Domain\MCP\Connectors\KlaviyoConnector;
+use App\Domain\MCP\Connectors\MailchimpConnector;
 use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
@@ -115,6 +120,33 @@ return [
 
         // Clé API statique (Semrush > Profil > API Units), pas d'OAuth.
         'semrush' => ['class' => SemrushConnector::class],
+
+        // Clé API statique (le datacenter usXX fait partie de la clé elle-même,
+        // voir MailchimpConnector::client()) — rien à configurer ici.
+        'mailchimp' => ['class' => MailchimpConnector::class],
+        // Clé API privée statique.
+        'klaviyo' => ['class' => KlaviyoConnector::class],
+
+        // Clé API statique.
+        'brevo' => ['class' => BrevoConnector::class],
+
+        // OAuth2 — app créée sur https://hootsuite.dev (Developer Portal), scope
+        // par défaut de l'app (pas de paramètre 'scope' dans l'URL d'autorisation
+        // Hootsuite : le périmètre est fixé au niveau de l'app elle-même côté
+        // portail développeur, à configurer en lecture+écriture messages/profiles).
+        'hootsuite' => [
+            'class' => HootsuiteConnector::class,
+            'client_id' => env('HOOTSUITE_CLIENT_ID'),
+            'client_secret' => env('HOOTSUITE_CLIENT_SECRET'),
+        ],
+
+        // OAuth2 — app créée sur https://buffer.com/developers/apps. Jetons Buffer
+        // v1 sans expiration documentée : pas de refresh_token à gérer.
+        'buffer' => [
+            'class' => BufferConnector::class,
+            'client_id' => env('BUFFER_CLIENT_ID'),
+            'client_secret' => env('BUFFER_CLIENT_SECRET'),
+        ],
     ],
 
     'orchestrator' => [

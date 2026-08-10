@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api\v5;
 
+use App\Domain\MCP\Capability\CapabilityActionPlaybookEngine;
+use App\Domain\MCP\Capability\CapabilityPlaybookEngine;
 use App\Domain\MCP\Capability\CapabilityResolver;
 use App\Http\Controllers\Controller;
 use App\Models\Mcp\{McpCapability, McpCapabilityPreference, McpConnector};
@@ -11,9 +13,12 @@ use Illuminate\Support\Str;
 
 class MCPCapabilityController extends Controller
 {
-    public function __construct(private readonly CapabilityResolver $resolver)
-    {
-    }
+    public function __construct(
+        private readonly CapabilityResolver $resolver,
+        private readonly CapabilityPlaybookEngine $playbookEngine, // 🆕
+        private readonly CapabilityActionPlaybookEngine $actionPlaybookEngine, // 🆕
+    )
+    { }
 
     /** Outils actifs disponibles sur ce site — alimente le sélecteur de la création/édition d'une capacité. */
     public function toolsCatalog(Request $request, Site $site)
@@ -63,6 +68,44 @@ class MCPCapabilityController extends Controller
             ]);
         }
         return response()->json(['data' => $created]);
+    }
+
+    /**
+     * 🆕 Connecteurs PAS ENCORE activés recommandés pour ce site, à partir
+     * du référentiel éditorial (mcp_capability_playbooks) — voir
+     * CapabilityPlaybookEngine. Distinct de suggest() ci-dessus, qui lui ne
+     * regroupe que des outils déjà actifs. Alimente le bandeau "Recommandé
+     * pour vous" du marketplace de connecteurs.
+     */
+    public function recommended(Request $request, Site $site)
+    {
+        return response()->json(['data' => $this->playbookEngine->suggestFor($site)]);
+    }
+
+    /** 🆕 L'admin ignore une suggestion — ne la revoit plus pour ce site. */
+    public function dismissRecommendation(Request $request, Site $site, string $key)
+    {
+        $this->playbookEngine->dismiss($site, $key);
+        return response()->json(['status' => 'dismissed']);
+    }
+
+    /** 🆕 Combos d'actions (même connecteur ou cross-connecteur) — bandeau de CapabilityManagerComponent. */
+    public function recommendedActions(Request $request, Site $site)
+    {
+        return response()->json(['data' => $this->actionPlaybookEngine->suggestFor($site)]);
+    }
+
+    /** 🆕 Accepte : crée directement la McpCapability correspondante. */
+    public function acceptActionRecommendation(Request $request, Site $site, string $key)
+    {
+        $capability = $this->actionPlaybookEngine->accept($site, $key);
+        return response()->json(['data' => $capability]);
+    }
+
+    public function dismissActionRecommendation(Request $request, Site $site, string $key)
+    {
+        $this->actionPlaybookEngine->dismiss($site, $key);
+        return response()->json(['status' => 'dismissed']);
     }
 
     /** Conflits actuels (2+ connecteurs actifs pour une même capacité). */

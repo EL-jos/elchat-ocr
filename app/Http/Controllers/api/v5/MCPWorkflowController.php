@@ -5,11 +5,14 @@ namespace App\Http\Controllers\api\v5;
 use App\Http\Controllers\Controller;
 use App\Models\Mcp\McpWorkflow;
 use App\Models\Site;
+use App\Services\mcp\WorkflowProvisioningService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class MCPWorkflowController extends Controller
 {
+    public function __construct(private readonly WorkflowProvisioningService $provisioning) {} // 🆕
+
     public function index(Request $request, Site $site)
     {
         $workflows = McpWorkflow::where(fn ($q) => $q->where('site_id', $site->id)->orWhereNull('site_id'))
@@ -69,5 +72,18 @@ class MCPWorkflowController extends Controller
             'steps.*.optional' => ['boolean'],
             'is_active' => ['boolean'],
         ]);
+    }
+
+    /** 🆕 État des dépendances du workflow pour ce site, sans rien modifier. */
+    public function dependencies(Request $request, Site $site, McpWorkflow $workflow)
+    {
+        return response()->json(['data' => $this->provisioning->checkDependencies($site, $workflow)]);
+    }
+
+    /** 🆕 Installe le workflow (copie locale si recette globale) + provisionne les capacités disponibles. */
+    public function install(Request $request, Site $site, McpWorkflow $workflow)
+    {
+        $result = $this->provisioning->install($site, $workflow);
+        return response()->json(['data' => $result]);
     }
 }

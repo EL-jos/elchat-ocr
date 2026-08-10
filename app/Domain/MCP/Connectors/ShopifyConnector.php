@@ -9,6 +9,7 @@ use App\Domain\MCP\Exceptions\AuthExpiredException;
 use App\Domain\MCP\Exceptions\ConnectorUnavailableException;
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -251,6 +252,32 @@ Bonnes pratiques :
 - Ne jamais créer plusieurs comptes pour la même adresse email.", [
                 'type' => 'object', 'properties' => ['email' => ['type' => 'string'], 'first_name' => ['type' => 'string'], 'last_name' => ['type' => 'string']], 'required' => ['email'],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'commerce.create_account'),
+
+            new ToolSchema('shopify', 'get_sales_summary',
+                "Retourne un résumé des ventes sur une période donnée : chiffre d'affaires total, nombre de commandes, panier moyen. Calculé en agrégeant les commandes de la période (échantillon plafonné à 250 commandes par appel). Utiliser pour une vue d'ensemble commerciale, jamais pour le détail d'une commande précise (utiliser get_order_status dans ce cas).", [
+                    'type' => 'object', 'properties' => [
+                        'date_from' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: -7 jours'],
+                        'date_to' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: aujourd\'hui'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto', capability: 'commerce.sales_reporting'),
+
+            new ToolSchema('shopify', 'get_top_products',
+                "Retourne les produits les plus vendus (en quantité) sur une période donnée, calculé en agrégeant les lignes de commande de la période (échantillon plafonné à 250 commandes). Utiliser pour identifier les meilleures ventes.", [
+                    'type' => 'object', 'properties' => [
+                        'date_from' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: -7 jours'],
+                        'date_to' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: aujourd\'hui'],
+                        'limit' => ['type' => 'integer', 'description' => 'défaut 10, max 30'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
+
+            new ToolSchema('shopify', 'get_abandoned_checkouts',
+                "Retourne les paniers/checkouts commencés mais jamais finalisés en commande sur une période donnée, avec email du visiteur si fourni et montant du panier. Utiliser pour évaluer les occasions de vente manquées ou cibler une relance, jamais pour les commandes déjà finalisées (utiliser get_order_status dans ce cas).", [
+                    'type' => 'object', 'properties' => [
+                        'date_from' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: -7 jours'],
+                        'limit' => ['type' => 'integer', 'description' => 'défaut 20, max 50'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
+
         ];
     }
 
@@ -268,6 +295,9 @@ Bonnes pratiques :
             'generate_checkout' => $this->generateCheckout($params, $credentials, $context),
             'get_order_status' => $this->getOrderStatus($params, $credentials),
             'create_customer' => $this->createCustomer($params, $credentials),
+            'get_sales_summary' => $this->salesSummary($params, $credentials), // 🆕
+            'get_top_products' => $this->topProducts($params, $credentials), // 🆕
+            'get_abandoned_checkouts' => $this->abandonedCheckouts($params, $credentials), // 🆕
             default => throw new ToolNotFoundException("Outil '{$toolName}' inconnu pour shopify."),
         };
     }
@@ -407,6 +437,107 @@ Bonnes pratiques :
         }
         $this->recordSuccess();
         return ToolResult::ok(['customer_id' => $customer['id']], 'Compte créé.', identity: ['email' => $p['email'], 'firstname' => $p['first_name'] ?? null, 'lastname' => $p['last_name'] ?? null]);
+    }
+
+    private function salesSummary(array $p, array $c): ToolResult
+    {
+        $from = $p['date_from'] ?? now()->subDays(7)->toDateString();
+        $to = $p['date_to'] ?? now()->toDateString();
+
+        try {
+            $response = $this->client($c)->get('orders.json', [
+                'status' => 'any', 'financial_status' => 'paid',
+                'created_at_min' => Carbon::parse($from)->startOfDay()->toIso8601String(),
+                'created_at_max' => Carbon::parse($to)->endOfDay()->toIso8601String(),
+                'limit' => 250,
+            ]);
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('Shopify indisponible: ' . $e->getMessage());
+        }
+        $this->recordSuccess();
+        $orders = $response->json('orders', []);
+
+        if (empty($orders)) {
+            return ToolResult::fail('not_found', "Aucune commande payée trouvée entre {$from} et {$to}.");
+        }
+
+        $total = collect($orders)->sum(fn ($o) => (float) $o['total_price']);
+        $count = count($orders);
+
+        return ToolResult::ok([
+            'period' => "{$from} → {$to}",
+            'total_sales' => round($total, 2),
+            'total_orders' => $count,
+            'average_order_value' => round($total / $count, 2),
+        ], "Résumé des ventes du {$from} au {$to} récupéré" . ($count >= 250 ? ' (échantillon plafonné à 250 commandes, le total réel peut être plus élevé)' : '') . '.');
+    }
+
+    private function topProducts(array $p, array $c): ToolResult
+    {
+        $from = $p['date_from'] ?? now()->subDays(7)->toDateString();
+        $to = $p['date_to'] ?? now()->toDateString();
+        $limit = max(1, min(30, (int) ($p['limit'] ?? 10)));
+
+        try {
+            $response = $this->client($c)->get('orders.json', [
+                'status' => 'any', 'financial_status' => 'paid',
+                'created_at_min' => Carbon::parse($from)->startOfDay()->toIso8601String(),
+                'created_at_max' => Carbon::parse($to)->endOfDay()->toIso8601String(),
+                'limit' => 250, 'fields' => 'line_items',
+            ]);
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('Shopify indisponible: ' . $e->getMessage());
+        }
+        $this->recordSuccess();
+        $orders = $response->json('orders', []);
+
+        if (empty($orders)) {
+            return ToolResult::fail('not_found', "Aucune commande payée trouvée entre {$from} et {$to}.");
+        }
+
+        $tally = [];
+        foreach ($orders as $order) {
+            foreach ($order['line_items'] ?? [] as $item) {
+                $id = $item['product_id'] ?? $item['title'];
+                $tally[$id] ??= ['product_id' => $item['product_id'] ?? null, 'name' => $item['title'], 'quantity_sold' => 0];
+                $tally[$id]['quantity_sold'] += (int) $item['quantity'];
+            }
+        }
+
+        $products = collect($tally)->sortByDesc('quantity_sold')->take($limit)->values()->all();
+
+        return ToolResult::ok(['period' => "{$from} → {$to}", 'products' => $products], count($products) . " produit(s) le(s) plus vendu(s) sur la période.");
+    }
+
+    private function abandonedCheckouts(array $p, array $c): ToolResult
+    {
+        $from = $p['date_from'] ?? now()->subDays(7)->toDateString();
+        $limit = max(1, min(50, (int) ($p['limit'] ?? 20)));
+
+        try {
+            $response = $this->client($c)->get('checkouts.json', [
+                'created_at_min' => Carbon::parse($from)->startOfDay()->toIso8601String(),
+                'limit' => $limit,
+            ]);
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('Shopify indisponible: ' . $e->getMessage());
+        }
+        $this->recordSuccess();
+        $checkouts = $response->json('checkouts', []);
+
+        if (empty($checkouts)) {
+            return ToolResult::fail('not_found', "Aucun panier abandonné trouvé depuis {$from}.");
+        }
+
+        $results = collect($checkouts)->map(fn ($ch) => [
+            'checkout_token' => $ch['token'] ?? null,
+            'email' => $ch['email'] ?? null,
+            'total_price' => $ch['total_price'] ?? null,
+            'created_at' => $ch['created_at'] ?? null,
+            'recovery_url' => $ch['abandoned_checkout_url'] ?? null,
+        ])->all();
+
+        return ToolResult::ok(['abandoned_checkouts' => $results], count($results) . " panier(s) abandonné(s) depuis {$from}.");
     }
 
     private function client(array $c)

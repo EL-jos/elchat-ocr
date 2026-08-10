@@ -3,13 +3,18 @@
 namespace Database\Seeders;
 
 use App\Domain\MCP\Connectors\AsanaConnector;
+use App\Domain\MCP\Connectors\BrevoConnector;
+use App\Domain\MCP\Connectors\BufferConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleAdsConnector;
 use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
 use App\Domain\MCP\Connectors\GoogleCalendarConnector;
 use App\Domain\MCP\Connectors\GoogleDriveConnector;
 use App\Domain\MCP\Connectors\GoogleSearchConsoleConnector;
+use App\Domain\MCP\Connectors\HootsuiteConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
+use App\Domain\MCP\Connectors\KlaviyoConnector;
+use App\Domain\MCP\Connectors\MailchimpConnector;
 use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
@@ -151,6 +156,41 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => SemrushConnector::class,
             'description' => "Analyse SEO concurrentielle : mots-clés, trafic organique, backlinks et concurrents.",
             'icon_url' => 'https://cdn.simpleicons.org/semrush/FF642D', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'mailchimp'], [
+            'name' => 'Mailchimp', 'category' => 'email_marketing', 'auth_type' => 'api_key',
+            'adapter_class' => MailchimpConnector::class,
+            'description' => "Audiences, campagnes et inscription à votre newsletter Mailchimp.",
+            'icon_url' => 'https://cdn.simpleicons.org/mailchimp/FFE01B', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'klaviyo'], [
+            'name' => 'Klaviyo', 'category' => 'email_marketing', 'auth_type' => 'api_key',
+            'adapter_class' => KlaviyoConnector::class,
+            'description' => "Listes, campagnes et inscription à vos listes Klaviyo.",
+            'icon_url' => 'https://cdn.simpleicons.org/klaviyo/222222', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'brevo'], [
+            'name' => 'Brevo', 'category' => 'email_marketing', 'auth_type' => 'api_key',
+            'adapter_class' => BrevoConnector::class,
+            'description' => "Listes de contacts, campagnes et inscription à vos listes Brevo.",
+            'icon_url' => 'https://cdn.simpleicons.org/brevo/0B996E', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'hootsuite'], [
+            'name' => 'Hootsuite', 'category' => 'social_media', 'auth_type' => 'oauth2',
+            'adapter_class' => HootsuiteConnector::class,
+            'description' => "Programmation et suivi de vos publications sur les réseaux sociaux via Hootsuite.",
+            'icon_url' => 'https://cdn.simpleicons.org/hootsuite/000000', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'buffer'], [
+            'name' => 'Buffer', 'category' => 'social_media', 'auth_type' => 'oauth2',
+            'adapter_class' => BufferConnector::class,
+            'description' => "Programmation et suivi de vos publications sur les réseaux sociaux via Buffer.",
+            'icon_url' => 'https://cdn.simpleicons.org/buffer/231F20', 'is_active' => true,
         ]);
     }
 }

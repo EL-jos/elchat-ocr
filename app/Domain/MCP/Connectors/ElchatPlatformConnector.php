@@ -2,6 +2,7 @@
 
 namespace App\Domain\MCP\Connectors;
 
+use App\Domain\RAG\RAGToolAdapter;
 use App\Domain\MCP\Contracts\{ToolResult, ToolSchema};
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
 use App\Models\{Conversation, Message, Site, UnansweredQuestion, User, Visitor};
@@ -20,6 +21,9 @@ use Illuminate\Support\Facades\Log;
  */
 class ElchatPlatformConnector extends AbstractConnector
 {
+    public function __construct(private readonly RAGToolAdapter $ragToolAdapter)
+    {}
+
     public function slug(): string { return 'elchat_platform'; }
 
     public function authenticate(array $credentials): array
@@ -34,6 +38,7 @@ class ElchatPlatformConnector extends AbstractConnector
             ...$this->messageTools(),
             ...$this->userTools(),
             ...$this->analyticsTools(),
+            ...$this->knowledgeTools(), // 🆕
             ...$this->adminTools(),
         ];
     }
@@ -63,6 +68,8 @@ class ElchatPlatformConnector extends AbstractConnector
             'channels_usage' => $this->channelsUsage($site),
             'active_visitors' => $this->activeVisitors($params, $site),
             'new_leads' => $this->newLeads($params, $site),
+
+            'search_knowledge_base' => $this->searchKnowledgeBase($params, $site), // 🆕
 
             'list_sites' => $this->listSites($site),
             'list_agents' => $this->listAgents($site),
@@ -402,6 +409,48 @@ class ElchatPlatformConnector extends AbstractConnector
         $count = $site->users()->wherePivot('first_seen_at', '>=', $since)->count();
 
         return ToolResult::ok(['count' => $count], "{$count} nouveau(x) client(s) identifié(s) depuis {$since->toDateString()}.");
+    }
+
+    // =====================================================================
+    // 🔎 BASE DE CONNAISSANCES
+    // =====================================================================
+    //
+    // Délègue entièrement à RAGToolAdapter (même embedding + recherche
+    // hybride + hydratation que le reste de la plateforme) plutôt que de
+    // dupliquer cette logique ici. Volontairement en actor_scope 'admin',
+    // comme le reste des outils de ce connecteur (cockpit interne) : le
+    // tool 'knowledge_base__search' de RAGToolAdapter reste, lui, le point
+    // d'entrée pour un visiteur en cours d'action (voir
+    // MCPActionGateService::handleForAgent(), qui l'ajoute automatiquement
+    // à chaque appel, hors du système de permissions normal).
+
+    private function knowledgeTools(): array
+    {
+        return [
+            new ToolSchema('elchat_platform', 'search_knowledge_base',
+                "Recherche dans la base de connaissances du site (FAQ, politiques, catalogue, documents indexés) pour une information ponctuelle nécessaire à une action de pilotage en cours (ex: vérifier un fait avant de rédiger un résumé ou une réponse). Réutilise le même moteur de recherche que le reste de la plateforme — les résultats ne sont jamais réinventés ni complétés. Ne PAS utiliser pour une question purement informationnelle d'un visiteur qui ne déclenche aucune action : elle est déjà traitée par le pipeline RAG principal du site, hors de cette boucle d'outils.",
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'query' => ['type' => 'string', 'description' => 'Requête de recherche'],
+                        'limit' => ['type' => 'integer', 'description' => "nombre maximum d'extraits retournés, défaut 8, max 20"],
+                    ],
+                    'required' => ['query'],
+                ],
+                defaultActorScope: 'admin', defaultMode: 'auto'),
+        ];
+    }
+
+    private function searchKnowledgeBase(array $p, Site $site): ToolResult
+    {
+        $query = trim($p['query'] ?? '');
+        if ($query === '') {
+            return ToolResult::fail('invalid_request', 'Une requête de recherche est requise.');
+        }
+
+        $limit = max(1, min(20, (int) ($p['limit'] ?? 8)));
+
+        return $this->ragToolAdapter->search($site, $query, $limit);
     }
 
     // =====================================================================

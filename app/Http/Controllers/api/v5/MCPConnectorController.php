@@ -164,6 +164,32 @@ class MCPConnectorController extends Controller
             return response()->json(['authorization_url' => $url]);
         }
 
+        if ($slug === 'hootsuite') {
+            $clientId = config('mcp.connectors.hootsuite.client_id');
+            if (!$clientId) {
+                Log::error('MCP: HOOTSUITE_CLIENT_ID absent ou config non rechargée.');
+                return response()->json(['message' => "Connecteur Hootsuite mal configuré côté serveur."], 500);
+            }
+
+            $url = 'https://platform.hootsuite.com/oauth2/auth?' . http_build_query([
+                    'response_type' => 'code', 'client_id' => $clientId, 'redirect_uri' => $redirectUri, 'state' => $state,
+                ]);
+            return response()->json(['authorization_url' => $url]);
+        }
+
+        if ($slug === 'buffer') {
+            $clientId = config('mcp.connectors.buffer.client_id');
+            if (!$clientId) {
+                Log::error('MCP: BUFFER_CLIENT_ID absent ou config non rechargée.');
+                return response()->json(['message' => "Connecteur Buffer mal configuré côté serveur."], 500);
+            }
+
+            $url = 'https://bufferapp.com/oauth2/authorize?' . http_build_query([
+                    'client_id' => $clientId, 'redirect_uri' => $redirectUri, 'response_type' => 'code', 'state' => $state,
+                ]);
+            return response()->json(['authorization_url' => $url]);
+        }
+
         abort(404, "OAuth non supporté pour {$slug}");
     }
 
@@ -179,11 +205,36 @@ class MCPConnectorController extends Controller
             return redirect("https://elchat.io/app/site/{$site->id}/settings/connectors?connected={$slug}");
         }
 
+        if ($slug === 'buffer') {
+            // Buffer utilise un endpoint et des noms de champs légèrement
+            // différents du flux OAuth2 standard (token.exchange, pas token) et ne
+            // retourne ni refresh_token ni expires_in — jetons sans expiration
+            // documentée (voir BufferConnector::authenticate()).
+            try {
+                $tokenResponse = \Illuminate\Support\Facades\Http::asForm()->post('https://api.bufferapp.com/1/oauth2/token.exchange', [
+                    'client_id' => config('mcp.connectors.buffer.client_id'),
+                    'client_secret' => config('mcp.connectors.buffer.client_secret'),
+                    'redirect_uri' => $redirectUri, 'code' => $code, 'grant_type' => 'authorization_code',
+                ])->throw()->json();
+            } catch (\Illuminate\Http\Client\RequestException $e) {
+                Log::error('MCP Buffer: échec OAuth callback', ['body' => $e->response?->body()]);
+                abort(500, "Connexion Buffer impossible pour le moment.");
+            }
+
+            $this->vault->store($site, $slug, ['access_token' => $tokenResponse['access_token']]);
+
+            if ($this->registry->has($slug)) {
+                $this->permissions->seedDefaultsIfMissing($site, $this->registry->get($slug)->listTools());
+            }
+            return redirect("https://elchat.io/app/site/{$site->id}/settings/connectors?connected={$slug}");
+        }
+
         $googleFamily = ['google_calendar', 'google_drive', 'google_analytics', 'google_search_console', 'google_ads'];
 
         $tokenEndpoint = match (true) {
             in_array($slug, $googleFamily) => 'https://oauth2.googleapis.com/token',
             $slug === 'onedrive' => 'https://login.microsoftonline.com/' . config('mcp.connectors.onedrive.tenant', 'common') . '/oauth2/v2.0/token',
+            $slug === 'hootsuite' => 'https://platform.hootsuite.com/oauth2/token', // grant_type standard, mêmes champs que Google/OneDrive
             default => abort(404, "OAuth non supporté pour {$slug}"),
         };
 

@@ -48,6 +48,7 @@ class WooCommerceConnector extends AbstractConnector
             ...$this->reviewTools(),
             ...$this->shippingTools(),
             ...$this->adminTools(),
+            ...$this->commerceIntelligenceTools(), // 🆕
         ];
     }
 
@@ -109,6 +110,9 @@ class WooCommerceConnector extends AbstractConnector
             'update_order_status' => $this->updateOrderStatus($params, $credentials),
             'adjust_stock' => $this->adjustStock($params, $credentials),
             'update_product_price' => $this->updateProductPrice($params, $credentials),
+
+            'get_sales_summary' => $this->salesSummary($params, $credentials), // 🆕
+            'get_top_products' => $this->topProducts($params, $credentials), // 🆕
 
             default => throw new ToolNotFoundException("Outil '{$toolName}' inconnu pour woocommerce."),
         };
@@ -1020,6 +1024,81 @@ Ne jamais déduire la présence d'un produit sans utiliser cet outil.", ['type' 
             }
         }
         return ToolResult::fail('not_found', "Pas de zone de livraison configurée pour {$p['country']}.");
+    }
+
+    // =====================================================================
+    // 📊 COMMERCE INTELLIGENCE (lecture seule, admin)
+    // =====================================================================
+    //
+    // Utilise le Reports API natif de WooCommerce (/wc/v3/reports/*),
+    // disponible sans aucun plugin supplémentaire.
+
+    private function commerceIntelligenceTools(): array
+    {
+        return [
+            new ToolSchema('woocommerce', 'get_sales_summary',
+                "Retourne un résumé des ventes sur une période prédéfinie : chiffre d'affaires total, ventes nettes, nombre de commandes, panier moyen. Utiliser pour une vue d'ensemble des performances commerciales, jamais pour le détail d'une commande précise (utiliser get_order_status dans ce cas).", [
+                    'type' => 'object', 'properties' => [
+                        'period' => ['type' => 'string', 'enum' => ['week', 'month', 'last_month', 'year'], 'description' => 'défaut: week'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto', capability: 'commerce.sales_reporting'),
+
+            new ToolSchema('woocommerce', 'get_top_products',
+                "Retourne les produits les plus vendus (en quantité) sur une période prédéfinie. Utiliser pour identifier les meilleures ventes, jamais pour la disponibilité d'un produit précis (utiliser get_product_stock dans ce cas).", [
+                    'type' => 'object', 'properties' => [
+                        'period' => ['type' => 'string', 'enum' => ['week', 'month', 'last_month', 'year'], 'description' => 'défaut: week'],
+                        'limit' => ['type' => 'integer', 'description' => 'défaut 10, max 30'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
+        ];
+    }
+
+    private function salesSummary(array $p, array $c): ToolResult
+    {
+        $period = $p['period'] ?? 'week';
+
+        try {
+            $report = $this->client($c)->get('reports/sales', ['period' => $period])->json();
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException($e->getMessage());
+        }
+        $this->recordSuccess();
+        $totals = $report[0] ?? [];
+
+        if (empty($totals)) {
+            return ToolResult::fail('not_found', "Aucune donnée de vente pour la période demandée.");
+        }
+
+        return ToolResult::ok([
+            'period' => $period,
+            'total_sales' => $totals['total_sales'] ?? '0',
+            'net_sales' => $totals['net_sales'] ?? '0',
+            'total_orders' => $totals['total_orders'] ?? 0,
+            'total_items' => $totals['total_items'] ?? 0,
+            'average_sales' => $totals['average_sales'] ?? '0',
+        ], "Résumé des ventes ({$period}) récupéré.");
+    }
+
+    private function topProducts(array $p, array $c): ToolResult
+    {
+        $period = $p['period'] ?? 'week';
+        $limit = max(1, min(30, (int) ($p['limit'] ?? 10)));
+
+        try {
+            $rows = $this->client($c)->get('reports/top_sellers', ['period' => $period])->json();
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException($e->getMessage());
+        }
+        $this->recordSuccess();
+
+        $products = collect($rows)->take($limit)->map(fn ($r) => [
+            'product_id' => $r['product_id'] ?? null, 'name' => $r['name'] ?? null, 'quantity_sold' => $r['quantity'] ?? 0,
+        ])->all();
+
+        if (empty($products)) {
+            return ToolResult::fail('not_found', "Aucune vente sur la période demandée.");
+        }
+        return ToolResult::ok(['period' => $period, 'products' => $products], count($products) . " produit(s) le(s) plus vendu(s) sur la période.");
     }
 
     // =====================================================================

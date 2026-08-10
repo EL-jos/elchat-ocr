@@ -8,6 +8,7 @@ use App\Domain\MCP\Exceptions\AuthExpiredException;
 use App\Domain\MCP\Exceptions\ConnectorUnavailableException;
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -50,6 +51,7 @@ class HubSpotConnector extends AbstractConnector
             ...$this->ticketTools(),
             ...$this->fileTools(),
             ...$this->aiTools(),
+            ...$this->supportAnalyticsTools(), // 🆕
         ];
     }
 
@@ -98,6 +100,10 @@ class HubSpotConnector extends AbstractConnector
             'score_lead' => $this->scoreLead($params, $credentials),
             'assign_owner' => $this->assignOwner($params, $credentials, $context),
             'summarize_contact' => $this->summarizeContact($params, $credentials),
+
+            'get_agent_workload' => $this->agentWorkload($params, $credentials), // 🆕
+            'get_csat_summary' => $this->csatSummary($params, $credentials), // 🆕
+            'get_first_response_time_stats' => $this->firstResponseTimeStats($params, $credentials), // 🆕
 
             default => throw new ToolNotFoundException("Outil '{$toolName}' inconnu pour hubspot."),
         };
@@ -1031,6 +1037,181 @@ class HubSpotConnector extends AbstractConnector
         return ToolResult::ok([
             'contact' => $contact['properties'], 'activity_counts' => $counts,
         ], 'Historique du contact récupéré — synthétise-le pour le conseiller.');
+    }
+
+    // =====================================================================
+    // 📊 CUSTOMER SUPPORT — QUALITÉ, CSAT, CHARGE PAR AGENT
+    // =====================================================================
+    //
+    // Décisions de conception :
+    // - get_csat_summary est TOUJOURS agrégé, jamais par ticket : HubSpot
+    //   n'associe pas nativement une réponse CSAT à un ticket précis (limite
+    //   documentée de l'objet feedback_submissions, confirmée par plusieurs
+    //   retours de la communauté HubSpot) — donner un chiffre par ticket
+    //   serait fabriquer une précision que l'API ne fournit pas.
+    // - get_first_response_time_stats résout le nom interne de la propriété
+    //   "temps de première réponse" DYNAMIQUEMENT via /crm/v3/properties/tickets
+    //   plutôt que de coder en dur "hs_time_to_first_agent_reply" : ce nom
+    //   varie selon la version/langue du portail, et la propriété n'existe
+    //   même pas sans Service Hub Pro/Enterprise (échec explicite sinon,
+    //   jamais une valeur inventée).
+    // - get_agent_workload est plafonné à 100 tickets ouverts (limite d'un
+    //   appel Search API HubSpot) : au-delà, le chiffre est un échantillon,
+    //   pas un total exact — le message retourné le précise toujours.
+
+    private function supportAnalyticsTools(): array
+    {
+        return [
+            new ToolSchema('hubspot', 'get_agent_workload',
+                "Retourne le nombre de tickets de support actuellement ouverts (non clôturés) par commercial/agent assigné, classé du plus chargé au moins chargé. Utiliser pour évaluer la charge de travail actuelle de l'équipe support ou décider à qui assigner un nouveau ticket. Jamais un historique : uniquement l'état actuel.", [
+                    'type' => 'object', 'properties' => [],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
+
+            new ToolSchema('hubspot', 'get_csat_summary',
+                "Retourne un résumé AGRÉGÉ des réponses aux enquêtes de satisfaction client (CSAT) sur une période : nombre de réponses, score moyen, répartition promoteurs/passifs/détracteurs. Ce résumé ne peut jamais être ventilé par ticket ou par agent individuel — HubSpot n'associe pas nativement une réponse CSAT à un ticket précis. Utiliser pour évaluer la satisfaction globale sur une période, jamais pour un client ou un ticket précis.", [
+                    'type' => 'object', 'properties' => [
+                        'date_from' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: -30 jours'],
+                        'date_to' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: aujourd\'hui'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
+
+            new ToolSchema('hubspot', 'get_first_response_time_stats',
+                "Retourne le temps moyen et médian entre la création d'un ticket et sa première réponse d'agent enregistrée par HubSpot, calculé sur un échantillon des tickets les plus récents. Nécessite un abonnement Service Hub Pro/Enterprise (la propriété sous-jacente n'existe pas sinon — l'outil l'indique clairement au lieu d'inventer une valeur). Utiliser pour évaluer la réactivité globale du support, jamais pour un ticket précis.", [
+                    'type' => 'object', 'properties' => ['sample_size' => ['type' => 'integer', 'description' => 'défaut 30, max 100']],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
+        ];
+    }
+
+    private function agentWorkload(array $p, array $c): ToolResult
+    {
+        try {
+            $tickets = $this->client($c)->post('/crm/v3/objects/tickets/search', [
+                'filterGroups' => [['filters' => [
+                    ['propertyName' => 'closed_date', 'operator' => 'NOT_HAS_PROPERTY'],
+                ]]],
+                'properties' => ['hubspot_owner_id'],
+                'limit' => 100,
+            ])->json();
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('HubSpot indisponible: ' . $e->getMessage());
+        }
+        $this->recordSuccess();
+
+        $byOwner = collect($tickets['results'] ?? [])
+            ->groupBy(fn ($t) => $t['properties']['hubspot_owner_id'] ?? 'unassigned')
+            ->map->count();
+
+        if ($byOwner->isEmpty()) {
+            return ToolResult::fail('not_found', 'Aucun ticket ouvert actuellement.');
+        }
+
+        try {
+            $owners = $this->client($c)->get('/crm/v3/owners', ['limit' => 100])->json('results', []);
+        } catch (RequestException) {
+            $owners = [];
+        }
+        $ownerNames = collect($owners)->keyBy('id')
+            ->map(fn ($o) => trim(($o['firstName'] ?? '') . ' ' . ($o['lastName'] ?? '')))->all();
+
+        $total = $byOwner->sum();
+        $workload = $byOwner->map(fn ($count, $ownerId) => [
+            'owner_id' => $ownerId,
+            'owner_name' => $ownerId === 'unassigned' ? 'Non assigné' : ($ownerNames[$ownerId] ?? $ownerId),
+            'open_tickets' => $count,
+        ])->sortByDesc('open_tickets')->values()->all();
+
+        return ToolResult::ok(
+            ['workload' => $workload, 'total_open_sampled' => $total],
+            count($workload) . ' agent(s) avec des tickets ouverts' . ($total >= 100 ? ' (échantillon des 100 tickets ouverts les plus récents, le total réel peut être plus élevé)' : '') . '.'
+        );
+    }
+
+    private function csatSummary(array $p, array $c): ToolResult
+    {
+        $from = $p['date_from'] ?? now()->subDays(30)->toDateString();
+        $to = $p['date_to'] ?? now()->toDateString();
+
+        try {
+            $response = $this->client($c)->post('/crm/v3/objects/feedback_submissions/search', [
+                'filterGroups' => [['filters' => [[
+                    'propertyName' => 'hs_createdate', 'operator' => 'BETWEEN',
+                    'value' => Carbon::parse($from)->startOfDay()->getTimestampMs(),
+                    'highValue' => Carbon::parse($to)->endOfDay()->getTimestampMs(),
+                ]]]],
+                'properties' => ['hs_value', 'hs_sentiment', 'hs_survey_type'],
+                'limit' => 100,
+            ])->json();
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('HubSpot indisponible: ' . $e->getMessage());
+        }
+        $this->recordSuccess();
+
+        $submissions = collect($response['results'] ?? [])
+            ->filter(fn ($s) => str_contains(strtolower($s['properties']['hs_survey_type'] ?? ''), 'satisfaction'));
+
+        if ($submissions->isEmpty()) {
+            return ToolResult::fail('not_found', "Aucune réponse à une enquête de satisfaction (CSAT) trouvée sur cette période.");
+        }
+
+        $scores = $submissions->pluck('properties.hs_value')->filter(fn ($v) => $v !== null)->map(fn ($v) => (float) $v);
+        $sentiments = $submissions->pluck('properties.hs_sentiment')->filter();
+
+        return ToolResult::ok([
+            'period' => "{$from} → {$to}",
+            'responses' => $submissions->count(),
+            'average_score' => $scores->isNotEmpty() ? round($scores->avg(), 2) . '/2' : null,
+            'promoters' => $sentiments->filter(fn ($s) => $s === 'promoter')->count(),
+            'passives' => $sentiments->filter(fn ($s) => $s === 'passive')->count(),
+            'detractors' => $sentiments->filter(fn ($s) => $s === 'detractor')->count(),
+        ], $submissions->count() . " réponse(s) CSAT sur la période (score agrégé de 0=insatisfait à 2=satisfait, jamais rattachable à un ticket précis).");
+    }
+
+    private function firstResponseTimeStats(array $p, array $c): ToolResult
+    {
+        $sampleSize = max(1, min(100, (int) ($p['sample_size'] ?? 30)));
+
+        try {
+            $properties = $this->client($c)->get('/crm/v3/properties/tickets')->json('results', []);
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('HubSpot indisponible: ' . $e->getMessage());
+        }
+
+        // Résolution dynamique : le nom interne varie selon le portail, ne
+        // jamais le coder en dur (voir note en tête de section).
+        $property = collect($properties)->first(fn ($prop) =>
+            str_contains(strtolower($prop['name'] ?? ''), 'time_to_first_agent')
+            || (str_contains(strtolower($prop['label'] ?? ''), 'first') && str_contains(strtolower($prop['label'] ?? ''), 'répons'))
+            || (str_contains(strtolower($prop['label'] ?? ''), 'first') && str_contains(strtolower($prop['label'] ?? ''), 'response'))
+        );
+
+        if (!$property) {
+            return ToolResult::fail('not_available', "Cette mesure nécessite Service Hub Pro/Enterprise — la propriété de temps de première réponse n'existe pas sur ce portail.");
+        }
+
+        try {
+            $tickets = $this->client($c)->get('/crm/v3/objects/tickets', [
+                'properties' => $property['name'], 'limit' => $sampleSize, 'sorts' => '-createdate',
+            ])->json('results', []);
+        } catch (RequestException $e) {
+            throw new ConnectorUnavailableException('HubSpot indisponible: ' . $e->getMessage());
+        }
+        $this->recordSuccess();
+
+        $values = collect($tickets)
+            ->map(fn ($t) => $t['properties'][$property['name']] ?? null)
+            ->filter()
+            ->map(fn ($v) => round(((float) $v) / 1000 / 60, 1)) // ms -> minutes
+            ->sort()->values();
+
+        if ($values->isEmpty()) {
+            return ToolResult::fail('not_found', "Aucun ticket avec un temps de première réponse enregistré dans cet échantillon.");
+        }
+
+        return ToolResult::ok([
+            'sample_size' => $values->count(),
+            'average_minutes' => round($values->avg(), 1),
+            'median_minutes' => $values[intdiv($values->count(), 2)],
+        ], "Temps de première réponse calculé sur {$values->count()} ticket(s) récent(s) disposant d'une valeur.");
     }
 
     // =====================================================================
