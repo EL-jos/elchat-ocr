@@ -19,6 +19,8 @@ use App\Http\Controllers\web\v4\TelegramWebhookController;
 use App\Http\Controllers\web\v4\WhatsAppEmbeddedSignupController;
 use App\Http\Controllers\web\v4\WhatsAppWebhookController;
 use App\Http\Controllers\web\v4\YouTubeConnectController;
+use App\Http\Controllers\web\v5\EmailEventWebhookController;
+use App\Http\Controllers\web\v5\EmailInboundWebhookController;
 use App\Http\Middleware\JwtAuthMiddleware;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
@@ -85,6 +87,11 @@ Route::prefix('webhooks')->group(function () {
 
     Route::prefix('/paypal')->controller(PaypalWebhookController::class)->group(function (){
         Route::post('/',   'handle')->name('webhooks.paypal');
+    });
+
+    Route::prefix('/email/{provider}')->group(function (){
+        Route::post('/events', [EmailEventWebhookController::class, 'handle']);
+        Route::post('/inbound', [EmailInboundWebhookController::class, 'handle']);
     });
 
 });

@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "ext-xmlwriter": "*",
+        "aws/aws-sdk-php": "*",
         "darkaonline/l5-swagger": "^9.0",
         "facebook/graph-sdk": "^5.1",
         "google/apiclient": "^2.19",

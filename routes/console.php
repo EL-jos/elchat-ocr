@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\RunProspectingCampaignJob;
+use App\Models\Sales\ProspectingCampaign;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -31,3 +33,25 @@ Schedule::command('youtube:sync-comments')
 
 Schedule::command('subscriptions:finalize-cancellations')->dailyAt('02:00');
 Schedule::command('subscriptions:check-expired-trials')->dailyAt('08:00');
+
+// 🆕 Sales Hunter — vérifie chaque minute les campagnes dont l'heure est
+// arrivée. Léger (une requête indexée sur next_run_at), même principe
+// que tout job planifié existant — driver `database`, workers Supervisor.
+Schedule::call(function () {
+    ProspectingCampaign::where('next_run_at', '<=', now())
+        ->whereIn('status', ['scheduled', 'completed'])
+        ->get()
+        ->each(function (ProspectingCampaign $campaign) {
+            RunProspectingCampaignJob::dispatch($campaign->id);
+
+            $frequency = $campaign->schedule_snapshot['frequency'] ?? 'manual';
+            $time = $campaign->schedule_snapshot['time'] ?? '09:00';
+            $next = match ($frequency) {
+                'daily' => now()->addDay()->setTimeFromTimeString($time),
+                'every_2_days' => now()->addDays(2)->setTimeFromTimeString($time),
+                'weekly' => now()->addWeek()->setTimeFromTimeString($time),
+                default => null, // 'manual' : ne se replanifie jamais toute seule
+            };
+            $campaign->update(['next_run_at' => $next]);
+        });
+})->everyMinute()->name('sales-hunter-campaign-scheduler')->withoutOverlapping();

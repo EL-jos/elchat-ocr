@@ -26,6 +26,7 @@ use App\Models\Mcp\McpPendingAction;
 use App\Models\Mcp\McpWorkflow;
 use App\Models\Site;
 use App\Services\cta\ChatResponse;
+use App\Services\hops\HopResponse;
 use App\Services\MercureService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -755,5 +756,31 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
         $objective = $agent->objective ? "Ton objectif principal : {$agent->objective}." : '';
 
         return "\n\nTu incarnes ici l'agent « {$agent->name} ». {$objective} {$toneInstructions}";
+    }
+
+    /**
+     * 🆕 Exécution directe et déterministe d'un outil, HORS boucle LLM — pour
+     * les jobs de fond qui doivent appeler un outil précis sans qu'un LLM
+     * décide s'il faut l'appeler (ex: CrmColdContactSource). Même chemin
+     * qu'un appel normal : permissions, vault, audit.
+     */
+    public function executeToolDirectly(Site $site, Conversation $conversation, string $qualifiedToolName, array $params): ToolResult
+    {
+        $actor = ActorContext::fromConversation($conversation);
+        ['connector' => $connectorSlug, 'tool' => $toolName] = ToolSchema::fromQualifiedName($qualifiedToolName);
+        return $this->executeAuthorized($site, $conversation, $actor, $connectorSlug, $toolName, $params, hop: 0);
+    }
+
+    /**
+     * 🆕 Exécution CIBLÉE sur un agent précis, sans passer par AgentSupervisor —
+     * pour un agent déclenché par un job planifié (AI Sales Hunter) plutôt
+     * qu'un message visiteur en direct : on SAIT déjà quel agent doit traiter.
+     */
+    public function runForAgent(Site $site, Conversation $conversation, McpAgent $agent, string $question, array $history = [], ?string $intent = null): HopResponse
+    {
+        $actor = ActorContext::fromConversation($conversation);
+        $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
+
+        return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $agent, $intent);
     }
 }

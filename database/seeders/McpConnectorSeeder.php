@@ -20,6 +20,7 @@ use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\SalesHunterConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
@@ -191,6 +192,13 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => BufferConnector::class,
             'description' => "Programmation et suivi de vos publications sur les réseaux sociaux via Buffer.",
             'icon_url' => 'https://cdn.simpleicons.org/buffer/231F20', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'sales_hunter'], [
+            'name' => 'Sales Hunter (interne)', 'category' => 'internal', 'auth_type' => 'internal',
+            'adapter_class' => SalesHunterConnector::class,
+            'description' => "Outils internes de prospection (analyse de site, statut, rédaction) utilisés par l'agent AI Sales Hunter.",
+            'icon_url' => 'https://elchat.io/assets/images/logo.svg', 'is_active' => true,
         ]);
     }
 }

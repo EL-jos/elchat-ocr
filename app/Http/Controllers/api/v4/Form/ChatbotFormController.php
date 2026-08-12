@@ -9,11 +9,15 @@ use App\Http\Requests\SubmitChatFormRequest;
 use App\Http\Resources\Form\ChatbotFormResource;
 use App\Http\Resources\Form\ChatFormSubmissionResource;
 use App\Mail\ChatFormSubmittedMail;
+use App\Models\ChatbotCta;
 use App\Models\ChatFormSubmission;
 use App\Models\Document;
 use App\Models\Form\ChatbotForm;
 use App\Models\Form\ChatFormSubmissionFile;
+use App\Models\Message;
+use App\Models\ResourceEvent;
 use App\Models\Site;
+use App\Services\analytics\ResourceEventLogger;
 use App\Services\Form\ChatbotFormFieldSyncService;
 use App\Services\Form\DynamicFormValidator;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +35,8 @@ class ChatbotFormController extends Controller
 {
     public function __construct(
         private readonly ChatbotFormFieldSyncService $fieldSync,
-        private readonly DynamicFormValidator $dynamicValidator
+        private readonly DynamicFormValidator $dynamicValidator,
+        private readonly ResourceEventLogger $resourceEventLogger, // 🆕
     ) {
     }
 
@@ -312,6 +317,10 @@ class ChatbotFormController extends Controller
 
         $this->notifyAccount($site, $formId, $values);
 
+        // fin de submitLegacyForm, avant le return
+        $this->resourceEventLogger->logFormConversion($site, $formId, $messageId, $submission->id);
+        //$this->logFormConversion($site, $formId, $messageId, $submission->id);
+
         return response()->json([
             'success' => true,
             'message' => 'Formulaire envoyé avec succès.',
@@ -359,6 +368,10 @@ class ChatbotFormController extends Controller
         });
 
         $this->notifyAccount($site, $customForm->name, $cleanValues, $customForm, $uploadedFiles);
+
+        // fin de submitCustomForm, avant le return
+        $this->resourceEventLogger->logFormConversion($site, $customForm->id, $request->input('message_id'), $submission->id);
+        //$this->logFormConversion($site, $customForm->id, $request->input('message_id'), $submission->id);
 
         return response()->json([
             'success' => true,
@@ -468,5 +481,26 @@ class ChatbotFormController extends Controller
         }
 
         return $file_path;
+    }
+
+    private function logFormConversion(Site $site, string $formId, string $messageId, ChatFormSubmission $submission): void
+    {
+        $cta = ChatbotCta::where('site_id', $site->id)
+            ->where('action', 'open_form')
+            ->where('value', $formId)
+            ->first();
+
+        ResourceEvent::create([
+            'id' => (string) Str::uuid(),
+            'site_id' => $site->id,
+            'conversation_id' => Message::find($messageId)?->conversation_id,
+            'message_id' => $messageId,
+            'resource_type' => 'cta',
+            'resource_id' => $cta?->id,
+            'event_type' => 'conversion',
+            'action' => 'open_form',
+            'label' => $cta?->label,
+            'metadata' => ['submission_id' => $submission->id, 'form_id' => $formId],
+        ]);
     }
 }

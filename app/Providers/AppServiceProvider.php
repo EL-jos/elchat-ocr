@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Domain\Email\Contracts\EmailProviderInterface;
+use App\Domain\Email\EmailProviderFactory;
+use App\Domain\Email\Providers\PostmarkEmailProvider;
+use App\Domain\Email\Providers\SesEmailProvider;
 use App\Payment\Adapters\PaypalCouponAdapter;
 use App\Payment\Gateways\PaypalPaymentGateway;
 use App\Payment\PaymentGatewayFactory;
@@ -9,6 +13,7 @@ use App\Services\payment\CouponService;
 use App\Services\payment\ModuleCatalogService;
 use App\Services\payment\PricingCalculator;
 use App\Services\payment\SubscriptionOrchestrator;
+use Aws\Ses\SesClient;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use SocialiteProviders\Manager\SocialiteWasCalled;
@@ -28,6 +33,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CouponService::class);
         $this->app->singleton(ModuleCatalogService::class);
         $this->app->singleton(SubscriptionOrchestrator::class);
+
+        $this->app->singleton(SesClient::class, fn () => new SesClient([
+            'version' => 'latest',
+            'region' => env('AWS_SES_REGION', env('AWS_DEFAULT_REGION', 'eu-west-1')),
+            'credentials' => ['key' => env('AWS_ACCESS_KEY_ID'), 'secret' => env('AWS_SECRET_ACCESS_KEY')],
+        ]));
+
+        $this->app->bind(EmailProviderInterface::class, fn () => EmailProviderFactory::make(config('mail-providers.default')));
     }
 
     /**

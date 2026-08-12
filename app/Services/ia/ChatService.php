@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Site;
 use App\Models\WidgetSetting;
+use App\Services\analytics\ResourceEventLogger;
 use App\Services\cta\ChatResponse;
 use App\Services\hops\HopResponse;
 use App\Services\hops\MultiHopPipelineService;
@@ -86,6 +87,7 @@ class ChatService
         protected ConversationEngineInterface $conversationEngine,
         // 🆕 MCP
         protected MCPActionGateService $mcpActionGateService,
+        private readonly ResourceEventLogger $resourceEventLogger, // 🆕
     )
     {}
 

@@ -18,6 +18,7 @@ use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\SalesHunterConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
@@ -147,6 +148,8 @@ return [
             'client_id' => env('BUFFER_CLIENT_ID'),
             'client_secret' => env('BUFFER_CLIENT_SECRET'),
         ],
+
+        'sales_hunter' => ['class' => SalesHunterConnector::class], // connecteur interne, pas de credentials
     ],
 
     'orchestrator' => [

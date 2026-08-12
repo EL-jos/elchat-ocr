@@ -9,6 +9,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\MessageCTA;
 use App\Models\Site;
+use App\Services\analytics\ResourceEventLogger;
 use App\Services\ia\ChatService;
 use App\Services\ia\EmbeddingService;
 use App\Services\mcp\MCPActionGateService;
@@ -33,6 +34,7 @@ class ChatController extends Controller
         private EmbeddingService $embeddingService,
         private ImageVisionService $imageVisionService,
         private MCPActionGateService $mcpActionGateService, // 🆕
+        private ResourceEventLogger $resourceEventLogger, // 🆕
     ){}
     public function ask(Request $request)
     {
@@ -266,6 +268,9 @@ class ChatController extends Controller
             ]);
 
         }
+
+        $this->resourceEventLogger->logCtaImpressions($site, $conversation, $botMessage, $chatResponse->ctas);
+        $this->resourceEventLogger->logEntityImpressions($site, $conversation, $botMessage, $chatResponse->entities);
 
 
         $this->mercureService->post($topic, [

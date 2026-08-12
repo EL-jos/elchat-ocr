@@ -10,6 +10,8 @@ use App\Http\Controllers\api\v1\DashboardController;
 use App\Http\Controllers\api\v1\DocumentController;
 use App\Http\Controllers\api\v1\ManualContentController;
 use App\Http\Controllers\api\v1\PageController;
+use App\Http\Controllers\api\v1\ResourceEventAnalyticsController;
+use App\Http\Controllers\api\v1\ResourceEventController;
 use App\Http\Controllers\api\v1\SitemapController;
 use App\Http\Controllers\api\v1\TypeSiteController;
 use App\Http\Controllers\api\v1\UserController;
@@ -27,6 +29,7 @@ use App\Http\Controllers\api\v5\MCPPermissionController;
 use App\Http\Controllers\api\v5\MCPWorkflowController;
 use App\Http\Controllers\api\v5\ModuleCatalogController;
 use App\Http\Controllers\api\v5\ModuleSubscriptionController;
+use App\Http\Controllers\api\v5\SalesProspectingController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
 use App\Http\Controllers\web\v4\FacebookWebhookController;
 use App\Http\Controllers\web\v4\InstagramConnectController;
@@ -129,6 +132,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/sites/{siteId}/forms/{formId}/submissions', 'submissions');
         });
 
+        // Dans le groupe jwt.auth (admin dashboard)
+        Route::get('site/{site}/analytics/resource-events', [ResourceEventAnalyticsController::class, 'index']);
+
         Route::prefix('/site/{site}/mcp')->group(function () {
 
             Route::controller(MCPConnectorController::class)->group(function () {
@@ -193,6 +199,22 @@ Route::prefix('v1')->group(function () {
                 Route::post('/agents/{agent}/set-fallback', 'setAsFallback'); // 🆕
             });
 
+            Route::controller(SalesProspectingController::class)->group(function () {
+                Route::get('/agent-templates', 'templates');
+                Route::post('/agent-templates/{templateKey}/install', 'installTemplate');
+
+                Route::get('/agents/{agent}/prospecting-config', 'getConfig');
+                Route::put('/agents/{agent}/prospecting-config', 'updateConfig');
+                Route::post('/agents/{agent}/prospecting-campaigns', 'storeCampaign');
+
+                Route::get('/prospecting-campaigns', 'campaigns');
+                Route::get('/prospecting-campaigns/{campaign}', 'showCampaign');
+                Route::post('/prospecting-campaigns/{campaign}/run', 'runCampaign');
+                Route::get('/prospecting-campaigns/{campaign}/prospects', 'campaignProspects');
+
+                Route::get('/prospects/{prospect}', 'showProspect');
+            });
+
         });
 
         Route::controller(ModuleCatalogController::class)->group(function () {
@@ -249,6 +271,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/sites/{siteId}/forms/{form}', 'public_show');
             Route::post('/sites/{siteId}/forms/{form}/submissions', 'submitForm');
         });
+
+        // Dans le groupe widget (public, visiteur)
+        Route::post('/site/{site}/resource-events', [ResourceEventController::class, 'store']);
     });
 
     Route::prefix('social')->group(function () {
