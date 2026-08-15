@@ -17,7 +17,11 @@ class SitemapController extends Controller
         $this->authorizeSite($site);
 
         $request->validate([
-            'sitemap_file' => 'required|file|mimes:xml,txt|max:2048'
+            'sitemap_file' => 'required|file|mimes:xml,txt|max:2048',
+            'include_pages' => 'nullable|array',
+            'include_pages.*' => 'string|max:2048',
+            'exclude_pages' => 'nullable|array',
+            'exclude_pages.*' => 'string|max:2048',
         ]);
 
         $sitemap = null;
@@ -26,16 +30,21 @@ class SitemapController extends Controller
             $files = $request->file('sitemap_file');
             $sitemap = $this->saveDocument($files, $site, 'file');
         }
-        
+
+        // 🆕 include_pages / exclude_pages envoyés avec le sitemap deviennent
+        // la nouvelle config du site (remplacement complet, pas de fusion).
+        // Écrit AVANT le dispatch du job pour garantir que ProcessSitemapJob
+        // (qui recharge le site depuis la base) voit bien ces valeurs à jour.
+        $site->update([
+            'include_pages' => $request->input('include_pages', []),
+            'exclude_pages' => $request->input('exclude_pages', []),
+            'status' => 'crawling',
+        ]);
+
         ProcessSitemapJob::dispatch(
             siteId: $site->id,
             sitemapDocumentId: $sitemap->id
         );
-
-        $site->update([
-            'status' => 'crawling',
-        ]);
-
 
         return response()->json([
             'message' => 'Sitemap uploaded. Processing started.'
@@ -87,4 +96,3 @@ class SitemapController extends Controller
         return $file_path;
     }
 }
-

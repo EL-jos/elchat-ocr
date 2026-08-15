@@ -52,7 +52,7 @@ class CrawlSiteJob implements ShouldQueue
 
         Log::info('DANS LE JOB', [
             'site_id' => $this->siteId,
-        ]); 
+        ]);
 
         $site = Site::findOrFail($this->siteId);
 
@@ -63,7 +63,10 @@ class CrawlSiteJob implements ShouldQueue
 
         });
 
-        $allUrls = $crawlService->prepareQueue($site);
+        $queueResult = $crawlService->prepareQueue($site);
+
+        $allUrls  = $queueResult['urls'];
+        $warnings = $queueResult['warnings'];
 
         $total = count($allUrls);
 
@@ -76,6 +79,20 @@ class CrawlSiteJob implements ShouldQueue
                 'done' => false,
             ]
         );
+
+        // ⚠️ URLs d'include_pages rejetées (invalides, non résolvables, ou
+        // hors domaine) : signalées au client sans bloquer le crawl du reste.
+        foreach ($warnings as $warningMessage) {
+            $mercureService->post(
+                "site/{$site->id}/knowledge/indexing",
+                [
+                    'type' => 'indexing_warning',
+                    'progress' => 0,
+                    'message' => $warningMessage,
+                    'done' => false,
+                ]
+            );
+        }
 
         if ($total === 0) {
 
@@ -221,7 +238,7 @@ class CrawlSiteJob implements ShouldQueue
 
         $site->update([
             'status' => 'ready'
-        ]); 
+        ]);
 
         $mercureService->post(
             "site/{$site->id}/knowledge/indexing",

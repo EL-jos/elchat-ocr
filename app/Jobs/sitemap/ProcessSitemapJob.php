@@ -5,11 +5,11 @@ namespace App\Jobs\sitemap;
 use App\Models\CrawlJob;
 use App\Models\Document;
 use App\Models\Site;
+use App\Services\crawl\CrawlService;
 use App\Services\MercureService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Log;
 
 class ProcessSitemapJob implements ShouldQueue
 {
@@ -20,7 +20,7 @@ class ProcessSitemapJob implements ShouldQueue
         public string $sitemapDocumentId
     ) {}
 
-    public function handle()
+    public function handle(CrawlService $crawlService)
     {
         $site = Site::findOrFail($this->siteId);
         $document = Document::findOrFail($this->sitemapDocumentId);
@@ -35,9 +35,6 @@ class ProcessSitemapJob implements ShouldQueue
             return;
         }
 
-        $include = $site->include_pages ?? [];
-        $exclude = $site->exclude_pages ?? [];
-
         $created = 0;
         $total = count($xml->url);
         $processed = 0;
@@ -46,12 +43,16 @@ class ProcessSitemapJob implements ShouldQueue
 
         foreach ($xml->url as $node) {
 
-            $url = (string) $node->loc;
-
+            $rawUrl = (string) $node->loc;
             $processed++;
 
-            if ($include && !$this->matches($url, $include)) continue;
-            if ($exclude && $this->matches($url, $exclude)) continue;
+            $url = $crawlService->normalizeUrl($rawUrl) ?: $rawUrl;
+
+            // ⚖️ exclude_pages prime sur include_pages. Les deux supportent le
+            // wildcard '*' (ex: '/blog/*') pour matcher tout un préfixe sans
+            // avoir à lister chaque url individuellement.
+            if (!$crawlService->isIncluded($url, $site)) continue;
+            if ($crawlService->isExcluded($url, $site)) continue;
 
             $job = CrawlJob::firstOrCreate([
                 'site_id' => $site->id,
@@ -86,6 +87,11 @@ class ProcessSitemapJob implements ShouldQueue
             return;
         }
 
+        $this->dispatchBatches($site);
+    }
+
+    private function dispatchBatches(Site $site): void
+    {
         $batchSize = 5;
         $batches = 0;
 
@@ -117,15 +123,6 @@ class ProcessSitemapJob implements ShouldQueue
         $site->update(['status' => 'ready']);
     }
 
-    private function matches(string $url, array $patterns): bool
-    {
-        foreach ($patterns as $pattern) {
-            $regex = '#^' . str_replace('\*', '.*', preg_quote($pattern, '#')) . '$#i';
-            if (preg_match($regex, $url)) return true;
-        }
-        return false;
-    }
-
     private function notify(string $type, int $progress, string $message, bool $done = false): void
     {
         app(MercureService::class)->post(
@@ -138,6 +135,4 @@ class ProcessSitemapJob implements ShouldQueue
             ]
         );
     }
-}
-
-
+}    

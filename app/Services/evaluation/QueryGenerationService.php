@@ -6,7 +6,9 @@ use App\Models\Chunk;
 use App\Models\RagEvaluationQuery;
 use App\Services\hops\LLMService;
 use App\Services\ia\EmbeddingService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 class QueryGenerationService
 {
@@ -25,7 +27,6 @@ class QueryGenerationService
         $context = $this->buildChunkContext($chunks);
 
         // 2. GENERATE RAW QUERIES
-        //$raw = $this->generateWithLLM($context, max($target * 2, 20));
         $raw = $this->generateWithLLM($context, $target);
 
         // 3. NORMALIZE
@@ -35,7 +36,71 @@ class QueryGenerationService
         // FILTER INVALID HARD QUERIES
         // =========================================
 
-        $queries = collect($queries)
+        $queries = $this->filterInvalidHardQueries($queries);
+
+        // 4. DEDUPLICATION (semantic)
+        $queries = $this->deduplicate($queries);
+
+        // =========================================
+        // 🔥 NOUVEAU : TOP-UP CIBLÉ (un seul appel complémentaire,
+        // uniquement si on est sous la cible après filtre/dédup).
+        // Remplace l'ancienne sur-génération systématique (target*2) :
+        // ici on ne paie que si c'est réellement nécessaire.
+        // =========================================
+
+        if (count($queries) < $target) {
+            $queries = $this->topUpQueries($context, $queries, $target);
+        }
+
+        // 5. BALANCE INTENTS
+        $queries = $this->balanceIntents($queries, $target);
+
+        // 6. LIMIT FINAL SIZE
+        return array_slice($queries, 0, $target);
+    }
+
+    // =========================================================
+    // 🔥 NOUVEAU : TOP-UP CIBLÉ
+    // =========================================================
+    private function topUpQueries(string $context, array $existing, int $target): array
+    {
+        $missing = $target - count($existing);
+
+        if ($missing <= 0) {
+            return $existing;
+        }
+
+        try {
+            $additionalRaw = $this->generateWithLLM(
+                context: $context,
+                target: $missing,
+                existingQueries: collect($existing)->pluck('query')->toArray()
+            );
+        } catch (Throwable $e) {
+            Log::warning('Query top-up generation failed, keeping existing queries only', [
+                'error' => $e->getMessage(),
+                'missing' => $missing,
+            ]);
+
+            return $existing;
+        }
+
+        $additional = $this->normalize($additionalRaw);
+        $additional = $this->filterInvalidHardQueries($additional);
+
+        $merged = array_merge($existing, $additional);
+
+        // re-dédup sémantique sur l'ensemble fusionné (évite doublons
+        // entre les questions existantes et les nouvelles)
+        return $this->deduplicate($merged);
+    }
+
+    // =========================================================
+    // FILTER INVALID HARD QUERIES (factorisé, utilisé 2x maintenant)
+    // =========================================================
+    private function filterInvalidHardQueries(array $queries): array
+    {
+        return collect($queries)
             ->filter(function ($q) {
 
                 $difficulty = strtolower($q['difficulty'] ?? 'medium');
@@ -51,22 +116,21 @@ class QueryGenerationService
             })
             ->values()
             ->toArray();
-
-        // 4. DEDUPLICATION (semantic)
-        $queries = $this->deduplicate($queries);
-
-        // 5. BALANCE INTENTS
-        $queries = $this->balanceIntents($queries, $target);
-
-        // 6. LIMIT FINAL SIZE
-        return array_slice($queries, 0, $target);
     }
 
     // =========================================================
     // 1. LLM GENERATION (AUDIT PROMPT)
     // =========================================================
-    private function generateWithLLM(string $context, int $target): array
+    private function generateWithLLM(string $context, int $target, array $existingQueries = []): array
     {
+        // budget dynamique : proportionnel au nombre de questions demandées
+        $maxTokens = max(500, ($target * 180) + 120);
+        $maxTokensCap = (int) round($maxTokens * 1.6);
+
+        $avoidRule = !empty($existingQueries)
+            ? "- Do NOT repeat or closely paraphrase any query listed in 'already_generated_do_not_repeat'\n"
+            : "";
+
         $response = $this->llm->chatJson([
             [
                 'role' => 'system',
@@ -84,6 +148,7 @@ class QueryGenerationService
                     "- Queries must be realistic (users would actually ask them)\n" .
                     "- Ensure diversity in intent (informational, transactional, navigation, comparison, troubleshooting)\n" .
                     "- Avoid duplicates or paraphrases\n" .
+                    $avoidRule .
                     "- Each query MUST include the chunk ids that contain the answer\n" .
                     "- expected_chunk_ids must reference ONLY ids present in the context\n" .
                     "- Never invent chunk ids\n" .
@@ -93,12 +158,14 @@ class QueryGenerationService
             ],
             [
                 'role' => 'user',
-                'content' => json_encode([
+                'content' => json_encode(array_filter([
                     'task' => "Generate evaluation queries for RAG system\n".
                         "- Generate EXACTLY {$target} queries\n" .
                         "- Never generate more than {$target} queries",
                     'target_count' => $target,
                     'context' => $context,
+                    // 🔥 NOUVEAU : présent uniquement lors du top-up
+                    'already_generated_do_not_repeat' => $existingQueries ?: null,
                     'output_format' => [
                         'queries' => [
                             [
@@ -106,18 +173,18 @@ class QueryGenerationService
                                 'intent' => 'informational|transactional|navigation|comparison|support',
                                 'difficulty' => 'easy|medium|hard',
                                 'expected_chunk_ids' => ['chunk-id-1', 'chunk-id-2'],
-                                //'reason' => '1 sentence max'
                             ]
                         ]
                     ],
-                    'response_format' => [
-                        'type' => 'json_object'
-                    ]
-                ])
+                ]))
             ]
         ], [
-            'max_tokens' => 800,
+            'max_tokens' => $maxTokens,
+            'max_tokens_cap' => $maxTokensCap,
             'temperature' => 0.7,
+            'detect_truncation' => true,
+            'response_format' => true,
+            'salvage_array_key' => 'queries',
         ]);
 
         return $response['queries'] ?? [];
@@ -128,9 +195,7 @@ class QueryGenerationService
     // =========================================================
     private function buildChunkContext(array $chunks): string
     {
-        // On limite pour éviter surcharge LLM
         $chunks = array_slice($chunks, 0, 15);
-        //$chunks = array_slice($chunks, 0, 8);
 
         return collect($chunks)
             ->map(fn($c) => [
@@ -159,7 +224,6 @@ class QueryGenerationService
                 'intent' => $q['intent'] ?? 'informational',
                 'difficulty' => $q['difficulty'] ?? 'medium',
                 'reason' => $q['reason'] ?? null,
-                // 🔥 IMPORTANT
                 'expected_chunk_ids' => array_values(
                     array_filter(
                         $q['expected_chunk_ids'] ?? []
@@ -212,10 +276,6 @@ class QueryGenerationService
 
         $final = collect();
 
-        // =========================================
-        // PASS 1 → respect distribution
-        // =========================================
-
         foreach ($distribution as $intent => $ratio) {
 
             $count = max(1, (int) round($target * $ratio));
@@ -226,10 +286,6 @@ class QueryGenerationService
                 $items->take($count)
             );
         }
-
-        // =========================================
-        // PASS 2 → COMPLETE IF MISSING
-        // =========================================
 
         if ($final->count() < $target) {
 
@@ -246,10 +302,6 @@ class QueryGenerationService
                 $remaining->take($missing)
             );
         }
-
-        // =========================================
-        // FINAL LIMIT
-        // =========================================
 
         return $final
             ->unique('query')
@@ -280,6 +332,4 @@ class QueryGenerationService
 
         return ($na && $nb) ? $dot / (sqrt($na) * sqrt($nb)) : 0;
     }
-
-
 }

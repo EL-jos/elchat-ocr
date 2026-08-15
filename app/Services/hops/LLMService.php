@@ -16,22 +16,43 @@ class LLMService
 
     public function chat(array $messages, array $options = []): string
     {
-        /*Log::info("DANS CHAT JSON => CHAT", [
-            "messages" => $messages,
-            "options" => $options
-        ]);*/
-
         $model = $options['model'] ?? $this->primaryModel;
+
+        // 🔥 NOUVEAU (opt-in) : détection de troncature via finish_reason.
+        // Désactivé par défaut => comportement identique pour tous les
+        // appelants existants qui ne passent pas cette option.
+        $detectTruncation = $options['detect_truncation'] ?? false;
+
+        $maxTokens = $options['max_tokens'] ?? 800;
+        $maxTokensCap = $options['max_tokens_cap'] ?? ($maxTokens * 2);
 
         for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
 
             try {
-                $response = $this->callAPI($messages, $model, $options);
+                $callOptions = $options;
+                $callOptions['max_tokens'] = $maxTokens;
 
-                $content = $response['choices'][0]['message']['content'] ?? null;
+                $response = $this->callAPI($messages, $model, $callOptions);
 
-                if ($content && trim($content) !== '') {
+                $choice = $response['choices'][0] ?? null;
+                $content = $choice['message']['content'] ?? null;
+                $finishReason = $choice['finish_reason'] ?? null;
+
+                $truncated = $detectTruncation && $finishReason === 'length';
+
+                if ($content && trim($content) !== '' && !$truncated) {
                     return trim($content);
+                }
+
+                if ($truncated) {
+                    Log::warning("LLM response truncated (finish_reason=length), retrying with higher max_tokens", [
+                        'attempt' => $attempt,
+                        'model' => $model,
+                        'previous_max_tokens' => $maxTokens,
+                    ]);
+
+                    // augmente le budget pour la prochaine tentative, plafonné
+                    $maxTokens = min((int) round($maxTokens * 1.5), $maxTokensCap);
                 }
 
             } catch (Throwable $e) {
@@ -63,7 +84,14 @@ class LLMService
             'max_tokens' => $options['max_tokens'] ?? 800,
         ];
 
-        //Log::info("max_tokens et temperature", $payload);
+        // 🔥 NOUVEAU (opt-in) : mode JSON strict côté provider.
+        // Ajouté au payload UNIQUEMENT si l'appelant le demande via
+        // $options['response_format']. N'affecte aucun autre appelant.
+        if (!empty($options['response_format'])) {
+            $payload['response_format'] = is_array($options['response_format'])
+                ? $options['response_format']
+                : ['type' => 'json_object'];
+        }
 
         $response = Http::timeout($this->timeout)
             ->withHeaders([
@@ -84,18 +112,14 @@ class LLMService
 
     public function chatJson(array $messages, array $options = []): array
     {
-        /*Log::info("DANS CHAT JSON", [
-           "messages" => $messages,
-            "options" => $options
-        ]);*/
         $response = $this->chat($messages, $options);
 
-        return $this->safeJsonDecode($response);
+        return $this->safeJsonDecode($response, $options);
     }
 
-    protected function safeJsonDecode(string $text): array
+    protected function safeJsonDecode(string $text, array $options = []): array
     {
-        // 🔥 nettoyage agressif
+        // nettoyage agressif
         $text = trim($text);
 
         // remove markdown
@@ -107,7 +131,7 @@ class LLMService
             return $decoded;
         }
 
-        // 🔥 fallback extraction JSON
+        // fallback extraction JSON
         if (preg_match('/\{.*\}/s', $text, $matches)) {
             $decoded = json_decode($matches[0], true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -115,8 +139,96 @@ class LLMService
             }
         }
 
+        // 🔥 NOUVEAU (opt-in) : sauvetage partiel d'un tableau JSON tronqué.
+        // Tenté UNIQUEMENT si l'appelant fournit 'salvage_array_key'.
+        // Récupère les objets déjà complets (ex: questions 1,2,3) au lieu
+        // de tout jeter à cause d'un objet coupé en fin de flux.
+        $salvageKey = $options['salvage_array_key'] ?? null;
+
+        if ($salvageKey) {
+            $salvaged = $this->salvagePartialArray($text, $salvageKey);
+
+            if (!empty($salvaged)) {
+                Log::warning("JSON parse failed, salvaged partial array", [
+                    'key' => $salvageKey,
+                    'recovered_count' => count($salvaged),
+                ]);
+
+                return [$salvageKey => $salvaged];
+            }
+        }
+
         Log::warning("JSON parse failed", ['text' => $text]);
 
         return [];
+    }
+
+    /**
+     * Extrait les objets JSON complets et valides d'un tableau nommé ($key)
+     * même si la réponse globale est tronquée / invalide.
+     * Ignore silencieusement le dernier objet s'il est incomplet.
+     */
+    private function salvagePartialArray(string $text, string $key): array
+    {
+        if (!preg_match('/"' . preg_quote($key, '/') . '"\s*:\s*\[/', $text, $m, PREG_OFFSET_CAPTURE)) {
+            return [];
+        }
+
+        $start = $m[0][1] + strlen($m[0][0]); // juste après le '['
+
+        $objects = [];
+        $depth = 0;
+        $objStart = null;
+        $inString = false;
+        $escape = false;
+
+        $length = strlen($text);
+
+        for ($i = $start; $i < $length; $i++) {
+            $char = $text[$i];
+
+            if ($inString) {
+                if ($escape) {
+                    $escape = false;
+                } elseif ($char === '\\') {
+                    $escape = true;
+                } elseif ($char === '"') {
+                    $inString = false;
+                }
+                continue;
+            }
+
+            if ($char === '"') {
+                $inString = true;
+                continue;
+            }
+
+            if ($char === '{') {
+                if ($depth === 0) {
+                    $objStart = $i;
+                }
+                $depth++;
+                continue;
+            }
+
+            if ($char === '}') {
+                $depth--;
+                if ($depth === 0 && $objStart !== null) {
+                    $candidate = substr($text, $objStart, $i - $objStart + 1);
+                    $decodedObj = json_decode($candidate, true);
+                    if (json_last_error() === JSON_ERROR_NONE) {
+                        $objects[] = $decodedObj;
+                    }
+                    $objStart = null;
+                }
+                continue;
+            }
+
+            if ($char === ']' && $depth === 0) {
+                break; // fin normale du tableau
+            }
+        }
+
+        return $objects;
     }
 }

@@ -17,43 +17,186 @@ use Symfony\Component\HttpClient\HttpClient;
 use Throwable;
 
 class CrawlService {
+    /**
+     * Construit la liste des urls à crawler pour un site.
+     *
+     * Deux modes, mutuellement exclusifs :
+     *
+     * - MODE LISTE BLANCHE (include_pages non vide) : seules ces urls sont
+     *   crawlées, telles quelles, sans découverte de liens et SANS tenir
+     *   compte de crawl_depth. exclude_pages garde la priorité : une url
+     *   présente dans include_pages ET exclude_pages n'est pas crawlée.
+     *
+     * - MODE SITE COMPLET (include_pages vide) : BFS classique depuis la
+     *   racine du site, borné par crawl_depth (0 = uniquement la page
+     *   racine, 1 = racine + liens directs, etc.), en excluant les urls qui
+     *   matchent exclude_pages.
+     *
+     * @return array{urls: array<int, array{url: string, depth: int}>, warnings: array<int, string>}
+     */
     public function prepareQueue(Site $site): array
     {
-        $queue = [];
-        $visited = [];
-
         $baseUrl  = rtrim($site->url, '/') . '/';
         $baseHost = parse_url($baseUrl, PHP_URL_HOST);
 
+        $warnings = [];
+
         if (!empty($site->include_pages)) {
-            foreach ($site->include_pages as $path) {
-                $queue[] = [
-                    'url'   => $this->resolveUrl($path, $baseUrl),
-                    'depth' => 0,
-                ];
-            }
-        } else {
-            $queue[] = ['url' => $baseUrl, 'depth' => 0];
+            return [
+                'urls'     => $this->buildWhitelistQueue($site, $baseUrl, $baseHost, $warnings),
+                'warnings' => $warnings,
+            ];
         }
 
-        $allUrls = [];
+        return [
+            'urls'     => $this->buildCrawlQueue($site, $baseUrl, $baseHost),
+            'warnings' => $warnings,
+        ];
+    }
+
+    /**
+     * Mode liste blanche. Deux types d'entrées dans include_pages, traitées
+     * différemment :
+     *
+     * - Entrées littérales (sans '*') : résolues/normalisées directement,
+     *   sans traversée de liens ni limite de crawl_depth — garanties incluses
+     *   même si la page n'est reliée par aucun lien du site.
+     *
+     * - Entrées avec wildcard ('*', ex: '/blog/*') : il n'existe pas d'url
+     *   concrète à résoudre pour un pattern, donc on explore le site (BFS
+     *   bornée par crawl_depth, réutilise buildCrawlQueue) et on ne retient
+     *   que les urls découvertes qui matchent au moins un pattern.
+     *
+     * Dans les deux cas, exclude_pages garde la priorité (supporte lui aussi
+     * les patterns wildcard, via isExcluded()).
+     */
+    private function buildWhitelistQueue(Site $site, string $baseUrl, ?string $baseHost, array &$warnings): array
+    {
+        $seen = [];
+        $result = [];
+
+        $literalEntries = [];
+        $hasWildcard = false;
+
+        foreach ($site->include_pages as $entry) {
+            if (str_contains($entry, '*')) {
+                $hasWildcard = true;
+            } else {
+                $literalEntries[] = $entry;
+            }
+        }
+
+        foreach ($literalEntries as $path) {
+
+            $resolved = $this->resolveUrl($path, $baseUrl);
+
+            if (!$resolved) {
+                $warnings[] = "URL include_pages invalide, ignorée : {$path}";
+                Log::warning('prepareQueue: include_pages url invalide', [
+                    'site_id' => $site->id,
+                    'path'    => $path,
+                ]);
+                continue;
+            }
+
+            $normalized = $this->normalizeUrl($resolved);
+
+            if (!$normalized) {
+                $warnings[] = "URL include_pages invalide, ignorée : {$path}";
+                Log::warning('prepareQueue: include_pages url non normalisable', [
+                    'site_id' => $site->id,
+                    'path'    => $path,
+                ]);
+                continue;
+            }
+
+            if (parse_url($normalized, PHP_URL_HOST) !== $baseHost) {
+                $warnings[] = "URL include_pages hors domaine, ignorée : {$normalized}";
+                Log::warning('prepareQueue: include_pages url hors domaine', [
+                    'site_id'       => $site->id,
+                    'url'           => $normalized,
+                    'expected_host' => $baseHost,
+                ]);
+                continue;
+            }
+
+            // ⚖️ exclude_pages prime sur include_pages : rejet silencieux,
+            // ce n'est pas une erreur mais un comportement voulu.
+            if ($this->isExcluded($normalized, $site)) {
+                continue;
+            }
+
+            if (isset($seen[$normalized])) {
+                continue;
+            }
+
+            $seen[$normalized] = true;
+            $result[] = ['url' => $normalized, 'depth' => 0];
+        }
+
+        if ($hasWildcard) {
+            $discovered = $this->buildCrawlQueue(
+                $site,
+                $baseUrl,
+                $baseHost,
+                fn (string $url) => $this->isIncluded($url, $site)
+            );
+
+            foreach ($discovered as $item) {
+                if (isset($seen[$item['url']])) continue;
+                $seen[$item['url']] = true;
+                $result[] = $item;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Mode site complet : BFS depuis la racine, borné par crawl_depth.
+     * depth 0 = page racine uniquement, depth N = jusqu'à N sauts de liens.
+     * Dédoublonnage à l'enfilement (évite d'empiler N fois la même url) et
+     * on n'extrait les liens d'une page que si on n'est pas déjà à la
+     * profondeur max (évite un fetch HTTP dont le résultat serait de toute
+     * façon jeté).
+     *
+     * $shouldInclude (optionnel) : filtre appliqué uniquement pour décider si
+     * une url découverte est retenue dans le résultat. L'exploration des
+     * liens continue même sur les pages non retenues, pour pouvoir atteindre
+     * des pages plus profondes qui, elles, passeraient le filtre. Utilisé par
+     * buildWhitelistQueue() pour la découverte des patterns wildcard.
+     */
+    private function buildCrawlQueue(Site $site, string $baseUrl, ?string $baseHost, ?callable $shouldInclude = null): array
+    {
+        $startUrl = $this->normalizeUrl($baseUrl);
+        if (!$startUrl) return [];
+
+        $queue    = [['url' => $startUrl, 'depth' => 0]];
+        $enqueued = [$startUrl => true];
+        $allUrls  = [];
 
         while ($queue) {
             $current = array_shift($queue);
-            $url     = $this->normalizeUrl($current['url']);
+            $url     = $current['url'];
             $depth   = $current['depth'];
 
-            if (!$url || $depth > $site->crawl_depth) continue;
-            if (in_array($url, $visited, true)) continue;
-
+            if ($depth > $site->crawl_depth) continue;
             if ($this->isExcluded($url, $site)) continue;
 
-            $visited[] = $url;
-            $allUrls[] = ['url' => $url, 'depth' => $depth];
+            if ($shouldInclude === null || $shouldInclude($url)) {
+                $allUrls[] = ['url' => $url, 'depth' => $depth];
+            }
+
+            // On est déjà à la profondeur max : inutile de télécharger cette
+            // page pour en extraire des liens qui seraient rejetés ensuite.
+            if ($depth >= $site->crawl_depth) continue;
 
             foreach ($this->extractInternalLinks($url, $baseHost, $site) as $link) {
-                if (!in_array($link, $visited, true)) {
-                    $queue[] = ['url' => $link, 'depth' => $depth + 1];
+                $normalizedLink = $this->normalizeUrl($link) ?: $link;
+
+                if (!isset($enqueued[$normalizedLink])) {
+                    $enqueued[$normalizedLink] = true;
+                    $queue[] = ['url' => $normalizedLink, 'depth' => $depth + 1];
                 }
             }
         }
@@ -187,7 +330,7 @@ class CrawlService {
         if (!config('vision.crawl_enabled', true)) {
             return [];
         }
-        
+
         $maxPerPage = (int) config('vision.max_images_per_page', 15);
         $minWidth   = (int) config('vision.min_width', 100);
         $minHeight  = (int) config('vision.min_height', 100);
@@ -405,6 +548,23 @@ class CrawlService {
         foreach ($site->exclude_pages ?? [] as $pattern) {
             if ($this->urlMatchesPattern($url, $pattern)) return true;
         }
+        return false;
+    }
+    /**
+     * true si aucune restriction include_pages n'est définie (tout est inclus
+     * par défaut), ou si $url matche au moins un pattern d'include_pages.
+     * Supporte le wildcard '*' et le préfixe de chemin, comme isExcluded().
+     */
+    public function isIncluded(string $url, Site $site): bool
+    {
+        $patterns = $site->include_pages ?? [];
+
+        if (empty($patterns)) return true;
+
+        foreach ($patterns as $pattern) {
+            if ($this->urlMatchesPattern($url, $pattern)) return true;
+        }
+
         return false;
     }
     private function urlMatchesPattern(string $url, string $pattern): bool

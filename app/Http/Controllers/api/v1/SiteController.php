@@ -13,7 +13,7 @@ use App\Models\Page;
 use App\Models\RagEvaluationRun;
 use App\Models\Site;
 use App\Models\WidgetSetting;
-use App\Services\CrawlService;
+use App\Services\crawl\CrawlService;
 use App\Services\evaluation\QueryGenerationService;
 use App\Services\IndexService;
 use App\Services\lexical\LexicalIndexService;
@@ -54,7 +54,7 @@ class SiteController extends Controller
             'url' => 'required|url',
             'type_site_id' => 'required|exists:type_sites,id',
             'name' => 'required|string|max:255',
-            'crawl_depth' => 'nullable|integer|min:1|max:5',
+            'crawl_depth' => 'nullable|integer|min:0|max:5',
             'exclude_pages' => 'nullable|array',
             'exclude_pages.*' => 'string',
             'include_pages' => 'nullable|array',
@@ -127,7 +127,7 @@ class SiteController extends Controller
 
         $validated = $request->validate([
             'url' => 'required|url',
-            'crawl_depth' => 'nullable|integer|min:1|max:5',
+            'crawl_depth' => 'nullable|integer|min:0|max:5',
             'status' => 'nullable|in:pending,crawling,ready,error',
             'type_site_id' => 'required|exists:type_sites,id',
             'name' => 'required|string|max:255',
@@ -376,7 +376,7 @@ class SiteController extends Controller
         // 🔹 URL à tester
         // Test local ou prod
         //$url = "http://127.0.0.1:5500/index.html"; // pour le test local
-         $url = rtrim($site->url, '/') . '/'; // pour prod
+        $url = rtrim($site->url, '/') . '/'; // pour prod
 
         // 🔹 Tag attendu
 

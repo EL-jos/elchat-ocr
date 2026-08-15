@@ -2,7 +2,6 @@
 
 namespace App\Jobs\sitemap;
 
-use App\Jobs\crawl\CheckCrawlCompletionJob;
 use App\Models\Chunk;
 use App\Models\CrawlJob;
 use App\Models\Page;
@@ -36,17 +35,13 @@ class SitemapPageBatchJob implements ShouldQueue
 
         $jobs = CrawlJob::whereIn('id', $this->crawlJobIds)->get();
 
-        $total = count($jobs);
-        $done = 0;
-
         foreach ($jobs as $crawlJob) {
-
-            $done++;
 
             try {
 
                 if ($crawlService->isExcluded($crawlJob->page_url, $site)) {
                     $crawlJob->update(['status' => 'done']);
+                    $this->notifyProgress($site, "Page exclue : {$crawlJob->page_url}");
                     continue;
                 }
 
@@ -55,13 +50,6 @@ class SitemapPageBatchJob implements ShouldQueue
                 }
 
                 $crawlJob->update(['status' => 'processing']);
-
-                $this->notify(
-                    'indexing_progress',
-                    40 + intval(($done / max($total, 1)) * 50),
-                    "Crawl: {$crawlJob->page_url}",
-                    false
-                );
 
                 $existingPage = Page::where('site_id', $site->id)
                     ->where('url', $crawlJob->page_url)
@@ -98,6 +86,8 @@ class SitemapPageBatchJob implements ShouldQueue
 
                 $crawlJob->update(['status' => 'done']);
 
+                $this->notifyProgress($site, "Crawl: {$crawlJob->page_url}");
+
             } catch (\Throwable $e) {
 
                 $crawlJob->update([
@@ -116,17 +106,66 @@ class SitemapPageBatchJob implements ShouldQueue
                     'site_id' => $site->id,
                     'error' => $e->getMessage(),
                 ]);
+
+                $this->notifyProgress($site, "Crawl: {$crawlJob->page_url}");
             }
         }
 
-        $this->notify(
-            'indexing_progress',
-            100,
-            'Batch terminé',
-            true
-        );
+        $this->finalizeIfComplete($site);
+    }
 
-        CheckCrawlCompletionJob::dispatch($site->id);
+    /**
+     * Progression calculée sur l'ensemble des CrawlJob 'sitemap' du SITE
+     * (pas seulement ceux de ce batch), pour rester cohérente même quand
+     * plusieurs SitemapPageBatchJob tournent en parallèle sur des lots
+     * différents.
+     */
+    private function notifyProgress(Site $site, string $message): void
+    {
+        $total = CrawlJob::where('site_id', $site->id)
+            ->where('source', 'sitemap')
+            ->count();
+
+        $completed = CrawlJob::where('site_id', $site->id)
+            ->where('source', 'sitemap')
+            ->whereIn('status', ['done', 'error'])
+            ->count();
+
+        $progress = 40 + intval(($completed / max($total, 1)) * 50);
+
+        $this->notify('indexing_progress', $progress, $message, false);
+    }
+
+    /**
+     * Chaque batch tourne indépendamment et ignore l'état des autres. On
+     * vérifie donc s'il reste des CrawlJob 'sitemap' non terminés pour le
+     * site : s'il en reste, ce n'est pas à CE batch de conclure. Sinon, ce
+     * batch est (probablement) le dernier à finir : il tente de marquer le
+     * site 'ready'.
+     *
+     * L'UPDATE conditionnel (WHERE status != 'ready') est atomique côté
+     * base : si deux batches terminent quasi simultanément et voient tous
+     * les deux 0 restant, un seul verra son UPDATE affecter une ligne — donc
+     * un seul enverra le signal de fin. Pas besoin d'un job séparé pour ça.
+     */
+    private function finalizeIfComplete(Site $site): void
+    {
+        $remaining = CrawlJob::where('site_id', $site->id)
+            ->where('source', 'sitemap')
+            ->whereNotIn('status', ['done', 'error'])
+            ->count();
+
+        if ($remaining > 0) {
+            return;
+        }
+
+        $updated = Site::where('id', $site->id)
+            ->where('status', '!=', 'ready')
+            ->update(['status' => 'ready']);
+
+        if ($updated) {
+            $this->notify('indexing_progress', 100, 'Indexation terminée', true);
+        }
     }
 
     private function notify(string $type, int $progress, string $message, bool $done = false): void
@@ -142,5 +181,3 @@ class SitemapPageBatchJob implements ShouldQueue
         );
     }
 }
-
-

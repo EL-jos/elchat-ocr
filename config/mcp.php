@@ -3,6 +3,8 @@
 use App\Domain\MCP\Connectors\AsanaConnector;
 use App\Domain\MCP\Connectors\BrevoConnector;
 use App\Domain\MCP\Connectors\BufferConnector;
+use App\Domain\MCP\Connectors\ClickUpConnector;
+use App\Domain\MCP\Connectors\DataForSeoConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleAdsConnector;
 use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
@@ -22,6 +24,7 @@ use App\Domain\MCP\Connectors\SalesHunterConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
+use App\Domain\MCP\Connectors\TrelloConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
 
 return [
@@ -150,6 +153,10 @@ return [
         ],
 
         'sales_hunter' => ['class' => SalesHunterConnector::class], // connecteur interne, pas de credentials
+
+        'clickup' => ['class' => ClickUpConnector::class],
+        'trello' => ['class' => TrelloConnector::class],
+        'dataforseo' => ['class' => DataForSeoConnector::class],
     ],
 
     'orchestrator' => [

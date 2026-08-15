@@ -5,6 +5,8 @@ namespace Database\Seeders;
 use App\Domain\MCP\Connectors\AsanaConnector;
 use App\Domain\MCP\Connectors\BrevoConnector;
 use App\Domain\MCP\Connectors\BufferConnector;
+use App\Domain\MCP\Connectors\ClickUpConnector;
+use App\Domain\MCP\Connectors\DataForSeoConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleAdsConnector;
 use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
@@ -24,6 +26,7 @@ use App\Domain\MCP\Connectors\SalesHunterConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
+use App\Domain\MCP\Connectors\TrelloConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
 use App\Models\Mcp\McpConnector;
 use Illuminate\Database\Seeder;
@@ -199,6 +202,27 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => SalesHunterConnector::class,
             'description' => "Outils internes de prospection (analyse de site, statut, rédaction) utilisés par l'agent AI Sales Hunter.",
             'icon_url' => 'https://elchat.io/assets/images/logo.svg', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'clickup'], [
+            'name' => 'ClickUp', 'category' => 'project_management', 'auth_type' => 'api_key',
+            'adapter_class' => ClickUpConnector::class,
+            'description' => "Tâches, listes et commentaires de votre espace ClickUp.",
+            'icon_url' => 'https://cdn.simpleicons.org/clickup/7B68EE', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'trello'], [
+            'name' => 'Trello', 'category' => 'project_management', 'auth_type' => 'api_key',
+            'adapter_class' => TrelloConnector::class,
+            'description' => "Tableaux, cartes et commentaires de votre espace Trello.",
+            'icon_url' => 'https://cdn.simpleicons.org/trello/0052CC', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'dataforseo'], [
+            'name' => 'DataForSEO', 'category' => 'seo', 'auth_type' => 'api_key',
+            'adapter_class' => DataForSeoConnector::class,
+            'description' => "Analyse SEO/SEM : mots-clés, trafic organique, backlinks, concurrents et résultats Google en direct.",
+            'icon_url' => 'https://dataforseo.com/favicon.ico', 'is_active' => true,
         ]);
     }
 }
