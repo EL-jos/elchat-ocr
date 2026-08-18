@@ -20,10 +20,12 @@
         return;
     }
     console.log('[ELChat] SITE_ID détecté:', SITE_ID);
-
-
     const API_URL = `https://elchat.io/api/v1/site/${SITE_ID}/widget/config`;
-    const IFRAME_URL = `https://elchat.io/widget?site_id=${encodeURIComponent(SITE_ID)}`;
+    const IFRAME_BASE_URL = `https://elchat.io/widget?site_id=${encodeURIComponent(SITE_ID)}`;
+    const WIDGET_ORIGIN = new URL(IFRAME_BASE_URL).origin;
+    const PROACTIVE_BRIDGE_URL = `${WIDGET_ORIGIN}/widget/proactive-bridge`;
+    const VISITOR_STORAGE_KEY = `elchat_visitor_uuid_${SITE_ID}`;
+    const PENDING_URL = `https://elchat.io/api/v1/widget/proactive/pending/${encodeURIComponent(SITE_ID)}`;
     const STORAGE_KEY = `elchat_user_opened_${SITE_ID}`;
     let userClosed = false; // au top du script
 
@@ -48,6 +50,10 @@
     let iframe = null;
     let autoOpenTimer = null;
     let isOpened = false;
+    let proactiveBridge = null;
+    let pendingProactiveMessage = null;
+    let visitorUUID = readVisitorUUID() || createVisitorUUID();
+    persistVisitorUUID(visitorUUID);
 
     /* =========================
        1️⃣ Charger la config depuis backend
@@ -70,11 +76,13 @@
             }
             createButton();
             setupAutoOpen();
+            startProactiveRealtime();
         })
         .catch(() => {
             console.warn('[ELChat] Config non trouvée → fallback par défaut');
             createButton();
             setupAutoOpen();
+            startProactiveRealtime();
         });
 
     /* =========================
@@ -118,6 +126,7 @@
 
         btn.addEventListener('click', openIframe);
         document.body.appendChild(btn);
+        renderProactiveBadge();
     }
 
     /* =========================
@@ -139,6 +148,7 @@
     function openIframe() {
         if (isOpened) return;
         isOpened = true;
+        pendingProactiveMessage = null;
 
         if (autoOpenTimer) {
             clearTimeout(autoOpenTimer);
@@ -152,7 +162,7 @@
 
         iframe = document.createElement('iframe');
         iframe.id = 'elchat-iframe';
-        iframe.src = IFRAME_URL;
+        iframe.src = `${IFRAME_BASE_URL}&visitor_uuid=${encodeURIComponent(visitorUUID)}`;
         iframe.allow = "microphone";
         iframe.allowTransparency = true;
         iframe.sandbox = "allow-scripts allow-same-origin allow-popups allow-forms"
@@ -194,6 +204,7 @@
     ========================= */
     window.addEventListener('message', (event) => {
         if (!event.data || event.data.source !== 'elchat') return;
+        if (event.origin !== WIDGET_ORIGIN) return;
 
         switch (event.data.type) {
             case 'CLOSE_WIDGET':
@@ -208,12 +219,124 @@
             case 'OPEN_LINK': // 🆕
                 openExternalLink(event.data.payload);
                 break;
+            case 'PROACTIVE_REALTIME':
+                handleProactiveMessage(event.data.payload);
+                break;
+            case 'VISITOR_IDENTIFIED':
+                if (isUuid(event.data.visitor_uuid)) {
+                    const nextVisitorUUID = event.data.visitor_uuid;
+                    if (nextVisitorUUID !== visitorUUID) {
+                        visitorUUID = nextVisitorUUID;
+                        persistVisitorUUID(visitorUUID);
+                        startProactiveRealtime();
+                    } else {
+                        pollProactiveMessage();
+                    }
+                }
+                break;
         }
     });
 
     /* =========================
-       🆕 Synchronisation panier WooCommerce (Store API, même origine)
+       🆕 Proactivité temps réel via le service Mercure de l'iframe ELChat
     ========================= */
+    function startProactiveRealtime() {
+        subscribeToProactiveTopic();
+        pollProactiveMessage();
+    }
+
+    function subscribeToProactiveTopic() {
+        if (proactiveBridge) {
+            proactiveBridge.remove();
+            proactiveBridge = null;
+        }
+
+        if (!visitorUUID) return;
+
+        proactiveBridge = document.createElement('iframe');
+        proactiveBridge.src = `${PROACTIVE_BRIDGE_URL}?site_id=${encodeURIComponent(SITE_ID)}&visitor_uuid=${encodeURIComponent(visitorUUID)}`;
+        proactiveBridge.setAttribute('aria-hidden', 'true');
+        Object.assign(proactiveBridge.style, {
+            position: 'fixed',
+            width: '1px',
+            height: '1px',
+            border: '0',
+            opacity: '0',
+            pointerEvents: 'none',
+            left: '-10px',
+            top: '-10px',
+        });
+        document.body.appendChild(proactiveBridge);
+    }
+
+    async function pollProactiveMessage() {
+        if (!visitorUUID) return;
+        try {
+            const response = await fetch(`${PENDING_URL}?visitor_uuid=${encodeURIComponent(visitorUUID)}`);
+            if (!response.ok) return;
+            const payload = await response.json();
+            const message = payload && payload.data;
+            if (!message || message.behavior === 'disabled') return;
+            handleProactiveMessage(message);
+        } catch (error) {
+            // Le widget normal reste disponible si ce contrôle échoue.
+        }
+    }
+
+    function handleProactiveMessage(payload) {
+        if (!payload || payload.behavior === 'disabled') return;
+        if (payload.visitor_uuid && payload.visitor_uuid !== visitorUUID) return;
+
+        const message = {
+            id: payload.id || payload.proactive_message_id,
+            conversation_id: payload.conversation_id,
+            message_id: payload.message_id,
+            behavior: payload.behavior || 'notification_only',
+            priority: payload.priority == null ? 5 : payload.priority,
+            scheduled_at: payload.scheduled_at,
+            sent_at: payload.sent_at
+        };
+
+        if (!message.id || !message.conversation_id || !message.message_id) return;
+
+        pendingProactiveMessage = message;
+        renderProactiveBadge();
+        if (message.behavior === 'auto_open' && !userClosed && !isOpened) openIframe();
+    }
+
+    function renderProactiveBadge() {
+        if (!btn || !pendingProactiveMessage || btn.querySelector('[data-elchat-proactive-badge]')) return;
+        const badge = document.createElement('span');
+        badge.setAttribute('data-elchat-proactive-badge', 'true');
+        badge.setAttribute('aria-label', 'Nouveau message');
+        Object.assign(badge.style, {
+            position: 'absolute', top: '1px', right: '1px', width: '14px', height: '14px',
+            borderRadius: '50%', background: '#ef4444', border: '2px solid white',
+            boxShadow: '0 3px 9px rgba(239,68,68,.45)', pointerEvents: 'none'
+        });
+        btn.appendChild(badge);
+    }
+
+    function readVisitorUUID() {
+        try { return localStorage.getItem(VISITOR_STORAGE_KEY); } catch (error) { return null; }
+    }
+
+    function persistVisitorUUID(uuid) {
+        try { localStorage.setItem(VISITOR_STORAGE_KEY, uuid); } catch (error) { /* mode privé */ }
+    }
+
+    function createVisitorUUID() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
+    function isUuid(value) {
+        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    }
+
     let wcCartNonce = null;
     let cartSyncQueue = Promise.resolve(); // 🆕 sérialise les actions pour éviter les courses sur le nonce
 

@@ -27,7 +27,7 @@ return new class extends Migration
     public function up(): void
     {
         if ($this->foreignKeyExists(self::FK_NAME)) {
-            Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropForeign(self::FK_NAME));
+            Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropForeign(['site_id']));
         }
 
         if ($this->indexExists(self::OLD_UNIQUE_INDEX)) {
@@ -50,7 +50,7 @@ return new class extends Migration
     public function down(): void
     {
         if ($this->foreignKeyExists(self::FK_NAME)) {
-            Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropForeign(self::FK_NAME));
+            Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropForeign(['site_id']));
         }
         if ($this->indexExists(self::UNIQUE_INDEX)) {
             Schema::table(self::TABLE, fn (Blueprint $t) => $t->dropUnique(self::UNIQUE_INDEX));
@@ -68,6 +68,11 @@ return new class extends Migration
 
     private function indexExists(string $indexName): bool
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return collect(DB::select("PRAGMA index_list('" . self::TABLE . "')"))
+                ->contains(fn (object $index): bool => ($index->name ?? null) === $indexName);
+        }
+
         $db = DB::getDatabaseName();
         return DB::table('information_schema.statistics')
             ->where('table_schema', $db)
@@ -78,6 +83,11 @@ return new class extends Migration
 
     private function foreignKeyExists(string $fkName): bool
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return collect(DB::select("PRAGMA foreign_key_list('" . self::TABLE . "')"))
+                ->contains(fn (object $foreignKey): bool => ($foreignKey->from ?? null) === 'site_id');
+        }
+
         $db = DB::getDatabaseName();
         return DB::table('information_schema.table_constraints')
             ->where('table_schema', $db)

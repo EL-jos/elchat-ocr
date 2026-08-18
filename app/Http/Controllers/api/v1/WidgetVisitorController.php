@@ -2,26 +2,34 @@
 
 namespace App\Http\Controllers\api\v1;
 
+use App\Enums\AnalyticsEventType;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Site;
 use App\Models\Visitor;
 use App\Models\WidgetSetting;
+use App\Services\analytics\AnalyticsEventService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class WidgetVisitorController extends Controller
 {
+    public function __construct(private readonly AnalyticsEventService $analytics)
+    {
+    }
+
     public function init(Request $request)
     {
         $request->validate([
             'site_id' => 'required|uuid',
-            'visitor_uuid' => 'required|uuid'
+            'visitor_uuid' => 'required|uuid',
+            'session_id' => 'required|string|max:100',
         ]);
 
+        $site = Site::findOrFail($request->site_id);
 
-        $visitor = Visitor::where('site_id', $request->site_id)
+        $visitor = Visitor::where('site_id', $site->id)
             ->where('uuid', $request->visitor_uuid)
             ->first();
 
@@ -29,13 +37,29 @@ class WidgetVisitorController extends Controller
 
             $visitor = Visitor::create([
                 'id' => (string) Str::uuid(),
-                'site_id' => $request->site_id,
+                'site_id' => $site->id,
                 'uuid' => $request->visitor_uuid,
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'device' => $this->detectDevice($request->userAgent())
             ]);
         }
+
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::WIDGET_OPENED,
+            [
+                'visitor_id' => $visitor->id,
+                'session_id' => $request->string('session_id')->toString(),
+                'correlation_id' => $request->string('session_id')->toString(),
+                'source' => 'widget',
+                'channel' => 'widget',
+            ],
+            metadata: ['device' => $visitor->device],
+            idempotencyKey: $this->analytics->deterministicKey(
+                'widget_opened', $site->id, $visitor->id, $request->string('session_id')->toString(),
+            ),
+        );
 
         return response()->json([
             'visitor_id' => $visitor->id
@@ -50,6 +74,7 @@ class WidgetVisitorController extends Controller
             'visitor_uuid' => 'required|uuid',
             'question' => 'nullable|string|max:1000',
             'conversation_id' => 'nullable|uuid',
+            'session_id' => 'nullable|string|max:100',
             // 🖼️ Upload d'image pendant la conversation (visiteur widget)
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192',
         ]);
@@ -87,7 +112,8 @@ class WidgetVisitorController extends Controller
             'site_id' => $site->id,
             'visitor_id' => $visitor->id,
             'question' => $data['question'],
-            'conversation_id' => $data['conversation_id'] ?? null
+            'conversation_id' => $data['conversation_id'] ?? null,
+            'session_id' => $data['session_id'] ?? null,
         ]);
 
         // 🖼️ Transmettre le fichier image (FileBag) à la requête interne —

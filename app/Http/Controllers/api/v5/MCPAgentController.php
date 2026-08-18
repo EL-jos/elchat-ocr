@@ -16,28 +16,40 @@ class MCPAgentController extends Controller
 
     public function skillsCatalog(Request $request, Site $site)
     {
+        $this->ensureSiteAccess($request, $site);
+
         return response()->json(['data' => $this->resolver->catalogFor($site)]);
     }
 
     public function index(Request $request, Site $site)
     {
+        $this->ensureSiteAccess($request, $site);
+
         return response()->json(['data' => McpAgent::where('site_id', $site->id)->orderByDesc('created_at')->get()]);
     }
 
     public function store(Request $request, Site $site)
     {
+        $this->ensureSiteAccess($request, $site);
+
         $agent = McpAgent::create(['site_id' => $site->id, ...$this->validated($request)]);
         return response()->json(['data' => $agent]);
     }
 
     public function update(Request $request, Site $site, McpAgent $agent)
     {
+        $this->ensureSiteAccess($request, $site);
+        $this->ensureAgentBelongsToSite($agent, $site);
+
         $agent->update($this->validated($request));
         return response()->json(['data' => $agent]);
     }
 
     public function destroy(Request $request, Site $site, McpAgent $agent)
     {
+        $this->ensureSiteAccess($request, $site);
+        $this->ensureAgentBelongsToSite($agent, $site);
+
         $agent->delete();
         return response()->json(['status' => 'deleted']);
     }
@@ -45,12 +57,18 @@ class MCPAgentController extends Controller
     /** 🆕 Plusieurs agents peuvent désormais être actifs en même temps — plus d'exclusivité mutuelle. */
     public function publish(Request $request, Site $site, McpAgent $agent)
     {
+        $this->ensureSiteAccess($request, $site);
+        $this->ensureAgentBelongsToSite($agent, $site);
+
         $agent->update(['is_active' => true]);
         return response()->json(['data' => $agent]);
     }
 
     public function unpublish(Request $request, Site $site, McpAgent $agent)
     {
+        $this->ensureSiteAccess($request, $site);
+        $this->ensureAgentBelongsToSite($agent, $site);
+
         $agent->update(['is_active' => false]);
         return response()->json(['data' => $agent]);
     }
@@ -58,6 +76,9 @@ class MCPAgentController extends Controller
     /** 🆕 Agent utilisé en repli si le superviseur ne trouve aucune correspondance claire — un seul par site. */
     public function setAsFallback(Request $request, Site $site, McpAgent $agent)
     {
+        $this->ensureSiteAccess($request, $site);
+        $this->ensureAgentBelongsToSite($agent, $site);
+
         McpAgent::where('site_id', $site->id)->update(['is_default' => false]);
         $agent->update(['is_default' => true, 'is_active' => true]);
         return response()->json(['data' => $agent]);
@@ -73,6 +94,21 @@ class MCPAgentController extends Controller
             'skills' => ['array'],
             'workflow_ids' => ['nullable', 'array'], // 🆕
             'is_active' => ['boolean'],
+            'can_proactively_engage' => ['boolean'],
+            'proactive_requires_approval' => ['boolean'],
+            'proactive_channel_scope' => ['nullable', 'array'],
+            'proactive_channel_scope.*' => ['in:website,facebook,instagram,telegram,youtube,email,whatsapp'],
         ]);
+    }
+
+    private function ensureSiteAccess(Request $request, Site $site): void
+    {
+        $accountId = $request->user()?->ownedAccount?->id;
+        abort_unless($accountId && $site->account_id === $accountId, 403);
+    }
+
+    private function ensureAgentBelongsToSite(McpAgent $agent, Site $site): void
+    {
+        abort_unless($agent->site_id === $site->id, 404);
     }
 }

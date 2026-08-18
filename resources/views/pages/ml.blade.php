@@ -11,7 +11,7 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Legal Notice</h1>
+                        <h1>Mentions légales</h1>
                         <p>
                             Les présentes mentions légales ont pour objet d'informer les utilisateurs
                             de l'identité de l'éditeur d'ELChat, de l'hébergeur du site, ainsi que
@@ -35,7 +35,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="ELChat AI Assistant">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration ELChat">
                         </figure>
                     </div>
                 </div>

@@ -190,6 +190,14 @@ class GenerateSitemapJob implements ShouldQueue
             'id' => (string) Str::uuid(),
             'path' => $documentPath,
             'type' => 'sitemap',
+            'purpose' => 'sitemap',
+            'title' => 'Sitemap généré',
+            'original_name' => basename($documentPath),
+            'extension' => 'xml',
+            'mime_type' => 'application/xml',
+            'file_size' => file_exists(public_path($documentPath)) ? filesize(public_path($documentPath)) : null,
+            'indexing_status' => 'indexed',
+            'last_indexed_at' => now(),
         ]);
 
         return $site->documents()->save($document);

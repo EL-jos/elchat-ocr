@@ -18,7 +18,7 @@ class Prospect extends Model
     protected $fillable = [
         'site_id', 'campaign_id', 'conversation_id', 'name', 'company', 'website', 'domain',
         'email', 'phone', 'source', 'location', 'sector', 'score', 'score_reasons',
-        'status', 'crm_ref', 'last_activity_at',
+        'status', 'email_status', 'crm_ref', 'last_activity_at',
     ];
 
     protected $casts = [

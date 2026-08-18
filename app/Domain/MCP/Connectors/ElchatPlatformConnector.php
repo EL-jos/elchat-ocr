@@ -2,11 +2,13 @@
 
 namespace App\Domain\MCP\Connectors;
 
+use App\Domain\Proactive\ProactiveSequenceService;
 use App\Domain\RAG\RAGToolAdapter;
 use App\Domain\MCP\Contracts\{ToolResult, ToolSchema};
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
 use App\Models\{Conversation, Message, Site, UnansweredQuestion, User, Visitor};
 use App\Models\Mcp\{McpAgent, McpConnector, McpWorkflow};
+use App\Models\Proactive\{ProactiveAuditLog, ProactiveCampaign, ProactiveSequence};
 use App\Models\Social\SocialConversationLink; // ⚠️ suppose le nom conventionnel du modèle, non vu directement
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -21,7 +23,10 @@ use Illuminate\Support\Facades\Log;
  */
 class ElchatPlatformConnector extends AbstractConnector
 {
-    public function __construct(private readonly RAGToolAdapter $ragToolAdapter)
+    public function __construct(
+        private readonly RAGToolAdapter $ragToolAdapter,
+        private readonly ProactiveSequenceService $proactiveSequences,
+    )
     {}
 
     public function slug(): string { return 'elchat_platform'; }
@@ -76,6 +81,10 @@ class ElchatPlatformConnector extends AbstractConnector
             'list_workflows' => $this->listWorkflows($site),
             'list_connectors' => $this->listConnectors($site),
             'activate_workflow' => $this->activateWorkflow($params, $site),
+            'schedule_proactive_message' => $this->scheduleProactiveMessage($params, $site),
+            'stop_proactive_sequence' => $this->stopProactiveSequence($params, $site),
+            'get_proactive_status' => $this->getProactiveStatus($params, $site),
+            'get_proactive_history' => $this->getProactiveHistory($params, $site),
 
             default => throw new ToolNotFoundException("Outil '{$toolName}' inconnu pour elchat_platform."),
         };
@@ -476,6 +485,30 @@ class ElchatPlatformConnector extends AbstractConnector
                 "Active un workflow existant identifié par son nom exact. Utilise uniquement lorsque l'utilisateur demande explicitement d'activer ou de réactiver un workflow. Si plusieurs workflows portent des noms proches ou si le nom est ambigu, demande une confirmation avant l'appel. Ne crée jamais un workflow et ne tente jamais de corriger son nom automatiquement.", [
                 'type' => 'object', 'properties' => ['name' => ['type' => 'string']], 'required' => ['name'],
             ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'auto'),
+
+            new ToolSchema('elchat_platform', 'schedule_proactive_message',
+                "Planifie un message dans une campagne proactive déjà active et une conversation existante. N'invente jamais d'identifiant et exige une demande explicite de l'administrateur.", [
+                    'type' => 'object', 'properties' => [
+                        'campaign_id' => ['type' => 'string'], 'conversation_id' => ['type' => 'string'],
+                        'scheduled_at' => ['type' => 'string', 'description' => 'ISO 8601, optionnel'],
+                        'content' => ['type' => 'string'], 'idempotency_key' => ['type' => 'string'],
+                    ], 'required' => ['campaign_id', 'conversation_id'],
+                ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'confirm', capability: 'proactive.schedule'),
+
+            new ToolSchema('elchat_platform', 'stop_proactive_sequence',
+                "Arrête une séquence proactive existante sans supprimer son historique.", [
+                    'type' => 'object', 'properties' => ['sequence_id' => ['type' => 'string'], 'reason' => ['type' => 'string']], 'required' => ['sequence_id'],
+                ], isWriteAction: true, defaultActorScope: 'admin', defaultMode: 'confirm', capability: 'proactive.stop'),
+
+            new ToolSchema('elchat_platform', 'get_proactive_status',
+                "Consulte l'état d'une campagne ou d'une séquence proactive sans lancer d'action.", [
+                    'type' => 'object', 'properties' => ['campaign_id' => ['type' => 'string'], 'sequence_id' => ['type' => 'string']],
+                ], defaultActorScope: 'admin', defaultMode: 'auto', capability: 'proactive.read'),
+
+            new ToolSchema('elchat_platform', 'get_proactive_history',
+                "Consulte le journal explicable des campagnes proactives du site.", [
+                    'type' => 'object', 'properties' => ['campaign_id' => ['type' => 'string'], 'limit' => ['type' => 'integer']],
+                ], defaultActorScope: 'admin', defaultMode: 'auto', capability: 'proactive.read'),
         ];
     }
 
@@ -529,6 +562,52 @@ class ElchatPlatformConnector extends AbstractConnector
     // =====================================================================
     // Utilitaires
     // =====================================================================
+
+    private function scheduleProactiveMessage(array $p, Site $site): ToolResult
+    {
+        $campaign = ProactiveCampaign::query()->where('site_id', $site->id)->where('status', 'active')->find($p['campaign_id'] ?? null);
+        if (!$campaign) return ToolResult::fail('not_found', 'Campagne proactive active introuvable.');
+
+        $message = $this->proactiveSequences->scheduleManual($campaign, [
+            'conversation_id' => $p['conversation_id'] ?? null,
+            'scheduled_at' => $p['scheduled_at'] ?? null,
+        ], $p['content'] ?? null, !empty($p['idempotency_key']) ? hash('sha256', (string) $p['idempotency_key']) : null);
+
+        return ToolResult::ok(['message_id' => $message->id, 'sequence_id' => $message->sequence_id, 'scheduled_at' => $message->scheduled_at], 'Message proactif planifié.');
+    }
+
+    private function stopProactiveSequence(array $p, Site $site): ToolResult
+    {
+        $sequence = ProactiveSequence::query()->where('site_id', $site->id)->find($p['sequence_id'] ?? null);
+        if (!$sequence) return ToolResult::fail('not_found', 'Séquence proactive introuvable.');
+        if ($sequence->status !== 'active') return ToolResult::ok(['sequence_id' => $sequence->id, 'status' => $sequence->status], 'La séquence était déjà arrêtée.');
+
+        $reason = mb_substr((string) ($p['reason'] ?? 'mcp_admin_stop'), 0, 64);
+        $sequence->update(['status' => 'stopped', 'stopped_at' => now(), 'stop_reason' => $reason, 'next_scheduled_at' => null]);
+        $sequence->messages()->whereIn('status', ['scheduled', 'retrying'])->update(['status' => 'canceled', 'canceled_at' => now(), 'failure_code' => 'sequence_stopped']);
+        return ToolResult::ok(['sequence_id' => $sequence->id, 'status' => 'stopped'], 'Séquence proactive arrêtée.');
+    }
+
+    private function getProactiveStatus(array $p, Site $site): ToolResult
+    {
+        if (!empty($p['sequence_id'])) {
+            $sequence = ProactiveSequence::query()->where('site_id', $site->id)->withCount('messages')->find($p['sequence_id']);
+            return $sequence ? ToolResult::ok(['sequence' => $sequence], 'Statut de la séquence récupéré.') : ToolResult::fail('not_found', 'Séquence introuvable.');
+        }
+        if (!empty($p['campaign_id'])) {
+            $campaign = ProactiveCampaign::query()->where('site_id', $site->id)->withCount(['sequences', 'messages', 'outcomes'])->find($p['campaign_id']);
+            return $campaign ? ToolResult::ok(['campaign' => $campaign], 'Statut de la campagne récupéré.') : ToolResult::fail('not_found', 'Campagne introuvable.');
+        }
+        return ToolResult::fail('invalid_request', 'campaign_id ou sequence_id est requis.');
+    }
+
+    private function getProactiveHistory(array $p, Site $site): ToolResult
+    {
+        $query = ProactiveAuditLog::query()->where('site_id', $site->id);
+        if (!empty($p['campaign_id'])) $query->where('campaign_id', $p['campaign_id']);
+        $logs = $query->latest('created_at')->limit(min(100, max(1, (int) ($p['limit'] ?? 25))))->get();
+        return ToolResult::ok(['history' => $logs], $logs->count().' entrée(s) du journal proactif.');
+    }
 
     private function channelFor(Conversation $conversation): string
     {

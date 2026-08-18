@@ -2,6 +2,8 @@
 
 namespace App\Services\mcp;
 
+use App\Enums\AnalyticsAttributionType;
+use App\Enums\AnalyticsEventType;
 use App\Domain\MCP\Agent\AgentSkillResolver;
 use App\Domain\MCP\Agent\AgentSupervisor;
 use App\Domain\MCP\Audit\AuditLogger;
@@ -26,7 +28,7 @@ use App\Models\Mcp\McpPendingAction;
 use App\Models\Mcp\McpWorkflow;
 use App\Models\Site;
 use App\Services\cta\ChatResponse;
-use App\Services\hops\HopResponse;
+use App\Services\analytics\AnalyticsEventService;
 use App\Services\MercureService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -50,6 +52,7 @@ class MCPActionGateService
         private readonly CapabilityResolver $capabilities, // 🆕
         private readonly AgentSkillResolver $agentSkills, // 🆕
         private readonly AgentSupervisor $supervisor, // 🆕
+        private readonly AnalyticsEventService $analytics,
     ) {
         $this->maxHops = (int) config('mcp.orchestrator.max_hops', 8); // 🆕
     }
@@ -101,6 +104,14 @@ class MCPActionGateService
 
         if (empty($scopedTools)) return MCPGateResult::notApplicable();
 
+        $agentCallKey = $agent
+            ? $this->analytics->deterministicKey('agent', $conversation->id, $agent->id, hash('sha256', $question))
+            : null;
+
+        if ($agent && $agentCallKey) {
+            $this->trackAgentExecution($site, $conversation, $agent, AnalyticsEventType::AGENT_STARTED, $agentCallKey);
+        }
+
         // 🆕 Un agent explicite n'utilise QUE les workflows cochés — aucun coché
         // = aucun workflow pour lui. Seule l'absence totale d'agent (site sans
         // Agent Studio configuré) continue de voir tous les workflows du site.
@@ -117,7 +128,21 @@ class MCPActionGateService
             ['role' => 'user', 'content' => $question],
         ];
 
-        return $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: 1, trace: [], suggestedActions: [], agent: $agent);
+        try {
+            $result = $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: 1, trace: [], suggestedActions: [], agent: $agent);
+
+            if ($agent && $agentCallKey && $result->status !== 'awaiting_confirmation') {
+                $this->trackAgentExecution($site, $conversation, $agent, AnalyticsEventType::AGENT_COMPLETED, $agentCallKey);
+            }
+
+            return $result;
+        } catch (Throwable $exception) {
+            if ($agent && $agentCallKey) {
+                $this->trackAgentExecution($site, $conversation, $agent, AnalyticsEventType::AGENT_FAILED, $agentCallKey, 'execution_exception');
+            }
+
+            throw $exception;
+        }
     }
 
     /**
@@ -277,6 +302,8 @@ class MCPActionGateService
                         'id' => (string) Str::uuid(),
                         'site_id' => $site->id,
                         'conversation_id' => $conversation->id,
+                        'session_id' => $conversation->metadata['session_id'] ?? null,
+                        'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
                         'connector_slug' => $connectorSlug,
                         'tool_name' => $toolName,
                         'params' => $args,
@@ -362,15 +389,44 @@ class MCPActionGateService
         if ($connectorSlug === RAGToolAdapter::CONNECTOR_SLUG) {
             $result = $this->ragTool->search($site, $params['query'] ?? '');
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'auto', $result->success ? 'success' : 'error', $result, conversationId: $conversation->id, hopNumber: $hop);
+
+            if ($result->success) {
+                $this->analytics->capture(
+                    $site,
+                    AnalyticsEventType::KNOWLEDGE_SOURCE_USED,
+                    [
+                        'visitor_id' => $conversation->visitor_id,
+                        'conversation_id' => $conversation->id,
+                        'source' => 'rag',
+                        'channel' => $conversation->metadata['channel'] ?? 'widget',
+                    ],
+                    metadata: ['tool_name' => $toolName],
+                    idempotencyKey: $this->analytics->deterministicKey(
+                        'knowledge_source_used', $conversation->id, $toolName, hash('sha256', (string) ($params['query'] ?? '')),
+                    ),
+                );
+            }
+
             return $result;
         }
 
+        $callKey = $this->analytics->deterministicKey(
+            'mcp', $conversation->id, $connectorSlug, $toolName, hash('sha256', json_encode($params)),
+        );
+        $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_STARTED, $callKey, $connectorSlug, $toolName);
+
         if (!$forced) {
-            $this->permissions->authorize($site, $actor, $connectorSlug, $toolName);
+            try {
+                $this->permissions->authorize($site, $actor, $connectorSlug, $toolName);
+            } catch (Throwable $exception) {
+                $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'permission_denied');
+                throw $exception;
+            }
         }
 
         $credentials = $this->vault->retrieve($site, $connectorSlug);
         if ($credentials === null) {
+            $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'not_connected');
             return ToolResult::fail('not_connected', "Le connecteur {$connectorSlug} n'est pas configuré pour ce site.");
         }
 
@@ -383,6 +439,7 @@ class MCPActionGateService
             }
         } catch (\App\Domain\MCP\Exceptions\AuthExpiredException $e) {
             $this->vault->markAuthExpired($site, $connectorSlug, $e->getMessage());
+            $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'auth_expired');
             throw $e;
         }
 
@@ -393,10 +450,30 @@ class MCPActionGateService
         ];
 
         $startedAt = microtime(true);
-        $result = $connector->callTool($toolName, $params, $freshCredentials, $context);
+        try {
+            $result = $connector->callTool($toolName, $params, $freshCredentials, $context);
+        } catch (Throwable $exception) {
+            $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
+            $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, $durationMs, 'connector_exception');
+            throw $exception;
+        }
         $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
 
         $this->audit->log($site, $connectorSlug, $toolName, $params, 'auto', $result->success ? 'success' : 'error', $result, $durationMs, conversationId: $conversation->id, hopNumber: $hop);
+        $this->trackMcpAction(
+            $site,
+            $conversation,
+            $result->success ? AnalyticsEventType::MCP_ACTION_COMPLETED : AnalyticsEventType::MCP_ACTION_FAILED,
+            $callKey,
+            $connectorSlug,
+            $toolName,
+            $durationMs,
+            $result->errorCode,
+        );
+
+        if ($result->success) {
+            $this->trackBusinessOutcome($site, $conversation, $callKey, $connectorSlug, $toolName, $params, $result);
+        }
 
         // 🆕 Les effets secondaires ne doivent JAMAIS pouvoir invalider un résultat
         // d'action déjà réussi côté WooCommerce (ex: une commande déjà créée et
@@ -425,6 +502,123 @@ class MCPActionGateService
         }
 
         return $result;
+    }
+
+    private function trackMcpAction(
+        Site $site,
+        Conversation $conversation,
+        AnalyticsEventType $eventType,
+        string $callKey,
+        string $connectorSlug,
+        string $toolName,
+        ?int $durationMs = null,
+        ?string $errorCode = null,
+    ): void {
+        $this->analytics->capture(
+            $site,
+            $eventType,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'session_id' => $conversation->metadata['session_id'] ?? null,
+                'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                'resource_type' => 'mcp_action',
+                'resource_id' => $connectorSlug,
+                'source' => 'mcp',
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+            ],
+            metadata: array_filter([
+                'connector_slug' => $connectorSlug,
+                'tool_name' => $toolName,
+                'duration_ms' => $durationMs,
+                'error_code' => $errorCode,
+            ], fn ($value) => $value !== null),
+            idempotencyKey: $this->analytics->deterministicKey($eventType->value, $callKey),
+        );
+    }
+
+    private function trackAgentExecution(
+        Site $site,
+        Conversation $conversation,
+        McpAgent $agent,
+        AnalyticsEventType $eventType,
+        string $callKey,
+        ?string $errorCode = null,
+    ): void {
+        $this->analytics->capture(
+            $site,
+            $eventType,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'agent_id' => $agent->id,
+                'session_id' => $conversation->metadata['session_id'] ?? null,
+                'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                'resource_type' => 'agent',
+                'resource_id' => $agent->id,
+                'source' => 'agent_orchestrator',
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+            ],
+            metadata: array_filter([
+                'agent_type' => $agent->agent_type,
+                'error_code' => $errorCode,
+            ], fn ($value) => $value !== null),
+            idempotencyKey: $this->analytics->deterministicKey($eventType->value, $callKey),
+        );
+    }
+
+    private function trackBusinessOutcome(
+        Site $site,
+        Conversation $conversation,
+        string $callKey,
+        string $connectorSlug,
+        string $toolName,
+        array $params,
+        ToolResult $result,
+    ): void {
+        $eventType = match ($toolName) {
+            'create_contact', 'create_customer', 'add_subscriber' => AnalyticsEventType::CONTACT_CREATED,
+            'create_deal', 'sales_create_quotation' => AnalyticsEventType::OPPORTUNITY_CREATED,
+            'update_deal' => AnalyticsEventType::OPPORTUNITY_UPDATED,
+            'close_deal' => ($params['outcome'] ?? null) === 'won'
+                ? AnalyticsEventType::OPPORTUNITY_WON
+                : AnalyticsEventType::OPPORTUNITY_LOST,
+            'create_event', 'create_google_meet', 'create_meeting', 'appointment_book' => AnalyticsEventType::MEETING_BOOKED,
+            'cancel_event', 'cancel_meeting', 'appointment_cancel' => AnalyticsEventType::MEETING_CANCELLED,
+            'add_to_cart' => AnalyticsEventType::PRODUCT_ADDED_TO_CART,
+            'sales_confirm_order' => AnalyticsEventType::PURCHASE_COMPLETED,
+            'close_conversation' => AnalyticsEventType::CONVERSATION_RESOLVED,
+            default => null,
+        };
+
+        if (!$eventType) {
+            return;
+        }
+
+        $resourceId = collect([
+            'id', 'contact_id', 'customer_id', 'deal_id', 'meeting_id',
+            'event_id', 'order_id', 'product_id',
+        ])->map(fn ($key) => $result->data[$key] ?? $params[$key] ?? null)->first(fn ($value) => $value !== null);
+
+        $this->analytics->capture(
+            $site,
+            $eventType,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'session_id' => $conversation->metadata['session_id'] ?? null,
+                'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                'resource_type' => $eventType === AnalyticsEventType::PURCHASE_COMPLETED ? 'purchase' : $eventType->category(),
+                'resource_id' => $resourceId !== null ? (string) $resourceId : null,
+                'source' => $connectorSlug,
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+                'attribution_type' => AnalyticsAttributionType::DIRECT->value,
+                'value' => $result->data['amount'] ?? $params['amount'] ?? null,
+                'currency' => $result->data['currency'] ?? $params['currency'] ?? null,
+            ],
+            metadata: ['connector_slug' => $connectorSlug, 'tool_name' => $toolName],
+            idempotencyKey: $this->analytics->deterministicKey($eventType->value, $callKey),
+        );
     }
 
     /** @return ToolSchema[] */
@@ -776,7 +970,7 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
      * pour un agent déclenché par un job planifié (AI Sales Hunter) plutôt
      * qu'un message visiteur en direct : on SAIT déjà quel agent doit traiter.
      */
-    public function runForAgent(Site $site, Conversation $conversation, McpAgent $agent, string $question, array $history = [], ?string $intent = null): HopResponse
+    public function runForAgent(Site $site, Conversation $conversation, McpAgent $agent, string $question, array $history = [], ?string $intent = null): MCPGateResult
     {
         $actor = ActorContext::fromConversation($conversation);
         $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));

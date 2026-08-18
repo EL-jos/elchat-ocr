@@ -2,7 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Domain\Subscription\Services\SubscriptionOrchestrator;
+#use App\Domain\Subscription\Services\SubscriptionOrchestrator;
+use App\Services\payment\SubscriptionOrchestrator;
 use Illuminate\Console\Command;
 
 class FinalizeModuleCancellations extends Command

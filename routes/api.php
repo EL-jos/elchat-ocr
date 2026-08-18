@@ -3,6 +3,7 @@ ini_set('max_execution_time', 0);
 set_time_limit(0);
 
 use App\Http\Controllers\api\v1\AIRoleController;
+use App\Http\Controllers\api\v1\AnalyticsController;
 use App\Http\Controllers\api\v1\ChatController;
 use App\Http\Controllers\api\v1\ChunkController;
 use App\Http\Controllers\api\v1\ConversationController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\api\v1\DashboardController;
 use App\Http\Controllers\api\v1\DocumentController;
 use App\Http\Controllers\api\v1\ManualContentController;
 use App\Http\Controllers\api\v1\PageController;
+use App\Http\Controllers\api\v1\ProactiveWidgetController;
 use App\Http\Controllers\api\v1\ResourceEventAnalyticsController;
 use App\Http\Controllers\api\v1\ResourceEventController;
 use App\Http\Controllers\api\v1\SitemapController;
@@ -29,6 +31,7 @@ use App\Http\Controllers\api\v5\MCPPermissionController;
 use App\Http\Controllers\api\v5\MCPWorkflowController;
 use App\Http\Controllers\api\v5\ModuleCatalogController;
 use App\Http\Controllers\api\v5\ModuleSubscriptionController;
+use App\Http\Controllers\api\v5\ProactiveEngagementController;
 use App\Http\Controllers\api\v5\SalesProspectingController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
 use App\Http\Controllers\web\v4\FacebookWebhookController;
@@ -84,7 +87,14 @@ Route::prefix('v1')->group(function () {
         });
         Route::post('/site/{site}/manual-content', [ManualContentController::class, 'store']);
         Route::post('/site/{site}/sitemap', [SitemapController::class, 'store']);
-        Route::post('/site/{site}/documents', [DocumentController::class, 'store']);
+        Route::controller(DocumentController::class)->prefix('/site/{site}/documents')->group(function () {
+            Route::get('/', 'index');
+            Route::post('/', 'store');
+            Route::get('/{document}', 'show');
+            Route::post('/{document}', 'update');
+            Route::delete('/{document}', 'destroy');
+            Route::post('/{document}/reindex', 'reindex');
+        });
         Route::apiResource('type_site', TypeSiteController::class)->only(['index']);
         Route::apiResource('widget_setting', WidgetSettingController::class)->except(['index']);
         Route::controller(WidgetSettingController::class)->group(function () {
@@ -134,6 +144,17 @@ Route::prefix('v1')->group(function () {
 
         // Dans le groupe jwt.auth (admin dashboard)
         Route::get('site/{site}/analytics/resource-events', [ResourceEventAnalyticsController::class, 'index']);
+        Route::prefix('site/{site}/analytics')->controller(AnalyticsController::class)->group(function () {
+            Route::get('/overview', 'overview');
+            Route::get('/business-impact', 'businessImpact');
+            Route::get('/funnel', 'funnel');
+            Route::get('/knowledge', 'knowledge');
+            Route::get('/agents', 'agents');
+            Route::get('/workflows', 'workflows');
+            Route::get('/mcp', 'mcp');
+            Route::get('/recommendations', 'recommendations');
+            Route::get('/anomalies', 'anomalies');
+        });
 
         Route::prefix('/site/{site}/mcp')->group(function () {
 
@@ -217,6 +238,24 @@ Route::prefix('v1')->group(function () {
 
         });
 
+        Route::prefix('/site/{site}/proactive')->controller(ProactiveEngagementController::class)->group(function () {
+            Route::get('/campaigns', 'index');
+            Route::post('/campaigns', 'store');
+            Route::get('/campaigns/{campaign}', 'show');
+            Route::put('/campaigns/{campaign}', 'update');
+            Route::delete('/campaigns/{campaign}', 'destroy');
+            Route::post('/campaigns/{campaign}/activate', 'activate');
+            Route::post('/campaigns/{campaign}/pause', 'pause');
+            Route::post('/campaigns/{campaign}/stop', 'stop');
+            Route::post('/campaigns/{campaign}/schedule', 'schedule');
+            Route::get('/messages', 'messages');
+            Route::post('/messages/{message}/cancel', 'cancelMessage');
+            Route::get('/messages/{message}/why', 'why');
+            Route::get('/history', 'history');
+            Route::get('/outcomes', 'outcomes');
+            Route::get('/stats', 'stats');
+        });
+
         Route::controller(ModuleCatalogController::class)->group(function () {
             Route::get('/modules/catalog',       'index')->name('modules.catalog');
             Route::get('/subscription/summary',  'summary')->name('subscription.summary');
@@ -272,8 +311,15 @@ Route::prefix('v1')->group(function () {
             Route::post('/sites/{siteId}/forms/{form}/submissions', 'submitForm');
         });
 
+        Route::controller(ProactiveWidgetController::class)->middleware('throttle:120,1')->group(function () {
+            Route::get('/proactive/pending/{site}', 'pending');
+            Route::post('/proactive/{site}/messages/{message}/opened', 'opened');
+            Route::post('/proactive/{site}/messages/{message}/opt-out', 'optOut');
+        });
+
         // Dans le groupe widget (public, visiteur)
-        Route::post('/site/{site}/resource-events', [ResourceEventController::class, 'store']);
+        Route::post('/site/{site}/resource-events', [ResourceEventController::class, 'store'])
+            ->middleware(['widget.origin', 'throttle:120,1']);
     });
 
     Route::prefix('social')->group(function () {

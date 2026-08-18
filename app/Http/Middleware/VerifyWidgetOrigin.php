@@ -15,15 +15,21 @@ class VerifyWidgetOrigin
      */
     public function handle($request, Closure $next)
     {
-        $allowedOrigins = [
+        $allowedOrigins = array_values(array_filter([
             env('WIDGET_ORIGIN'),
-            'https://elchat-widget.promogifts.ma',
+            'https://elchat.io',
             'http://localhost:4200' // Pour le dev
-        ];
+        ]));
 
-        $origin = $request->header('Origin') ?: $request->header('Referer');
+        $origin = $request->header('Origin');
+        if (!$origin && $request->header('Referer')) {
+            $parts = parse_url($request->header('Referer'));
+            if (isset($parts['scheme'], $parts['host'])) {
+                $origin = $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+            }
+        }
 
-        if ($origin && !in_array($origin, $allowedOrigins)) {
+        if (!$origin || !in_array(rtrim($origin, '/'), array_map(fn ($item) => rtrim($item, '/'), $allowedOrigins), true)) {
             abort(403, 'Invalid origin');
         }
 

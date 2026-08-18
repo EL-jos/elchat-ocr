@@ -2,12 +2,12 @@
 
 namespace App\Jobs;
 
-use App\Domain\MCP\Orchestration\MCPActionGateService;
 use App\Domain\Sales\ProspectingPolicyEngine;
 use App\Domain\Sales\ProspectScoringService;
 use App\Domain\Sales\WebsiteIntelligenceService;
 use App\Models\Conversation;
 use App\Models\Sales\Prospect;
+use App\Services\mcp\MCPActionGateService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;

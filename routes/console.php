@@ -1,6 +1,8 @@
 <?php
 
 use App\Jobs\RunProspectingCampaignJob;
+use App\Jobs\Proactive\SendProactiveMessageJob;
+use App\Models\Proactive\ProactiveMessage;
 use App\Models\Sales\ProspectingCampaign;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -34,6 +36,15 @@ Schedule::command('youtube:sync-comments')
 Schedule::command('subscriptions:finalize-cancellations')->dailyAt('02:00');
 Schedule::command('subscriptions:check-expired-trials')->dailyAt('08:00');
 
+Schedule::command('analytics:aggregate --days=2')
+    ->hourlyAt(10)
+    ->withoutOverlapping(55)
+    ->onOneServer();
+Schedule::command('analytics:prune')
+    ->dailyAt('03:30')
+    ->withoutOverlapping(120)
+    ->onOneServer();
+
 // 🆕 Sales Hunter — vérifie chaque minute les campagnes dont l'heure est
 // arrivée. Léger (une requête indexée sur next_run_at), même principe
 // que tout job planifié existant — driver `database`, workers Supervisor.
@@ -54,4 +65,28 @@ Schedule::call(function () {
             };
             $campaign->update(['next_run_at' => $next]);
         });
-})->everyMinute()->name('sales-hunter-campaign-scheduler')->withoutOverlapping();
+})->everyMinute()->name('sales-hunter-campaign-scheduler')->withoutOverlapping()->onOneServer();
+
+Schedule::call(function () {
+    // Un worker peut être interrompu après le verrouillage DB et avant la
+    // remise à jour du message. Les verrous expirés sont remis en retry afin
+    // d'éviter une séquence bloquée définitivement.
+    ProactiveMessage::query()
+        ->where('status', 'processing')
+        ->whereNotNull('locked_at')
+        ->where('locked_at', '<=', now()->subMinutes((int) config('proactive.stale_lock_minutes', 15)))
+        ->update([
+            'status' => 'retrying',
+            'locked_at' => null,
+            'failure_code' => 'stale_lock_recovered',
+            'failure_details' => 'Le verrou de traitement a expiré avant la confirmation du canal.',
+        ]);
+
+    ProactiveMessage::query()
+        ->whereIn('status', ['scheduled', 'retrying'])
+        ->where('scheduled_at', '<=', now())
+        ->orderBy('scheduled_at')
+        ->limit((int) config('proactive.scan_batch_size', 200))
+        ->pluck('id')
+        ->each(fn (string $id) => SendProactiveMessageJob::dispatch($id)->onQueue(config('proactive.queue', 'proactive')));
+})->everyMinute()->name('proactive-engagement-scheduler')->withoutOverlapping()->onOneServer();

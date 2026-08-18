@@ -864,7 +864,8 @@ class IndexService
         $canonical = $this->documentCanonicalService->buildCanonicalDocument(
             path: $path,
             extension: $document->extension,
-            fullPath: $path
+            fullPath: $path,
+            title: $document->title,
         );
 
         //Log::info("CANONICAL", $canonical);

@@ -13,9 +13,9 @@ return new class extends Migration
     {
         // ✅ Supprimer l'ancien index
         Schema::table('social_conversations', function (Blueprint $table) {
-            $table->dropForeign('social_conversations_social_account_id_foreign');
-            $table->dropColumn('social_account_id');
+            $table->dropForeign(['social_account_id']);
             $table->dropUnique('unique_conversation_context');
+            $table->dropColumn('social_account_id');
         });
 
         // ✅ Ajouter une colonne context_id_hash pour l'index (SHA-256 = 64 chars fixe)

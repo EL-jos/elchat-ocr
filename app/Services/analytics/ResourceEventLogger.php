@@ -2,14 +2,19 @@
 
 namespace App\Services\analytics;
 
+use App\Enums\AnalyticsAttributionType;
+use App\Enums\AnalyticsEventType;
+use App\Models\AnalyticsEvent;
 use App\Models\Conversation;
 use App\Models\Message;
-use App\Models\ResourceEvent;
 use App\Models\Site;
-use Illuminate\Support\Str;
 
 class ResourceEventLogger
 {
+    public function __construct(private readonly AnalyticsEventService $analytics)
+    {
+    }
+
     /**
      * Log une impression pour chaque CTA proposé dans une réponse chat.
      * $ctas = tableau brut renvoyé par ChatResponse::ctas (issu de CtaResource::make()).
@@ -63,7 +68,7 @@ class ResourceEventLogger
         ?string $action = null,
         ?string $label = null,
         ?array $metadata = null,
-    ): ResourceEvent {
+    ): ?AnalyticsEvent {
         return $this->log(
             site: $site,
             conversation: $conversationId,
@@ -83,9 +88,10 @@ class ResourceEventLogger
      */
     public function logFormConversion(Site $site, string $formId, string $messageId, string $submissionId): void
     {
-        $conversationId = Message::where('id', $messageId)->value('conversation_id');
+        $message = Message::with('conversation')->find($messageId);
+        $conversation = $message?->conversation;
 
-        if (!$conversationId) {
+        if (!$conversation || $conversation->site_id !== $site->id) {
             return; // message introuvable, on n'écrit rien plutôt qu'un événement orphelin
         }
 
@@ -96,7 +102,7 @@ class ResourceEventLogger
 
         $this->log(
             site: $site,
-            conversation: $conversationId,
+            conversation: $conversation,
             messageId: $messageId,
             resourceType: 'cta',
             resourceId: $cta?->id,
@@ -104,6 +110,27 @@ class ResourceEventLogger
             action: 'open_form',
             label: $cta?->label,
             metadata: ['submission_id' => $submissionId, 'form_id' => $formId],
+        );
+
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::LEAD_CREATED,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'message_id' => $messageId,
+                'session_id' => $conversationModel?->metadata['session_id'] ?? null,
+                'correlation_id' => $conversationModel?->metadata['session_id'] ?? $conversationId,
+                'resource_type' => 'lead',
+                'resource_id' => $submissionId,
+                'source' => 'chat_form',
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+                'attribution_type' => $cta
+                    ? AnalyticsAttributionType::DIRECT->value
+                    : AnalyticsAttributionType::UNKNOWN->value,
+            ],
+            metadata: ['form_id' => $formId, 'cta_id' => $cta?->id],
+            idempotencyKey: $this->analytics->deterministicKey('lead_created', $submissionId),
         );
     }
 
@@ -120,18 +147,31 @@ class ResourceEventLogger
         ?string $action = null,
         ?string $label = null,
         ?array $metadata = null,
-    ): ResourceEvent {
-        return ResourceEvent::create([
-            'id' => (string) Str::uuid(),
-            'site_id' => $site->id,
-            'conversation_id' => $conversation instanceof Conversation ? $conversation->id : $conversation,
-            'message_id' => $messageId,
-            'resource_type' => $resourceType,
-            'resource_id' => $resourceId,
-            'event_type' => $eventType,
-            'action' => $action,
-            'label' => $label,
-            'metadata' => $metadata,
-        ]);
+    ): ?AnalyticsEvent {
+        $conversationId = $conversation instanceof Conversation ? $conversation->id : $conversation;
+        $conversationModel = $conversation instanceof Conversation ? $conversation : null;
+        $canonicalType = $this->analytics->canonicalResourceEventType($resourceType, $eventType);
+
+        return $this->analytics->capture(
+            site: $site,
+            eventType: $canonicalType,
+            context: [
+                'visitor_id' => $conversationModel?->visitor_id,
+                'conversation_id' => $conversationId,
+                'message_id' => $messageId,
+                'session_id' => $conversation->metadata['session_id'] ?? null,
+                'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                'resource_type' => $resourceType,
+                'resource_id' => $resourceId,
+                'source' => $eventType === 'conversion' ? 'form' : 'chat_response',
+                'channel' => $conversationModel?->metadata['channel'] ?? 'widget',
+                'action' => $action,
+                'label' => $label,
+            ],
+            metadata: $metadata ?? [],
+            idempotencyKey: $this->analytics->resourceIdempotencyKey(
+                $site->id, $conversationId, $messageId, $resourceType, $resourceId, $eventType,
+            ),
+        );
     }
 }

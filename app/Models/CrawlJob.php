@@ -12,6 +12,10 @@ class CrawlJob extends BaseModel
     {
         return $this->belongsTo(Site::class);
     }
+    public function sourceDocument(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'source_document_id');
+    }
     public function pages(): HasMany
     {
         return $this->hasMany(Page::class);

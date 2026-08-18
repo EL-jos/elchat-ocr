@@ -11,7 +11,7 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Terms and Conditions of Use</h1>
+                        <h1>Conditions générales d’utilisation</h1>
                         <p>
                             En accédant à ELChat et en utilisant ses services, vous acceptez
                             de respecter les présentes Conditions générales d'utilisation.
@@ -35,7 +35,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="ELChat AI Assistant">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration ELChat">
                         </figure>
                     </div>
                 </div>

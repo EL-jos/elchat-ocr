@@ -38,6 +38,10 @@ class CheckProductImportCompletionJob implements ShouldQueue
         // 🔒 Sécurité anti-boucle infinie
         if ($import->started_at->diffInMinutes(now()) > 30) {
             $import->update(['status' => 'failed']);
+            $import->document?->update([
+                'indexing_status' => 'failed',
+                'indexing_error' => 'Le délai maximal de 30 minutes a été dépassé.',
+            ]);
 
             Log::error('Product import timeout', [
                 'import_id' => $import->id,
@@ -55,6 +59,11 @@ class CheckProductImportCompletionJob implements ShouldQueue
 
         // ✅ Import terminé
         $import->update(['status' => 'completed']);
+        $import->document?->update([
+            'indexing_status' => 'indexed',
+            'last_indexed_at' => now(),
+            'indexing_error' => null,
+        ]);
 
         // ✅ Site prêt
         $import->site->update(['status' => 'ready']);

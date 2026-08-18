@@ -6,6 +6,12 @@ use App\Domain\Email\Contracts\EmailProviderInterface;
 use App\Domain\Email\EmailProviderFactory;
 use App\Domain\Email\Providers\PostmarkEmailProvider;
 use App\Domain\Email\Providers\SesEmailProvider;
+use App\Domain\Sales\ProspectDiscoveryService;
+use App\Domain\Sales\Sources\CrmColdContactSource;
+use App\Events\AnalyticsEventRecorded;
+use App\Listeners\HandleProactiveAnalyticsEvent;
+use App\Models\UnansweredQuestion;
+use App\Observers\UnansweredQuestionObserver;
 use App\Payment\Adapters\PaypalCouponAdapter;
 use App\Payment\Gateways\PaypalPaymentGateway;
 use App\Payment\PaymentGatewayFactory;
@@ -33,6 +39,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CouponService::class);
         $this->app->singleton(ModuleCatalogService::class);
         $this->app->singleton(SubscriptionOrchestrator::class);
+        $this->app->bind(
+            ProspectDiscoveryService::class,
+            fn ($app) => new ProspectDiscoveryService([
+                $app->make(CrmColdContactSource::class),
+            ]),
+        );
 
         $this->app->singleton(SesClient::class, fn () => new SesClient([
             'version' => 'latest',
@@ -48,9 +60,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        UnansweredQuestion::observe(UnansweredQuestionObserver::class);
+
         Event::listen(
             SocialiteWasCalled::class,
             SlackExtendSocialite::class
         );
+
+        Event::listen(AnalyticsEventRecorded::class, HandleProactiveAnalyticsEvent::class);
     }
 }

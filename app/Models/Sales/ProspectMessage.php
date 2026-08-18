@@ -15,7 +15,8 @@ class ProspectMessage extends Model
 
     protected $fillable = [
         'prospect_id', 'message_id', 'channel', 'direction', 'status', 'content',
-        'intent', 'external_message_id', 'in_reply_to_external_id',
+        'intent', 'external_message_id', 'provider_message_id', 'provider_key',
+        'in_reply_to_external_id',
     ];
 
     public function prospect(): BelongsTo { return $this->belongsTo(Prospect::class, 'prospect_id'); }

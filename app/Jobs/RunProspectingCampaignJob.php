@@ -10,6 +10,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
 
@@ -26,6 +27,11 @@ class RunProspectingCampaignJob implements ShouldQueue
     {
     }
 
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping("sales-hunter-campaign:{$this->campaignId}"))->expireAfter(1800)];
+    }
+
     public function handle(ProspectDiscoveryService $discovery, ProspectingPolicyEngine $policy): void
     {
         $campaign = ProspectingCampaign::with('config.agent', 'site')->findOrFail($this->campaignId);
@@ -33,7 +39,7 @@ class RunProspectingCampaignJob implements ShouldQueue
 
         $decision = $policy->canDiscover($config, $campaign);
         if (!$decision->allowed) {
-            $campaign->update(['status' => 'paused', 'stats' => array_merge($campaign->stats, ['last_block_reason' => $decision->message])]);
+            $campaign->update(['status' => 'paused', 'stats' => array_merge($campaign->stats ?? [], ['last_block_reason' => $decision->message])]);
             return;
         }
 
@@ -55,7 +61,7 @@ class RunProspectingCampaignJob implements ShouldQueue
 
         $campaign->update([
             'status' => 'completed', 'completed_at' => now(),
-            'stats' => array_merge($campaign->stats, ['prospects_discovered' => $createdCount]),
+            'stats' => array_merge($campaign->stats ?? [], ['prospects_discovered' => $createdCount]),
         ]);
     }
 }

@@ -29,6 +29,8 @@ class ProductImportJob implements ShouldQueue
 
     public function handle(MercureService $mercureService)
     {
+        $this->document->update(['indexing_status' => 'processing', 'indexing_error' => null]);
+
         Log::info("🚀 ProductImportJob démarré pour site {$this->site->id}");
 
         $this->site->update(['status' => 'indexing']);
@@ -44,6 +46,10 @@ class ProductImportJob implements ShouldQueue
             $rows = ProductFileParser::parse($this->document);
 
             if (empty($rows)) {
+                $this->document->update([
+                    'indexing_status' => 'failed',
+                    'indexing_error' => 'Aucun produit exploitable trouvé dans le fichier.',
+                ]);
                 Log::warning("⚠️ Aucun produit trouvé");
                 $this->site->update(['status' => 'ready']);
                 return;
@@ -59,6 +65,10 @@ class ProductImportJob implements ShouldQueue
             $products = ProductMapper::map($rows, $this->mapping);
 
             if (empty($products)) {
+                $this->document->update([
+                    'indexing_status' => 'failed',
+                    'indexing_error' => 'Le mapping produit ne contient aucune donnée exploitable.',
+                ]);
                 Log::warning("⚠️ Mapping vide");
                 $this->site->update(['status' => 'ready']);
                 return;
@@ -117,6 +127,10 @@ class ProductImportJob implements ShouldQueue
 
         } catch (\Throwable $e) {
             $this->site->update(['status' => 'error']);
+            $this->document->update([
+                'indexing_status' => 'failed',
+                'indexing_error' => mb_substr($e->getMessage(), 0, 2000),
+            ]);
 
             Log::error("❌ ProductImportJob échoué: {$e->getMessage()}");
 

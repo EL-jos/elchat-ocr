@@ -93,7 +93,7 @@ class MCPPendingActionController extends Controller
 
         $chatResponse = $result->response ?? new ChatResponse(message: "D'accord, cette action a été annulée.", ctas: [], entities: []);
 
-        Message::create([
+        $botMessage = Message::create([
             'id' => (string) Str::uuid(),
             'conversation_id' => $pendingAction->conversation_id,
             'role' => 'bot',
@@ -103,6 +103,7 @@ class MCPPendingActionController extends Controller
         $this->mercureService->post("/sites/{$site->id}/conversations/{$pendingAction->conversation_id}", [
             'type' => 'bot_message',
             'conversation_id' => $pendingAction->conversation_id,
+            'message_id' => $botMessage->id,
             'content' => $chatResponse->message,
             'ctas' => [], 'entities' => [],
             'suggested_actions' => $chatResponse->suggestedActions ?? [], // 🆕
