@@ -35,6 +35,12 @@ class ProactiveAuditService
             'campaign_id' => $context['campaign_id'] ?? null,
             'sequence_id' => $context['sequence_id'] ?? null,
             'message_id' => $context['message_id'] ?? null,
+        ], [
+            'proactive/stats',
+            'proactive/campaigns',
+            'proactive/messages',
+            'proactive/results',
+            'proactive/history',
         ]);
 
         return $audit;

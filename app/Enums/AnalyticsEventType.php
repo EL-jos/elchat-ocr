@@ -4,7 +4,23 @@ namespace App\Enums;
 
 enum AnalyticsEventType: string
 {
+    // Visitor Intelligence reuses the existing Event Intelligence stream. These
+    // events describe an observed journey without storing browser snapshots.
+    case SESSION_START = 'session_start';
+    case PAGE_VIEW = 'page_view';
+    case PAGE_EXIT = 'page_exit';
+    case NAVIGATION = 'navigation';
+    case SCROLL_DEPTH = 'scroll_depth';
+    case CLICK = 'click';
+    case POINTER_MOVE = 'pointer_move';
+    case WIDGET_IMPRESSION = 'widget_impression';
     case WIDGET_OPENED = 'widget_opened';
+    case WIDGET_CLOSED = 'widget_close';
+    case FORM_START = 'form_start';
+    case FORM_SUBMIT = 'form_submit';
+    case INACTIVITY_START = 'inactivity_start';
+    case INACTIVITY_END = 'inactivity_end';
+    case SESSION_END = 'session_end';
     case CONVERSATION_STARTED = 'conversation_started';
     case MESSAGE_SENT = 'message_sent';
     case MESSAGE_RECEIVED = 'message_received';
@@ -44,6 +60,8 @@ enum AnalyticsEventType: string
     case MEETING_PROPOSED = 'meeting_proposed';
     case MEETING_BOOKED = 'meeting_booked';
     case MEETING_CANCELLED = 'meeting_cancelled';
+    case APPOINTMENT_CREATED = 'appointment_created';
+    case CONVERSION = 'conversion';
 
     case WORKFLOW_STARTED = 'workflow_started';
     case WORKFLOW_COMPLETED = 'workflow_completed';
@@ -86,11 +104,26 @@ enum AnalyticsEventType: string
     {
         return match ($this) {
             self::WIDGET_OPENED,
+            self::WIDGET_IMPRESSION,
+            self::WIDGET_CLOSED,
             self::CONVERSATION_STARTED,
             self::MESSAGE_SENT,
             self::MESSAGE_RECEIVED,
             self::CONVERSATION_RESOLVED,
             self::HUMAN_HANDOFF => 'conversation',
+
+            self::SESSION_START,
+            self::PAGE_VIEW,
+            self::PAGE_EXIT,
+            self::NAVIGATION,
+            self::SCROLL_DEPTH,
+            self::CLICK,
+            self::POINTER_MOVE,
+            self::FORM_START,
+            self::FORM_SUBMIT,
+            self::INACTIVITY_START,
+            self::INACTIVITY_END,
+            self::SESSION_END => 'journey',
 
             self::INTENT_DETECTED,
             self::COMMERCIAL_INTENT_DETECTED,
@@ -130,7 +163,10 @@ enum AnalyticsEventType: string
 
             self::MEETING_PROPOSED,
             self::MEETING_BOOKED,
-            self::MEETING_CANCELLED => 'calendar',
+            self::MEETING_CANCELLED,
+            self::APPOINTMENT_CREATED => 'calendar',
+
+            self::CONVERSION => 'crm',
 
             self::WORKFLOW_STARTED,
             self::WORKFLOW_COMPLETED,

@@ -7,7 +7,7 @@
         const data = @json($data);
 
         // Poste le message au parent
-        window.opener.postMessage(data, 'https://elchat-widget.promogifts.ma/sign-in');
+        window.opener.postMessage(data, 'https://elchat.io/sign-in');
         window.close();
     </script>
 </head>

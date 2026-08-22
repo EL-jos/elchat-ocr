@@ -6,6 +6,7 @@ use App\Events\ModuleActivated;
 use App\Events\ModuleDeactivated;
 use App\Listeners\GrantModulePermissions;
 use App\Listeners\HandleProactiveAnalyticsEvent;
+use App\Listeners\HandleVisitorIntelligenceEvent;
 use App\Listeners\RevokeModulePermissions;
 use App\Listeners\SendModuleActivationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -33,6 +34,7 @@ class EventServiceProvider extends ServiceProvider
         // queue proactive : aucune requête de chat ne dépend de son exécution.
         AnalyticsEventRecorded::class => [
             HandleProactiveAnalyticsEvent::class,
+            HandleVisitorIntelligenceEvent::class,
         ],
     ];
 }

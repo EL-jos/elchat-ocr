@@ -14,6 +14,8 @@ use App\Http\Controllers\api\v1\PageController;
 use App\Http\Controllers\api\v1\ProactiveWidgetController;
 use App\Http\Controllers\api\v1\ResourceEventAnalyticsController;
 use App\Http\Controllers\api\v1\ResourceEventController;
+use App\Http\Controllers\api\v1\VisitorIntelligenceController;
+use App\Http\Controllers\api\v1\VisitorIntelligenceIngestionController;
 use App\Http\Controllers\api\v1\SitemapController;
 use App\Http\Controllers\api\v1\TypeSiteController;
 use App\Http\Controllers\api\v1\UserController;
@@ -154,6 +156,25 @@ Route::prefix('v1')->group(function () {
             Route::get('/mcp', 'mcp');
             Route::get('/recommendations', 'recommendations');
             Route::get('/anomalies', 'anomalies');
+        });
+
+        Route::prefix('site/{site}/visitor-intelligence')->controller(VisitorIntelligenceController::class)->group(function () {
+            Route::get('/overview', 'overview');
+            Route::get('/sessions', 'sessions');
+            Route::get('/visitors', 'visitors');
+            Route::get('/sessions/{session}', 'session');
+            Route::get('/sessions/{session}/replay', 'replay');
+            Route::get('/sessions/{session}/replay/chunks/{chunk}', 'replayChunk');
+            Route::delete('/sessions/{session}', 'deleteSession');
+            Route::get('/journey', 'journey');
+            Route::get('/opportunities', 'opportunities');
+            Route::get('/actions', 'actions');
+            Route::get('/rules', 'rules');
+            Route::post('/rules', 'storeRule');
+            Route::put('/rules/{rule}', 'updateRule');
+            Route::delete('/rules/{rule}', 'destroyRule');
+            Route::post('/actions/{action}/approve', 'approveAction');
+            Route::post('/actions/{action}/execute', 'executeAction');
         });
 
         Route::prefix('/site/{site}/mcp')->group(function () {
@@ -319,6 +340,12 @@ Route::prefix('v1')->group(function () {
 
         // Dans le groupe widget (public, visiteur)
         Route::post('/site/{site}/resource-events', [ResourceEventController::class, 'store'])
+            ->middleware(['widget.origin', 'throttle:120,1']);
+        Route::post('/site/{site}/visitor-intelligence/events', [VisitorIntelligenceIngestionController::class, 'store'])
+            ->middleware(['widget.origin', 'throttle:300,1']);
+        Route::post('/site/{site}/visitor-intelligence/frames', [VisitorIntelligenceIngestionController::class, 'frame'])
+            ->middleware(['widget.origin', 'throttle:300,1']);
+        Route::post('/site/{site}/visitor-intelligence/replay-chunks', [VisitorIntelligenceIngestionController::class, 'replayChunk'])
             ->middleware(['widget.origin', 'throttle:120,1']);
     });
 

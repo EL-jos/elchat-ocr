@@ -2,15 +2,15 @@
 
 @section('seo')
     <!-- Primary Meta Tags -->
-    <title>Capacités ELChat | Engagement proactif, RAG, workflows et agents IA</title>
+    <title>Capacités ELChat | Visitor Intelligence, engagement proactif, RAG et agents IA</title>
 
-    <meta name="title" content="Capacités ELChat | Engagement proactif, RAG, workflows et agents IA">
+    <meta name="title" content="Capacités ELChat | Visitor Intelligence, engagement proactif, RAG et agents IA">
 
     <meta name="description"
-          content="Découvrez les capacités d'ELChat : engagement proactif, base de connaissances RAG, omnicanal, connecteurs métier, workflows, intelligence événementielle et agents IA.">
+          content="Découvrez les capacités d'ELChat : Visitor Intelligence, engagement proactif, base de connaissances RAG, omnicanal, connecteurs métier, workflows, intelligence événementielle et agents IA.">
 
     <meta name="keywords"
-          content="RAG entreprise, engagement proactif, relance contextuelle, workflows IA, connecteurs MCP, agents IA spécialisés, automatisation métier, intelligence événementielle, omnicanal, AI Sales Hunter, ELChat">
+          content="Visitor Intelligence, replay parcours visiteurs, RAG entreprise, engagement proactif, relance contextuelle, workflows IA, connecteurs MCP, agents IA spécialisés, automatisation métier, intelligence événementielle, omnicanal, AI Sales Hunter, ELChat">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -41,7 +41,7 @@
           content="Capacités ELChat | Plateforme d'IA opérationnelle">
 
     <meta name="twitter:description"
-          content="RAG, engagement proactif, omnicanal, workflows, connecteurs et agents spécialisés réunis dans une plateforme d'IA opérationnelle.">
+          content="Visitor Intelligence, RAG, engagement proactif, omnicanal, workflows, connecteurs et agents spécialisés réunis dans une plateforme d'IA opérationnelle.">
 
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
@@ -204,6 +204,34 @@
             </div>
             <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
                 <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Découvrir cette capacité</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- VISITOR INTELLIGENCE SECTION -->
+    <section class="float-left w-100 position-relative why-choose-us-con padding-top padding-bottom main-box">
+        <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
+            <div class="heading-title-con text-center">
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">Visitor Intelligence</span>
+                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Voir ce que fait réellement<br>un visiteur sur votre site</h2>
+                <p class="mx-auto" style="max-width: 760px;">Visitor Intelligence relie le comportement visible sur le site du tenant aux interactions ELChat. Les événements, scrolls, captures du viewport et replays terminés donnent aux équipes une lecture concrète du parcours, sans confondre observation et intention certaine.</p>
+            </div>
+            <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
+                <div class="choose-box">
+                    <h6>Capturer le bon périmètre</h6>
+                    <p class="mb-0">Le système observe la zone visible du site hôte, pas le scroll interne du widget et pas une capture de page entière.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Relier les signaux</h6>
+                    <p class="mb-0">Navigation, clics, scrolls, inactivité, widget, CTA, conversations et conversions sont replacés dans l’ordre du parcours.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Analyser avec contrôle</h6>
+                    <p class="mb-0">Le dashboard propose un lecteur d’événements, un replay adapté au device et un export vidéo WebM du parcours terminé.</p>
+                </div>
+            </div>
+            <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
+                <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Parler de vos parcours visiteurs</a>
             </div>
         </div>
     </section>

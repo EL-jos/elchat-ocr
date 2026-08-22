@@ -31,6 +31,14 @@ class Site extends BaseModel
     {
         return $this->hasMany(Conversation::class);
     }
+    public function visitorSessions(): HasMany
+    {
+        return $this->hasMany(VisitorSession::class);
+    }
+    public function visitorOpportunities(): HasMany
+    {
+        return $this->hasMany(VisitorOpportunity::class);
+    }
     public function unansweredQuestions(): HasMany
     {
         return $this->hasMany(UnansweredQuestion::class);

@@ -14,7 +14,7 @@
           content="ELChat relie connaissances, événements et outils métier pour aider les entreprises à décider, automatiser leurs processus, reprendre les conversations au bon moment et mesurer les résultats avec l'IA.">
 
     <meta name="keywords"
-          content="plateforme IA entreprise, IA opérationnelle, engagement proactif, relance contextuelle, automatisation métier, agents IA, workflows IA, RAG entreprise, intelligence décisionnelle, connecteurs MCP, prospection IA, ELChat">
+          content="plateforme IA entreprise, IA opérationnelle, Visitor Intelligence, replay parcours visiteurs, engagement proactif, relance contextuelle, automatisation métier, agents IA, workflows IA, RAG entreprise, intelligence décisionnelle, connecteurs MCP, prospection IA, ELChat">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -349,6 +349,34 @@
             </div>
             <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
                 <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Parler d’un cas d’usage</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- VISITOR INTELLIGENCE SECTION -->
+    <section class="float-left w-100 position-relative why-choose-us-con padding-top padding-bottom main-box">
+        <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
+            <div class="heading-title-con text-center">
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">Visitor Intelligence</span>
+                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Comprendre le parcours<br>avant, pendant et après ELChat</h2>
+                <p class="mx-auto" style="max-width: 760px;">Observez le comportement réellement visible sur le site du tenant : pages consultées, scrolls, clics, interactions avec le widget et signaux de conversion. Les parcours terminés deviennent consultables dans le dashboard avec un replay adapté au périphérique du visiteur.</p>
+            </div>
+            <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
+                <div class="choose-box">
+                    <h6>Le viewport du visiteur</h6>
+                    <p class="mb-0">Les captures concernent uniquement la zone visible du site, sur desktop, mobile ou tablette, sans capturer la page entière.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Un parcours terminé</h6>
+                    <p class="mb-0">Le dashboard n’affiche pas un parcours incomplet en temps réel. Une notification arrive lorsque la session est terminée et prête à être analysée.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Replay et événements</h6>
+                    <p class="mb-0">L’administrateur peut lire, mettre en pause, cibler un événement, gérer l’inactivité et télécharger le replay en vidéo WebM.</p>
+                </div>
+            </div>
+            <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
+                <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Découvrir Visitor Intelligence</a>
             </div>
         </div>
     </section>

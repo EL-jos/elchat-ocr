@@ -45,9 +45,7 @@ Schedule::command('analytics:prune')
     ->withoutOverlapping(120)
     ->onOneServer();
 Schedule::command('visitor-intelligence:prune')
-    // Run hourly so the 48-hour replay retention is not extended by another
-    // full day waiting for the nightly scheduler.
-    ->hourlyAt(45)
+    ->dailyAt('03:45')
     ->withoutOverlapping(120)
     ->onOneServer();
 

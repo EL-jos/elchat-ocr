@@ -139,3 +139,18 @@ Ne supprimer le schéma qu'après export et validation explicite : le rollback d
 ## Extension
 
 Les agents, workflows et actions MCP partagent déjà les dimensions `agent_id`, `workflow_id`, `source`, `correlation_id` et `attribution_type`. Ils peuvent donc consommer ultérieurement les résultats d'Intelligence sans créer une deuxième banque d'agents ou un moteur parallèle. L'AI Sales Hunter installé depuis la marketplace utilise son identifiant d'agent dynamique et alimente les mêmes événements d'exécution et de résultat.
+
+## Visitor Intelligence — temps réel, replay visuel et rétention
+
+Visitor Intelligence réutilise Mercure sur le topic `/sites/{site}/visitor-intelligence`. Les événements intermédiaires d’une session ne sont pas diffusés au dashboard : le parcours reste en cours jusqu’à `session_end`. Une notification `session_completed` est publiée après la construction du résumé, puis le dashboard recharge la vue et ses projections terminées. Les mises à jour indépendantes d’opportunité, d’action ou de règle restent temps réel.
+
+Le replay visuel conserve dans le flux analytique partagé des captures du viewport de la page du tenant, associées aux positions de pointeur/toucher, au scroll et à leur horodatage réel, avec des coordonnées normalisées par viewport et par page. Le widget hébergé relaie les événements visuels de son iframe vers la page hôte, mais le système capture la zone visible du site hôte et non le scroll interne du widget. Le dashboard propose une timeline navigable, la lecture ou le saut des périodes d’inactivité et un export vidéo WebM généré côté navigateur. Les données de formulaire, le texte saisi, les images de contenu isolées et les identifiants sensibles ne sont pas capturés.
+
+La rétention par défaut des parcours et de leurs chunks de replay est de 48 heures :
+
+```dotenv
+VISITOR_INTELLIGENCE_SESSION_RETENTION_DAYS=2
+VISITOR_INTELLIGENCE_POINTER_TRACKING_ENABLED=true
+```
+
+La commande planifiée `visitor-intelligence:prune` supprime chaque parcours expiré, ses événements Visitor Intelligence, résumés, opportunités et actions associés. L’admin peut supprimer un parcours depuis le replay. `GET /api/v1/site/{site}/visitor-intelligence/visitors` regroupe les parcours par visiteur pseudonyme dans la limite du site.

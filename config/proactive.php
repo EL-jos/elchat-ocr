@@ -8,10 +8,7 @@ return [
     'max_tenant_daily_messages' => (int) env('PROACTIVE_MAX_TENANT_DAILY', 10000),
     'max_visitor_daily_messages' => (int) env('PROACTIVE_MAX_VISITOR_DAILY', 5),
     'stale_lock_minutes' => (int) env('PROACTIVE_STALE_LOCK_MINUTES', 15),
-    'decision_model' => env(
-        'PROACTIVE_DECISION_MODEL',
-        'google/gemini-2.5-flash-lite'
-    ),
+    'decision_model' => env('PROACTIVE_DECISION_MODEL'),
     'outcome_window_hours' => (int) env('PROACTIVE_OUTCOME_WINDOW_HOURS', 168),
     'channels' => [
         'website' => ['enabled' => true, 'window_hours' => null],

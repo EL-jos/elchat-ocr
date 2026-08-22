@@ -106,6 +106,14 @@ class AnalyticsEventService
                 'visitor_id' => $event->visitor_id,
                 'resource_type' => $event->resource_type,
                 'resource_id' => $event->resource_id,
+            ], [
+                'intelligence/overview',
+                'intelligence/attention',
+                'intelligence/funnel',
+                'intelligence/knowledge',
+                ...((str_starts_with((string) $event->event_type, 'proactive_'))
+                    ? ['proactive/stats', 'proactive/campaigns', 'proactive/messages', 'proactive/results']
+                    : []),
             ]);
         }
 
