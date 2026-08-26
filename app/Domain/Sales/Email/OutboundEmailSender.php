@@ -4,9 +4,9 @@ namespace App\Domain\Sales\Email;
 
 use App\Domain\Email\DTO\OutboundEmail;
 use App\Domain\Email\EmailService;
+use App\Models\Message;
 use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectMessage;
-use App\Models\Message;
 use Illuminate\Support\Str;
 
 /**
@@ -18,9 +18,7 @@ use Illuminate\Support\Str;
  */
 class OutboundEmailSender
 {
-    public function __construct(private readonly EmailService $emailService)
-    {
-    }
+    public function __construct(private readonly EmailService $emailService) {}
 
     public function send(Prospect $prospect, ProspectMessage $draft): void
     {
@@ -28,14 +26,15 @@ class OutboundEmailSender
             to: $prospect->email,
             from: config('mail.from.address'),
             fromName: config('app.name'),
-            subject: "Message de " . config('app.name') . " [" . $this->threadToken($prospect) . "]",
+            subject: 'Message de '.config('app.name').' ['.$this->threadToken($prospect).']',
             textBody: $draft->content,
         );
 
         $result = $this->emailService->send($email);
 
-        if (!$result->accepted) {
+        if (! $result->accepted) {
             $draft->update(['status' => 'failed']);
+
             return;
         }
 
@@ -59,6 +58,6 @@ class OutboundEmailSender
 
     private function threadToken(Prospect $prospect): string
     {
-        return 'PID:' . substr($prospect->id, 0, 8);
+        return 'PID:'.substr($prospect->id, 0, 8);
     }
 }

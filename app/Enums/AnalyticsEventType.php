@@ -95,6 +95,33 @@ enum AnalyticsEventType: string
     case PROACTIVE_OPPORTUNITY_CREATED = 'proactive_opportunity_created';
     case PROACTIVE_SALE_ATTRIBUTED = 'proactive_sale_attributed';
 
+    case ENGAGEMENT_CANDIDATE = 'engagement_candidate';
+    case ENGAGEMENT_EVALUATED = 'engagement_evaluated';
+    case ENGAGEMENT_SKIPPED = 'engagement_skipped';
+    case ENGAGEMENT_TRIGGERED = 'engagement_triggered';
+    case ENGAGEMENT_MESSAGE_SENT = 'engagement_message_sent';
+    case ENGAGEMENT_WIDGET_OPENED = 'engagement_widget_opened';
+    case ENGAGEMENT_ACCEPTED = 'engagement_accepted';
+    case ENGAGEMENT_DISMISSED = 'engagement_dismissed';
+    case ENGAGEMENT_REJECTED = 'engagement_rejected';
+    case ENGAGEMENT_REPLIED = 'engagement_replied';
+
+    case PROSPECTING_CAMPAIGN_STARTED = 'campaign_started';
+    case PROSPECTING_SOURCE_STARTED = 'source_started';
+    case PROSPECTING_SOURCE_COMPLETED = 'source_completed';
+    case PROSPECTING_SOURCE_FAILED = 'source_failed';
+    case PROSPECT_CANDIDATE_DISCOVERED = 'candidate_discovered';
+    case PROSPECT_CANDIDATE_DEDUPLICATED = 'candidate_deduplicated';
+    case PROSPECT_CANDIDATE_ENRICHED = 'candidate_enriched';
+    case PROSPECT_CANDIDATE_QUALIFIED = 'candidate_qualified';
+    case PROSPECT_CANDIDATE_REJECTED = 'candidate_rejected';
+    case PROSPECT_CANDIDATE_SCORED = 'candidate_scored';
+    case PROSPECT_CRM_CHECK_COMPLETED = 'crm_check_completed';
+    case PROSPECT_CRM_CREATED = 'crm_created';
+    case PROSPECT_CRM_UPDATED = 'crm_updated';
+    case PROSPECTING_CAMPAIGN_COMPLETED = 'campaign_completed';
+    case PROSPECTING_CAMPAIGN_FAILED = 'campaign_failed';
+
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
@@ -201,6 +228,33 @@ enum AnalyticsEventType: string
             self::PROACTIVE_MEETING_BOOKED,
             self::PROACTIVE_OPPORTUNITY_CREATED,
             self::PROACTIVE_SALE_ATTRIBUTED => 'proactive',
+
+            self::ENGAGEMENT_CANDIDATE,
+            self::ENGAGEMENT_EVALUATED,
+            self::ENGAGEMENT_SKIPPED,
+            self::ENGAGEMENT_TRIGGERED,
+            self::ENGAGEMENT_MESSAGE_SENT,
+            self::ENGAGEMENT_WIDGET_OPENED,
+            self::ENGAGEMENT_ACCEPTED,
+            self::ENGAGEMENT_DISMISSED,
+            self::ENGAGEMENT_REJECTED,
+            self::ENGAGEMENT_REPLIED => 'proactive',
+
+            self::PROSPECTING_CAMPAIGN_STARTED,
+            self::PROSPECTING_SOURCE_STARTED,
+            self::PROSPECTING_SOURCE_COMPLETED,
+            self::PROSPECTING_SOURCE_FAILED,
+            self::PROSPECT_CANDIDATE_DISCOVERED,
+            self::PROSPECT_CANDIDATE_DEDUPLICATED,
+            self::PROSPECT_CANDIDATE_ENRICHED,
+            self::PROSPECT_CANDIDATE_QUALIFIED,
+            self::PROSPECT_CANDIDATE_REJECTED,
+            self::PROSPECT_CANDIDATE_SCORED,
+            self::PROSPECT_CRM_CHECK_COMPLETED,
+            self::PROSPECT_CRM_CREATED,
+            self::PROSPECT_CRM_UPDATED,
+            self::PROSPECTING_CAMPAIGN_COMPLETED,
+            self::PROSPECTING_CAMPAIGN_FAILED => 'sales_prospecting',
         };
     }
 }

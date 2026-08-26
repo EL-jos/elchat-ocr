@@ -65,6 +65,7 @@ class ProactiveOutcomeService
 
             if ($outcome->wasRecentlyCreated) {
                 $this->recordOutcomeEvent($event, $sequence, $latestMessage, $isConversion);
+                $this->recordAIEngagementReply($event, $latestMessage);
             }
 
             if ($isReply && $campaign->stop_on_reply && $sequence->status === 'active') {
@@ -172,5 +173,29 @@ class ProactiveOutcomeService
                 $this->analytics->deterministicKey('proactive_conversion', $sequence->id, $event->id),
             );
         }
+    }
+
+    private function recordAIEngagementReply(AnalyticsEvent $event, $message): void
+    {
+        $decisionId = data_get($message?->metadata, 'ai_engagement_decision_id');
+        $site = $message?->campaign?->site;
+        if (!$decisionId || !$site) return;
+
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::ENGAGEMENT_REPLIED,
+            [
+                'visitor_id' => $event->visitor_id,
+                'conversation_id' => $event->conversation_id,
+                'message_id' => $message->message_id,
+                'source' => 'ai_engagement',
+                'channel' => $event->channel ?: 'widget',
+                'resource_type' => 'ai_engagement_decision',
+                'resource_id' => $decisionId,
+                'causation_id' => $event->id,
+            ],
+            ['proactive_message_id' => $message->id, 'reply_event_id' => $event->id],
+            $this->analytics->deterministicKey('ai-engagement-replied', $message->id, $event->id),
+        );
     }
 }

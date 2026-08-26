@@ -1,9 +1,11 @@
 <?php
+
 ini_set('max_execution_time', 0);
 set_time_limit(0);
 
 use App\Http\Controllers\api\v1\AIRoleController;
 use App\Http\Controllers\api\v1\AnalyticsController;
+use App\Http\Controllers\api\v1\AuthController;
 use App\Http\Controllers\api\v1\ChatController;
 use App\Http\Controllers\api\v1\ChunkController;
 use App\Http\Controllers\api\v1\ConversationController;
@@ -14,17 +16,19 @@ use App\Http\Controllers\api\v1\PageController;
 use App\Http\Controllers\api\v1\ProactiveWidgetController;
 use App\Http\Controllers\api\v1\ResourceEventAnalyticsController;
 use App\Http\Controllers\api\v1\ResourceEventController;
-use App\Http\Controllers\api\v1\VisitorIntelligenceController;
-use App\Http\Controllers\api\v1\VisitorIntelligenceIngestionController;
+use App\Http\Controllers\api\v1\SiteController;
 use App\Http\Controllers\api\v1\SitemapController;
 use App\Http\Controllers\api\v1\TypeSiteController;
 use App\Http\Controllers\api\v1\UserController;
+use App\Http\Controllers\api\v1\VisitorIntelligenceController;
+use App\Http\Controllers\api\v1\VisitorIntelligenceIngestionController;
 use App\Http\Controllers\api\v1\WidgetSettingController;
 use App\Http\Controllers\api\v1\WidgetVisitorController;
 use App\Http\Controllers\api\v2\CtaController;
 use App\Http\Controllers\api\v4\Form\ChatbotFormController;
 use App\Http\Controllers\api\v4\SocialIntegrationController;
 use App\Http\Controllers\api\v5\AdminCopilotController;
+use App\Http\Controllers\api\v5\AIEngagementController;
 use App\Http\Controllers\api\v5\MCPAgentController;
 use App\Http\Controllers\api\v5\MCPCapabilityController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
@@ -36,13 +40,9 @@ use App\Http\Controllers\api\v5\ModuleSubscriptionController;
 use App\Http\Controllers\api\v5\ProactiveEngagementController;
 use App\Http\Controllers\api\v5\SalesProspectingController;
 use App\Http\Controllers\web\v4\FacebookConnectController;
-use App\Http\Controllers\web\v4\FacebookWebhookController;
 use App\Http\Controllers\web\v4\InstagramConnectController;
 use App\Http\Controllers\web\v4\YouTubeConnectController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\api\v1\SiteController;
-use App\Http\Controllers\api\v1\AuthController;
-use Illuminate\Support\Facades\Log;
 
 Route::prefix('v1')->group(function () {
 
@@ -65,21 +65,21 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('site', SiteController::class);
         Route::controller(SiteController::class)->group(function () {
             Route::post('site/{id}/crawl', 'crawl');
-            //Route::post('site/{site_id}/documents', 'uploadDocument');
+            // Route::post('site/{site_id}/documents', 'uploadDocument');
             Route::get('site/{siteId}/pages/overview', 'pagesOverview');
             Route::get('site/{site}/widget-test', 'widgetTest');
             Route::get('/site/{site_id}/widget/config', 'widgetConfig');
             Route::post('/site/sitemap', 'generateSitemap');
             Route::post('/knowledge-quality/calculate', 'calculateKnowledgeQuality');
-            //Route::post('/api/products/{productIndex}/reindex', 'reindexProducts');
+            // Route::post('/api/products/{productIndex}/reindex', 'reindexProducts');
         });
         Route::post('/chat/ask', [ChatController::class, 'ask']);
-        Route::apiResource('conversation', ConversationController::class)->except(['store', 'update',]);
+        Route::apiResource('conversation', ConversationController::class)->except(['store', 'update']);
         Route::controller(ConversationController::class)->group(function () {
             Route::get('/conversation/{conversationId}/{siteId}', 'messages');
             Route::get('/conversation/{conversationId}/{siteId}/admin', 'messagesAdmin');
             Route::get('/conversation/{conversationId}/site/{siteId}/user/{userId}', 'messagesByUser');
-            Route::get('/site/{siteId}/users/{userId}/conversations', "conversationsByUser");
+            Route::get('/site/{siteId}/users/{userId}/conversations', 'conversationsByUser');
 
             Route::get('sites/{siteId}/conversations', 'index');
             Route::get('site/{siteId}/conversations/{conversation}', 'show');
@@ -110,12 +110,12 @@ Route::prefix('v1')->group(function () {
             Route::delete('site/{site}/products', 'deleteProducts');
         });
         Route::controller(PageController::class)->group(function () {
-            Route::post("/pages/{page}/recrawl", "recrawl");
-            Route::post("site/{site}/pages/import", "import");
+            Route::post('/pages/{page}/recrawl', 'recrawl');
+            Route::post('site/{site}/pages/import', 'import');
             Route::delete('/pages', [PageController::class, 'destroyMultiple']);
             Route::delete('/pages/{page}', [PageController::class, 'destroy']);
         });
-        Route::controller(UserController::class)->group(function (){
+        Route::controller(UserController::class)->group(function () {
             Route::get('/users/site/{site}', 'index')->whereUuid('site');
             Route::get('users/{userId}/site/{site}', 'show')->whereUuid(['userId', 'site']);
         });
@@ -242,8 +242,10 @@ Route::prefix('v1')->group(function () {
             });
 
             Route::controller(SalesProspectingController::class)->group(function () {
+                Route::get('/prospecting-sources', 'sourceCatalog');
                 Route::get('/agent-templates', 'templates');
                 Route::post('/agent-templates/{templateKey}/install', 'installTemplate');
+                Route::delete('/agent-templates/{templateKey}', 'uninstallTemplate');
 
                 Route::get('/agents/{agent}/prospecting-config', 'getConfig');
                 Route::put('/agents/{agent}/prospecting-config', 'updateConfig');
@@ -252,9 +254,15 @@ Route::prefix('v1')->group(function () {
                 Route::get('/prospecting-campaigns', 'campaigns');
                 Route::get('/prospecting-campaigns/{campaign}', 'showCampaign');
                 Route::post('/prospecting-campaigns/{campaign}/run', 'runCampaign');
+                Route::post('/prospecting-campaigns/{campaign}/force-run', 'forceRunCampaign');
+                Route::post('/prospecting-campaigns/{campaign}/stop', 'stopCampaign');
+                Route::delete('/prospecting-campaigns/{campaign}', 'destroyCampaign');
+                Route::get('/prospecting-campaigns/{campaign}/prospects/export', 'exportCampaignProspects');
                 Route::get('/prospecting-campaigns/{campaign}/prospects', 'campaignProspects');
+                Route::post('/prospecting-campaigns/{campaign}/sync-crm', 'syncCampaignProspectsToCrm');
 
                 Route::get('/prospects/{prospect}', 'showProspect');
+                Route::post('/prospects/{prospect}/sync-crm', 'syncProspectToCrm');
             });
 
         });
@@ -277,17 +285,24 @@ Route::prefix('v1')->group(function () {
             Route::get('/stats', 'stats');
         });
 
+        Route::prefix('/site/{site}/ai-engagement')->controller(AIEngagementController::class)->group(function () {
+            Route::get('/', 'show');
+            Route::put('/', 'update');
+            Route::get('/decisions', 'decisions');
+            Route::get('/stats', 'stats');
+        });
+
         Route::controller(ModuleCatalogController::class)->group(function () {
-            Route::get('/modules/catalog',       'index')->name('modules.catalog');
-            Route::get('/subscription/summary',  'summary')->name('subscription.summary');
+            Route::get('/modules/catalog', 'index')->name('modules.catalog');
+            Route::get('/subscription/summary', 'summary')->name('subscription.summary');
         });
 
         Route::controller(ModuleSubscriptionController::class)->group(function () {
             // Activation / désactivation / upgrade
-            Route::post('/modules/{slug}/trial',    'startTrial')->name('modules.trial');
+            Route::post('/modules/{slug}/trial', 'startTrial')->name('modules.trial');
             Route::post('/modules/{slug}/purchase', 'purchase')->name('modules.purchase');
             Route::post('/modules/{slug}/deactivate', 'deactivate')->name('modules.deactivate');
-            Route::post('/modules/{slug}/upgrade',    'upgrade')->name('modules.upgrade');
+            Route::post('/modules/{slug}/upgrade', 'upgrade')->name('modules.upgrade');
 
             // Coupons
             Route::post('/subscription/coupon', 'applyCoupon')->name('subscription.coupon');

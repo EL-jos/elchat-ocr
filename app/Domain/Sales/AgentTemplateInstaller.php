@@ -2,10 +2,12 @@
 
 namespace App\Domain\Sales;
 
-use App\Services\mcp\WorkflowProvisioningService;
-use App\Models\Mcp\{McpAgent, McpAgentTemplate, McpWorkflow};
+use App\Models\Mcp\McpAgent;
+use App\Models\Mcp\McpAgentTemplate;
+use App\Models\Mcp\McpWorkflow;
 use App\Models\Sales\ProspectingConfig;
 use App\Models\Site;
+use App\Services\mcp\WorkflowProvisioningService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -21,9 +23,7 @@ use Illuminate\Support\Str;
  */
 class AgentTemplateInstaller
 {
-    public function __construct(private readonly WorkflowProvisioningService $provisioning)
-    {
-    }
+    public function __construct(private readonly WorkflowProvisioningService $provisioning) {}
 
     public function install(Site $site, McpAgentTemplate $template): McpAgent
     {
@@ -48,8 +48,14 @@ class AgentTemplateInstaller
             if ($template->key === 'sales_hunter') {
                 ProspectingConfig::create([
                     'id' => (string) Str::uuid(), 'site_id' => $site->id, 'agent_id' => $agent->id,
-                    'icp' => [], 'objective' => $config['objective'] ?? 'generate_meetings',
-                    'limits' => ['max_prospects_per_campaign' => 50, 'max_new_prospects_per_day' => 20, 'max_outbound_actions_per_day' => 20],
+                    'icp' => [], 'sources' => ['openstreetmap'], 'objective' => $config['objective'] ?? 'generate_meetings',
+                    'limits' => [
+                        'max_prospects_per_campaign' => 50, 'max_prospects_per_run' => 50,
+                        'max_new_prospects_per_day' => 20, 'max_outbound_actions_per_day' => 20,
+                        'max_sources_per_run' => 3, 'max_pages_per_prospect' => 3,
+                        'max_requests_per_source' => 20, 'max_concurrent_jobs' => 5,
+                    ],
+                    'discovery_settings' => ['web_seed_urls' => []], 'minimum_score' => 70,
                     'autonomy_mode' => 'suggestion',
                     'is_active' => false,
                 ]);

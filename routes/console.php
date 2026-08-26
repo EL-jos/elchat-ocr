@@ -1,17 +1,19 @@
 <?php
 
-use App\Jobs\RunProspectingCampaignJob;
 use App\Jobs\Proactive\SendProactiveMessageJob;
+use App\Jobs\RunProspectingCampaignJob;
+use App\Jobs\SyncProspectToCrmJob;
 use App\Models\Proactive\ProactiveMessage;
+use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
-
 
 // IMAP polling — toutes les 5 minutes
 Schedule::command('email:sync-imap')
@@ -25,7 +27,6 @@ Schedule::command('email:renew-webhooks')
     ->hourly()
     ->withoutOverlapping(60)
     ->onOneServer();
-
 
 Schedule::command('youtube:sync-comments')
     ->everyFiveMinutes()        // ✅ pas everyMinute() — voir quota ci-dessous
@@ -56,22 +57,64 @@ Schedule::command('visitor-intelligence:prune')
 // que tout job planifié existant — driver `database`, workers Supervisor.
 Schedule::call(function () {
     ProspectingCampaign::where('next_run_at', '<=', now())
-        ->whereIn('status', ['scheduled', 'completed'])
-        ->get()
-        ->each(function (ProspectingCampaign $campaign) {
-            RunProspectingCampaignJob::dispatch($campaign->id);
+        ->whereIn('status', ['scheduled', 'completed', 'failed'])
+        ->pluck('id')
+        ->each(function (string $campaignId) {
+            $queued = DB::transaction(function () use ($campaignId) {
+                $campaign = ProspectingCampaign::whereKey($campaignId)->lockForUpdate()->first();
+                if (! $campaign || ! in_array($campaign->status, ['scheduled', 'completed', 'failed'], true) || ! $campaign->next_run_at?->isPast()) {
+                    return null;
+                }
 
-            $frequency = $campaign->schedule_snapshot['frequency'] ?? 'manual';
-            $time = $campaign->schedule_snapshot['time'] ?? '09:00';
-            $next = match ($frequency) {
-                'daily' => now()->addDay()->setTimeFromTimeString($time),
-                'every_2_days' => now()->addDays(2)->setTimeFromTimeString($time),
-                'weekly' => now()->addWeek()->setTimeFromTimeString($time),
-                default => null, // 'manual' : ne se replanifie jamais toute seule
-            };
-            $campaign->update(['next_run_at' => $next]);
+                $frequency = $campaign->schedule_snapshot['frequency'] ?? 'manual';
+                $time = $campaign->schedule_snapshot['time'] ?? '09:00';
+                $next = match ($frequency) {
+                    'daily' => now()->addDay()->setTimeFromTimeString($time),
+                    'every_2_days' => now()->addDays(2)->setTimeFromTimeString($time),
+                    'weekly' => now()->addWeek()->setTimeFromTimeString($time),
+                    default => null,
+                };
+                $campaign->update([
+                    'status' => 'running',
+                    'started_at' => now(),
+                    'completed_at' => null,
+                    'next_run_at' => $next,
+                    'stats' => array_merge($campaign->stats ?? [], [
+                        'last_run_trigger' => 'scheduled',
+                        'last_run_requested_at' => now()->toIso8601String(),
+                    ]),
+                ]);
+
+                return $campaign->id;
+            });
+
+            if (! $queued) {
+                return;
+            }
+
+            try {
+                RunProspectingCampaignJob::dispatch($queued, 'scheduled');
+            } catch (Throwable $exception) {
+                ProspectingCampaign::whereKey($queued)->update([
+                    'status' => 'failed',
+                    'completed_at' => now(),
+                    'stats' => array_merge(ProspectingCampaign::find($queued)?->stats ?? [], ['last_error' => $exception->getMessage()]),
+                ]);
+            }
         });
 })->everyMinute()->name('sales-hunter-campaign-scheduler')->withoutOverlapping()->onOneServer();
+
+// Reprend les prospects conservés localement lorsqu'un CRM était absent,
+// temporairement indisponible ou lorsqu'une adresse email a été complétée.
+Schedule::call(function () {
+    Prospect::query()
+        ->whereIn('crm_sync_status', ['pending_crm', 'pending_email', 'failed'])
+        ->whereIn('status', ['qualified', 'discovered'])
+        ->orderBy('updated_at')
+        ->limit(200)
+        ->pluck('id')
+        ->each(fn (string $id) => SyncProspectToCrmJob::dispatch($id));
+})->everyTenMinutes()->name('sales-hunter-crm-sync')->withoutOverlapping()->onOneServer();
 
 Schedule::call(function () {
     // Un worker peut être interrompu après le verrouillage DB et avant la

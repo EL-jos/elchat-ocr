@@ -77,6 +77,8 @@ class ProactiveWidgetController extends Controller
                 'resource_type' => 'proactive_message', 'resource_id' => $message->id, 'action' => 'open',
             ], ['campaign_id' => $message->campaign_id, 'sequence_id' => $message->sequence_id],
                 $this->analytics->deterministicKey('proactive_message_clicked', $message->id));
+            $this->captureAIEngagementEvent($site, $message, AnalyticsEventType::ENGAGEMENT_WIDGET_OPENED);
+            $this->captureAIEngagementEvent($site, $message, AnalyticsEventType::ENGAGEMENT_ACCEPTED);
         }
 
         return response()->json(['status' => 'opened']);
@@ -125,6 +127,11 @@ class ProactiveWidgetController extends Controller
             'resource_type' => 'proactive_message', 'resource_id' => $message->id,
         ], ['campaign_id' => $message->campaign_id, 'sequence_id' => $message->sequence_id],
             $this->analytics->deterministicKey($eventType, $message->id));
+        $this->captureAIEngagementEvent(
+            $site,
+            $message,
+            $data['action'] === 'unsubscribe' ? AnalyticsEventType::ENGAGEMENT_DISMISSED : AnalyticsEventType::ENGAGEMENT_REJECTED,
+        );
 
         return response()->json(['status' => $data['action']]);
     }
@@ -136,5 +143,26 @@ class ProactiveWidgetController extends Controller
         abort_unless($message->site_id === $site->id && $message->visitor_id === $visitor->id && $message->channel === 'website', 404);
 
         return [$visitor, $message];
+    }
+
+    private function captureAIEngagementEvent(Site $site, ProactiveMessage $message, AnalyticsEventType $type): void
+    {
+        $decisionId = data_get($message->metadata, 'ai_engagement_decision_id');
+        if (!$decisionId) return;
+        $this->analytics->capture(
+            $site,
+            $type,
+            [
+                'visitor_id' => $message->visitor_id,
+                'conversation_id' => $message->conversation_id,
+                'message_id' => $message->message_id,
+                'source' => 'ai_engagement',
+                'channel' => 'website',
+                'resource_type' => 'ai_engagement_decision',
+                'resource_id' => $decisionId,
+            ],
+            ['proactive_message_id' => $message->id],
+            $this->analytics->deterministicKey('ai-engagement-widget-event', $type->value, $message->id),
+        );
     }
 }

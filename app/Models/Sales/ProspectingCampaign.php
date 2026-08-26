@@ -16,16 +16,50 @@ class ProspectingCampaign extends Model
 
     protected $fillable = [
         'site_id', 'config_id', 'name', 'status', 'schedule_snapshot',
-        'next_run_at', 'started_at', 'completed_at', 'stats',
+        'sources_snapshot', 'configuration_snapshot', 'next_run_at', 'started_at', 'completed_at', 'stats',
     ];
 
     protected $casts = [
-        'schedule_snapshot' => 'array', 'stats' => 'array',
+        'schedule_snapshot' => 'array', 'sources_snapshot' => 'array', 'configuration_snapshot' => 'array', 'stats' => 'array',
         'next_run_at' => 'datetime', 'started_at' => 'datetime', 'completed_at' => 'datetime',
     ];
 
-    public function site(): BelongsTo { return $this->belongsTo(Site::class); }
-    public function config(): BelongsTo { return $this->belongsTo(ProspectingConfig::class, 'config_id'); }
-    public function prospects(): HasMany { return $this->hasMany(Prospect::class, 'campaign_id'); }
-    public function reports(): HasMany { return $this->hasMany(ProspectingReport::class, 'campaign_id'); }
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
+    }
+
+    public function config(): BelongsTo
+    {
+        return $this->belongsTo(ProspectingConfig::class, 'config_id');
+    }
+
+    public function prospects(): HasMany
+    {
+        return $this->hasMany(Prospect::class, 'campaign_id');
+    }
+
+    public function reports(): HasMany
+    {
+        return $this->hasMany(ProspectingReport::class, 'campaign_id');
+    }
+
+    public function runs(): HasMany
+    {
+        return $this->hasMany(ProspectingRun::class, 'campaign_id');
+    }
+
+    /** Configuration figée au moment de la création de la campagne. */
+    public function runtimeSettings(): array
+    {
+        return $this->configuration_snapshot ?: [
+            'icp' => $this->config?->icp ?? [],
+            'objective' => $this->config?->objective,
+            'sources' => $this->sources_snapshot ?: ($this->config?->sourceKeys() ?? []),
+            'limits' => $this->config?->limits ?? [],
+            'minimum_score' => $this->config?->minimum_score ?? 70,
+            'discovery_settings' => $this->config?->discovery_settings ?? [],
+            'crm_connector_slug' => $this->config?->crm_connector_slug,
+        ];
+    }
 }

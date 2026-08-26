@@ -2,8 +2,6 @@
 
 namespace App\Services\mcp;
 
-use App\Enums\AnalyticsAttributionType;
-use App\Enums\AnalyticsEventType;
 use App\Domain\MCP\Agent\AgentSkillResolver;
 use App\Domain\MCP\Agent\AgentSupervisor;
 use App\Domain\MCP\Audit\AuditLogger;
@@ -11,6 +9,7 @@ use App\Domain\MCP\Capability\CapabilityResolver;
 use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
 use App\Domain\MCP\Contracts\ToolResult;
 use App\Domain\MCP\Contracts\ToolSchema;
+use App\Domain\MCP\Exceptions\AuthExpiredException;
 use App\Domain\MCP\Exceptions\ConfirmationRequiredException;
 use App\Domain\MCP\Exceptions\ConnectorUnavailableException;
 use App\Domain\MCP\Exceptions\MCPException;
@@ -22,13 +21,15 @@ use App\Domain\MCP\Security\ActorContext;
 use App\Domain\MCP\Security\CredentialVault;
 use App\Domain\MCP\Security\PermissionEngine;
 use App\Domain\RAG\RAGToolAdapter;
+use App\Enums\AnalyticsAttributionType;
+use App\Enums\AnalyticsEventType;
 use App\Models\Conversation;
 use App\Models\Mcp\McpAgent;
 use App\Models\Mcp\McpPendingAction;
 use App\Models\Mcp\McpWorkflow;
 use App\Models\Site;
-use App\Services\cta\ChatResponse;
 use App\Services\analytics\AnalyticsEventService;
+use App\Services\cta\ChatResponse;
 use App\Services\MercureService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -38,6 +39,7 @@ use Throwable;
 class MCPActionGateService
 {
     private const MAX_HOPS = 6; // 🆕 relevé : chaînes plus longues possibles (recherche -> panier -> checkout)
+
     private int $maxHops;
 
     public function __construct(
@@ -79,6 +81,7 @@ class MCPActionGateService
         // marqué "par défaut", sinon le premier agent actif du site.
         if (empty($selected)) {
             $fallback = $activeAgents->firstWhere('is_default', true) ?? $activeAgents->first();
+
             return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $fallback, $intent);
         }
 
@@ -95,14 +98,16 @@ class MCPActionGateService
      */
     private function handleForAgent(
         Site $site, Conversation $conversation, ActorContext $actor, string $question, array $history,
-        array $permittedTools, ?\App\Models\Mcp\McpAgent $agent, ?string $intent,
+        array $permittedTools, ?McpAgent $agent, ?string $intent,
     ): MCPGateResult {
-        $agentAllowedNames = ($agent && !empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
+        $agentAllowedNames = ($agent && ! empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
         $scopedTools = $agentAllowedNames
             ? array_values(array_filter($permittedTools, fn ($t) => in_array($t->qualifiedName(), $agentAllowedNames, true)))
             : $permittedTools;
 
-        if (empty($scopedTools)) return MCPGateResult::notApplicable();
+        if (empty($scopedTools)) {
+            return MCPGateResult::notApplicable();
+        }
 
         $agentCallKey = $agent
             ? $this->analytics->deterministicKey('agent', $conversation->id, $agent->id, hash('sha256', $question))
@@ -161,7 +166,9 @@ class MCPActionGateService
         $runningHistory = $history; // 🆕 s'enrichit au fil des agents traités dans ce même tour
 
         foreach ($agents as $agent) {
-            if (in_array($agent->id, $processedAgentIds, true)) continue;
+            if (in_array($agent->id, $processedAgentIds, true)) {
+                continue;
+            }
             $processedAgentIds[] = $agent->id;
 
             $result = $this->handleForAgent($site, $conversation, $actor, $question, $runningHistory, $permittedTools, $agent, $intent);
@@ -184,9 +191,12 @@ class MCPActionGateService
             }
         }
 
-        if (empty($answers)) return MCPGateResult::notApplicable();
+        if (empty($answers)) {
+            return MCPGateResult::notApplicable();
+        }
 
         $mergedMessage = count($answers) === 1 ? $answers[0] : implode("\n\n", $answers);
+
         return MCPGateResult::finished(new ChatResponse(message: $mergedMessage, ctas: [], entities: [], suggestedActions: $suggestedActions), []);
     }
 
@@ -206,7 +216,7 @@ class MCPActionGateService
         // hors du périmètre qui avait motivé la confirmation.
         $agent = $pendingAction->agent_id ? McpAgent::find($pendingAction->agent_id) : null;
 
-        if (!$approved) {
+        if (! $approved) {
             $messages[] = ['role' => 'tool', 'tool_call_id' => $pendingAction->tool_call_id, 'content' => json_encode(['status' => 'declined'])];
         } else {
             $result = $this->executeAuthorized($site, $conversation, $actor, $pendingAction->connector_slug, $pendingAction->tool_name, $pendingAction->params, hop: 0, forced: true);
@@ -218,7 +228,7 @@ class MCPActionGateService
         }
 
         $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
-        $agentAllowedNames = ($agent && !empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
+        $agentAllowedNames = ($agent && ! empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
         $scopedTools = $agentAllowedNames
             ? array_values(array_filter($permittedTools, fn ($t) => in_array($t->qualifiedName(), $agentAllowedNames, true)))
             : $permittedTools;
@@ -273,12 +283,12 @@ class MCPActionGateService
                 // — critique pour les actions financières (generate_checkout,
                 // issue_refund...) — et on répond directement avec le résultat
                 // déjà obtenu au lieu de laisser la boucle tourner jusqu'à MAX_HOPS.
-                $callSignature = $connectorSlug . '.' . $toolName . ':' . md5(json_encode($args));
+                $callSignature = $connectorSlug.'.'.$toolName.':'.md5(json_encode($args));
 
                 if (isset($executedCalls[$callSignature])) {
                     $cached = $executedCalls[$callSignature];
                     $fallbackMessage = $cached->humanSummary ?: 'Cette action a déjà été effectuée avec succès.';
-                    if (!empty($cached->data['checkout_url'])) {
+                    if (! empty($cached->data['checkout_url'])) {
                         $fallbackMessage .= " Voici le lien de paiement : {$cached->data['checkout_url']}";
                     }
 
@@ -319,10 +329,10 @@ class MCPActionGateService
                 }
 
                 // 🆕 On ne met en cache que les VRAIS succès métier (ToolResult::success
-                    // === true), jamais un échec métier (out_of_stock, variation_required,
-                    // empty_cart...). Un échec doit toujours pouvoir être retenté par le LLM
-                    // après correction — seule une action réellement aboutie doit être protégée
-                    // contre une ré-exécution.
+                // === true), jamais un échec métier (out_of_stock, variation_required,
+                // empty_cart...). Un échec doit toujours pouvoir être retenté par le LLM
+                // après correction — seule une action réellement aboutie doit être protégée
+                // contre une ré-exécution.
                 if ($execution['status'] === 'success' && $execution['result']->success) {
                     $suggestedActions = array_merge(
                         $suggestedActions,
@@ -363,23 +373,29 @@ class MCPActionGateService
     {
         try {
             $result = $this->executeAuthorized($site, $conversation, $actor, $connectorSlug, $toolName, $params, $hop);
+
             return ['status' => 'success', 'result' => $result];
         } catch (ConfirmationRequiredException $e) {
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'confirm', 'awaiting_confirmation', conversationId: $conversation->id, hopNumber: $hop);
+
             return ['status' => 'awaiting_confirmation', 'confirm_actor' => $e->confirmActor];
         } catch (PermissionDeniedException $e) {
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'deny', 'denied', errorCode: 'permission_denied', conversationId: $conversation->id, hopNumber: $hop);
+
             return ['status' => 'denied', 'result' => ToolResult::fail('permission_denied', $e->getMessage())];
         } catch (ConnectorUnavailableException $e) {
             Log::warning("MCP connector_unavailable: {$e->getMessage()}", ['connector' => $connectorSlug, 'tool' => $toolName]);
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'auto', 'error', errorCode: 'connector_unavailable', conversationId: $conversation->id, hopNumber: $hop);
+
             return ['status' => 'error', 'result' => ToolResult::fail('connector_unavailable', "Le service {$connectorSlug} est momentanément indisponible.")];
         } catch (MCPException $e) {
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'auto', 'error', errorCode: $e->errorCode(), conversationId: $conversation->id, hopNumber: $hop);
+
             return ['status' => 'error', 'result' => ToolResult::fail($e->errorCode(), $e->getMessage())];
         } catch (Throwable $e) {
             Log::error("MCP hop non géré: {$e->getMessage()}", ['connector' => $connectorSlug, 'tool' => $toolName]);
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'auto', 'error', errorCode: 'unexpected', conversationId: $conversation->id, hopNumber: $hop);
+
             return ['status' => 'error', 'result' => ToolResult::fail('unexpected', 'Une erreur technique est survenue.')];
         }
     }
@@ -415,7 +431,7 @@ class MCPActionGateService
         );
         $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_STARTED, $callKey, $connectorSlug, $toolName);
 
-        if (!$forced) {
+        if (! $forced) {
             try {
                 $this->permissions->authorize($site, $actor, $connectorSlug, $toolName);
             } catch (Throwable $exception) {
@@ -427,6 +443,7 @@ class MCPActionGateService
         $credentials = $this->vault->retrieve($site, $connectorSlug);
         if ($credentials === null) {
             $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'not_connected');
+
             return ToolResult::fail('not_connected', "Le connecteur {$connectorSlug} n'est pas configuré pour ce site.");
         }
 
@@ -437,7 +454,7 @@ class MCPActionGateService
             if ($freshCredentials !== $credentials) {
                 $this->vault->refresh($site, $connectorSlug, $freshCredentials);
             }
-        } catch (\App\Domain\MCP\Exceptions\AuthExpiredException $e) {
+        } catch (AuthExpiredException $e) {
             $this->vault->markAuthExpired($site, $connectorSlug, $e->getMessage());
             $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'auth_expired');
             throw $e;
@@ -480,7 +497,7 @@ class MCPActionGateService
         // payable). Isolés dans leur propre try/catch : une erreur ici est
         // loggée, jamais propagée — sinon le LLM croit que l'action a échoué et
         // la retente, au risque de créer une 2e commande pour de vrai.
-        if ($result->success && !empty($result->cartSync)) {
+        if ($result->success && ! empty($result->cartSync)) {
             try {
                 $this->notifyCartSync($site, $conversation, $result->cartSync);
             } catch (Throwable $e) {
@@ -591,7 +608,7 @@ class MCPActionGateService
             default => null,
         };
 
-        if (!$eventType) {
+        if (! $eventType) {
             return;
         }
 
@@ -628,15 +645,20 @@ class MCPActionGateService
         $schemas = [];
 
         foreach ($activeSlugs as $slug) {
-            if (!$this->registry->has($slug)) continue;
+            if (! $this->registry->has($slug)) {
+                continue;
+            }
             $connector = $this->registry->get($slug);
 
             // 🆕 Connecteur à outils dynamiques (Odoo) : filtre selon les modules
             // réellement installés sur l'instance de ce site.
             if ($connector instanceof ProvidesSiteScopedTools) {
                 $credentials = $this->vault->retrieve($site, $slug);
-                if (!$credentials) continue;
+                if (! $credentials) {
+                    continue;
+                }
                 array_push($schemas, ...$connector->toolsAvailableFor($credentials));
+
                 continue;
             }
 
@@ -728,7 +750,7 @@ demande explicite — n'agis ainsi que si le signal est net et que l'action est 
 duplique jamais une action déjà réalisée dans cette même conversation.
 N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
-PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllowedNames, $agentWorkflowIds);
+PROMPT.$this->agentPersona($agent).$this->workflowGuidance($site, $agentAllowedNames, $agentWorkflowIds);
     }
 
     private function thinkingLabelFor(string $connectorSlug, string $toolName): string
@@ -775,7 +797,7 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
                 'function' => [
                     'name' => 'control__no_action_needed',
                     'description' => "Appelle cet outil si le message du visiteur ne correspond à AUCUNE action réalisable avec les outils disponibles (question d'information générale). N'appelle jamais un autre outil en même temps que celui-ci.",
-                    'parameters' => ['type' => 'object', 'properties' => new \stdClass()],
+                    'parameters' => ['type' => 'object', 'properties' => new \stdClass],
                 ],
             ],
             [
@@ -806,7 +828,7 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
 
         // 🆕 Un lien de paiement n'est pas une action à ré-exécuter via un
         // message : c'est une URL à ouvrir directement.
-        if ($toolName === 'generate_checkout' && !empty($resultData['checkout_url'])) {
+        if ($toolName === 'generate_checkout' && ! empty($resultData['checkout_url'])) {
             return [['label' => '💳 Payer maintenant', 'url' => $resultData['checkout_url']]];
         }
 
@@ -873,7 +895,7 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
      */
     private function workflowGuidance(Site $site, array $allowedToolNames = [], ?array $agentWorkflowIds = null): string
     {
-        $workflows = \App\Models\Mcp\McpWorkflow::where('is_active', true)
+        $workflows = McpWorkflow::where('is_active', true)
             ->where(fn ($q) => $q->where('site_id', $site->id)->orWhereNull('site_id'))
             ->get()
             ->groupBy('slug')
@@ -890,22 +912,30 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
 
             foreach ($workflow->steps as $step) {
                 $toolName = $this->capabilities->resolveToolName($site, $step['capability']);
-                $outOfAgentScope = !empty($allowedToolNames) && $toolName && !in_array($toolName, $allowedToolNames, true); // 🆕
+                $outOfAgentScope = ! empty($allowedToolNames) && $toolName && ! in_array($toolName, $allowedToolNames, true); // 🆕
 
-                if (!$toolName || $outOfAgentScope) {
-                    if (empty($step['optional'])) { $blocked = true; break; }
+                if (! $toolName || $outOfAgentScope) {
+                    if (empty($step['optional'])) {
+                        $blocked = true;
+                        break;
+                    }
+
                     continue;
                 }
                 $steps[] = $toolName;
             }
 
-            if ($blocked || empty($steps)) continue;
-            $lines[] = "- « {$workflow->name} » (déclenchée quand : {$workflow->trigger_description}) : " . implode(' → ', $steps);
+            if ($blocked || empty($steps)) {
+                continue;
+            }
+            $lines[] = "- « {$workflow->name} » (déclenchée quand : {$workflow->trigger_description}) : ".implode(' → ', $steps);
         }
 
-        if (empty($lines)) return '';
+        if (empty($lines)) {
+            return '';
+        }
 
-        return "\n\nWorkflows recommandés pour ce site (suis cette séquence quand la demande du visiteur correspond au déclencheur décrit, en gardant la liberté d'adapter — sauter une étape non pertinente, demander une précision manquante, ou continuer au-delà si besoin) :\n" . implode("\n", $lines);
+        return "\n\nWorkflows recommandés pour ce site (suis cette séquence quand la demande du visiteur correspond au déclencheur décrit, en gardant la liberté d'adapter — sauter une étape non pertinente, demander une précision manquante, ou continuer au-delà si besoin) :\n".implode("\n", $lines);
     }
 
     /**
@@ -926,7 +956,7 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
      */
     private function applyAgentScope(Site $site, array $tools, ?McpAgent $agent): array
     {
-        if (!$agent || empty($agent->skills)) {
+        if (! $agent || empty($agent->skills)) {
             return $tools;
         }
 
@@ -937,14 +967,16 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
 
     private function agentPersona(?McpAgent $agent): string
     {
-        if (!$agent) return '';
+        if (! $agent) {
+            return '';
+        }
 
         $toneInstructions = match ($agent->tone) {
-            'friendly' => "Adopte un ton chaleureux et décontracté, comme un ami de confiance.",
-            'concise' => "Sois le plus concis possible, va droit au but, phrases courtes.",
+            'friendly' => 'Adopte un ton chaleureux et décontracté, comme un ami de confiance.',
+            'concise' => 'Sois le plus concis possible, va droit au but, phrases courtes.',
             'enthusiastic' => "Sois enthousiaste et engageant, transmets de l'énergie positive.",
             'custom' => $agent->custom_tone_instructions ?? '',
-            default => "Adopte un ton professionnel et posé.",
+            default => 'Adopte un ton professionnel et posé.',
         };
 
         $objective = $agent->objective ? "Ton objectif principal : {$agent->objective}." : '';
@@ -958,10 +990,19 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
      * décide s'il faut l'appeler (ex: CrmColdContactSource). Même chemin
      * qu'un appel normal : permissions, vault, audit.
      */
-    public function executeToolDirectly(Site $site, Conversation $conversation, string $qualifiedToolName, array $params): ToolResult
+    public function executeToolDirectly(
+        Site $site,
+        Conversation $conversation,
+        string $qualifiedToolName,
+        array $params,
+        bool $systemActor = false,
+    ): ToolResult
     {
-        $actor = ActorContext::fromConversation($conversation);
+        $actor = $systemActor
+            ? ActorContext::forSystem($conversation)
+            : ActorContext::fromConversation($conversation);
         ['connector' => $connectorSlug, 'tool' => $toolName] = ToolSchema::fromQualifiedName($qualifiedToolName);
+
         return $this->executeAuthorized($site, $conversation, $actor, $connectorSlug, $toolName, $params, hop: 0);
     }
 
@@ -970,9 +1011,18 @@ PROMPT . $this->agentPersona($agent) . $this->workflowGuidance($site, $agentAllo
      * pour un agent déclenché par un job planifié (AI Sales Hunter) plutôt
      * qu'un message visiteur en direct : on SAIT déjà quel agent doit traiter.
      */
-    public function runForAgent(Site $site, Conversation $conversation, McpAgent $agent, string $question, array $history = [], ?string $intent = null): MCPGateResult
-    {
-        $actor = ActorContext::fromConversation($conversation);
+    public function runForAgent(
+        Site $site,
+        Conversation $conversation,
+        McpAgent $agent,
+        string $question,
+        array $history = [],
+        ?string $intent = null,
+        bool $systemActor = false,
+    ): MCPGateResult {
+        $actor = $systemActor
+            ? ActorContext::forSystem($conversation)
+            : ActorContext::fromConversation($conversation);
         $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
 
         return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $agent, $intent);

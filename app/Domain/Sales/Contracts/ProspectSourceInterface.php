@@ -16,11 +16,6 @@ use Illuminate\Support\Collection;
  * qualification) — permet à la source d'exécuter des appels d'outils via
  * MCPActionGateService::executeToolDirectly() en réutilisant permissions +
  * audit, sans qu'un LLM décide s'il faut chercher (c'est déjà décidé).
- *
- * V1 : seule CrmColdContactSource est implémentée (voir architecture,
- * §9 — aucun scraping, uniquement des sources déjà autorisées/disponibles).
- * GooglePlacesProspectSource / WebsiteProspectSource / SocialProspectSource
- * s'ajoutent plus tard sans toucher au moteur.
  */
 interface ProspectSourceInterface
 {
@@ -28,8 +23,10 @@ interface ProspectSourceInterface
     public function key(): string;
 
     /**
-     * @param array $icp {sector, company_type, location, company_size, custom_criteria}
-     * @return Collection<int, array> candidats bruts : {name?, company?, website?, domain?, email?, phone?, location?, sector?, crm_ref?}
+     * @param  array  $icp  {sector, company_type, location, company_size, custom_criteria}
+     * @param  array  $options  limites et paramètres propres à la campagne/source
+     * @return Collection<int, array> candidats bruts. Chaque source peut
+     *                                ajouter external_key, source_url et evidence pour conserver la preuve.
      */
-    public function discover(Site $site, Conversation $conversation, array $icp, int $limit): Collection;
+    public function discover(Site $site, Conversation $conversation, array $icp, int $limit, array $options = []): Collection;
 }

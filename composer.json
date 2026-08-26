@@ -22,6 +22,7 @@
         "opcodesio/log-viewer": "^3.24",
         "phpoffice/phpspreadsheet": "^5.4",
         "phpoffice/phpword": "^1.4",
+        "romanzipp/laravel-queue-monitor": "^5.4",
         "smalot/pdfparser": "^2.12",
         "socialiteproviders/slack": "^5.2",
         "spatie/opening-hours": "^4.2",

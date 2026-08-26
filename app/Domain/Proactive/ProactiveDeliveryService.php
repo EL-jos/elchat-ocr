@@ -118,8 +118,9 @@ class ProactiveDeliveryService
                     'workflow_id' => $message->workflow_id, 'source' => 'proactive', 'channel' => $message->channel,
                     'resource_type' => 'proactive_message', 'resource_id' => $message->id,
                 ], ['campaign_id' => $message->campaign_id, 'sequence_id' => $message->sequence_id],
-                    $this->analytics->deterministicKey('proactive_message_delivered', $message->id));
+                     $this->analytics->deterministicKey('proactive_message_delivered', $message->id));
             }
+            $this->captureAIEngagementEvent($site, $message, AnalyticsEventType::ENGAGEMENT_MESSAGE_SENT);
             $this->auditMessage($message, 'message_sent', 'delivery_accepted', ['provider' => $result['provider']]);
         } catch (Throwable $exception) {
             $this->retryOrFail($message, $exception);
@@ -263,7 +264,8 @@ class ProactiveDeliveryService
                 'workflow_id' => $message->workflow_id, 'source' => 'proactive', 'channel' => $message->channel,
                 'resource_type' => 'proactive_message', 'resource_id' => $message->id,
             ], ['campaign_id' => $message->campaign_id, 'sequence_id' => $message->sequence_id, 'recovered' => true],
-                $this->analytics->deterministicKey('proactive_message_sent', $message->id));
+                 $this->analytics->deterministicKey('proactive_message_sent', $message->id));
+            $this->captureAIEngagementEvent($site, $message, AnalyticsEventType::ENGAGEMENT_MESSAGE_SENT);
         }
     }
 
@@ -273,5 +275,27 @@ class ProactiveDeliveryService
             'account_id' => $message->account_id, 'site_id' => $message->site_id,
             'campaign_id' => $message->campaign_id, 'sequence_id' => $message->sequence_id, 'message_id' => $message->id,
         ], $reason, metadata: $metadata);
+    }
+
+    private function captureAIEngagementEvent($site, ProactiveMessage $message, AnalyticsEventType $type): void
+    {
+        $decisionId = data_get($message->metadata, 'ai_engagement_decision_id');
+        if (!$decisionId || !$site) return;
+
+        $this->analytics->capture(
+            $site,
+            $type,
+            [
+                'visitor_id' => $message->visitor_id,
+                'conversation_id' => $message->conversation_id,
+                'message_id' => $message->message_id,
+                'source' => 'ai_engagement',
+                'channel' => $message->channel,
+                'resource_type' => 'ai_engagement_decision',
+                'resource_id' => $decisionId,
+            ],
+            ['proactive_message_id' => $message->id],
+            $this->analytics->deterministicKey('ai-engagement-message-event', $type->value, $message->id),
+        );
     }
 }

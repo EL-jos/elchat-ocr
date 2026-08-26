@@ -39,6 +39,7 @@ return [
         // fournisseur LLM pour toute l'application, y compris MCP.
         'api_key' => env('OPENROUTER_API_KEY'),
         'model' => env('MCP_LLM_MODEL', 'openai/gpt-4.1-mini'),
+        'fallback_model' => env('MCP_LLM_FALLBACK_MODEL', 'deepseek/deepseek-chat-v3.1'),
     ],
 
     /*

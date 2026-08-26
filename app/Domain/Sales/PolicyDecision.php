@@ -4,9 +4,7 @@ namespace App\Domain\Sales;
 
 final readonly class PolicyDecision
 {
-    private function __construct(public bool $allowed, public ?string $reasonCode = null, public ?string $message = null)
-    {
-    }
+    private function __construct(public bool $allowed, public ?string $reasonCode = null, public ?string $message = null) {}
 
     public static function allow(): self
     {

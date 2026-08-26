@@ -28,7 +28,7 @@ class ProactiveSequenceService
     {
         // Les événements émis par le moteur lui-même ne doivent jamais
         // ré-entrer dans l'évaluation des triggers (Agent → message → Agent).
-        if (str_starts_with($event->event_type, 'proactive_') || $event->source === 'proactive' || data_get($event->metadata, 'proactive_message_id')) return [];
+        if (str_starts_with($event->event_type, 'proactive_') || str_starts_with($event->event_type, 'engagement_') || in_array($event->source, ['proactive', 'ai_engagement'], true) || data_get($event->metadata, 'proactive_message_id')) return [];
 
         $triggers = ProactiveTrigger::query()
             ->with(['campaign.agent'])
@@ -83,7 +83,7 @@ class ProactiveSequenceService
         return $created;
     }
 
-    public function scheduleManual(ProactiveCampaign $campaign, array $target, ?string $content = null, ?string $idempotencyKey = null): ProactiveMessage
+    public function scheduleManual(ProactiveCampaign $campaign, array $target, ?string $content = null, ?string $idempotencyKey = null, array $metadata = []): ProactiveMessage
     {
         $conversation = !empty($target['conversation_id'])
             ? Conversation::query()->where('site_id', $campaign->site_id)->findOrFail($target['conversation_id'])
@@ -114,7 +114,7 @@ class ProactiveSequenceService
         $idempotencyKey ??= hash('sha256', implode('|', ['manual', $campaign->id, $conversation?->id ?? '-', $socialId ?? '-', now()->format('YmdHi')]));
         $scheduledAt = $this->schedule->nextAllowedAt($campaign, CarbonImmutable::parse($target['scheduled_at'] ?? now()));
 
-        $message = DB::transaction(function () use ($campaign, $conversation, $visitorId, $socialId, $content, $idempotencyKey, $scheduledAt) {
+        $message = DB::transaction(function () use ($campaign, $conversation, $visitorId, $socialId, $content, $idempotencyKey, $scheduledAt, $metadata) {
             $sequence = ProactiveSequence::query()->firstOrCreate(
                 ['site_id' => $campaign->site_id, 'idempotency_key' => $idempotencyKey],
                 [
@@ -130,7 +130,7 @@ class ProactiveSequenceService
                 ],
             );
 
-            return $this->firstMessage($campaign, $sequence, $scheduledAt, $content, hash('sha256', $idempotencyKey.'|1'));
+            return $this->firstMessage($campaign, $sequence, $scheduledAt, $content, hash('sha256', $idempotencyKey.'|1'), $metadata);
         });
 
         if ($message->scheduled_at->lte(now())) {
@@ -157,6 +157,28 @@ class ProactiveSequenceService
         }
 
         return $message;
+    }
+
+    /**
+     * AI Engagement is a decision layer over the existing proactive engine.
+     * It deliberately enters through the same sequence/message tables and
+     * delivery job as a manually configured proactive campaign.
+     */
+    public function scheduleAIEngagement(
+        ProactiveCampaign $campaign,
+        Conversation $conversation,
+        ?string $visitorId,
+        string $content,
+        string $idempotencyKey,
+        array $metadata = [],
+    ): ProactiveMessage {
+        return $this->scheduleManual(
+            $campaign,
+            ['conversation_id' => $conversation->id, 'visitor_id' => $visitorId, 'scheduled_at' => now()->toISOString()],
+            $content,
+            $idempotencyKey,
+            $metadata,
+        );
     }
 
     private function createFromTrigger(ProactiveTrigger $trigger, AnalyticsEvent $event): ?ProactiveMessage
@@ -260,7 +282,7 @@ class ProactiveSequenceService
         return $message;
     }
 
-    private function firstMessage(ProactiveCampaign $campaign, ProactiveSequence $sequence, CarbonImmutable $scheduledAt, ?string $content, string $key): ProactiveMessage
+    private function firstMessage(ProactiveCampaign $campaign, ProactiveSequence $sequence, CarbonImmutable $scheduledAt, ?string $content, string $key, array $metadata = []): ProactiveMessage
     {
         return ProactiveMessage::query()->firstOrCreate(
             ['site_id' => $campaign->site_id, 'idempotency_key' => $key],
@@ -277,7 +299,11 @@ class ProactiveSequenceService
                 'step' => 1,
                 'content' => $content,
                 'scheduled_at' => $scheduledAt,
-                'metadata' => ['widget_behavior' => $campaign->widget_behavior, 'priority' => $campaign->priority],
+                'metadata' => [
+                    'widget_behavior' => $campaign->widget_behavior,
+                    'priority' => $campaign->priority,
+                    ...$metadata,
+                ],
             ],
         );
     }

@@ -475,6 +475,8 @@ class SiteController extends Controller
                     'offsetX'    => $settings->button_offset_x,
                     'offsetY'    => $settings->button_offset_y,
                 ],
+                'ai_engagement_enabled' => (bool) $settings->ai_engagement_enabled,
+                'ai_engagement_widget_behavior' => $settings->ai_engagement_widget_behavior ?: 'notification_only',
             ],
         ]);
     }

@@ -19,6 +19,13 @@ class ProspectMessage extends Model
         'in_reply_to_external_id',
     ];
 
-    public function prospect(): BelongsTo { return $this->belongsTo(Prospect::class, 'prospect_id'); }
-    public function message(): BelongsTo { return $this->belongsTo(Message::class); }
+    public function prospect(): BelongsTo
+    {
+        return $this->belongsTo(Prospect::class, 'prospect_id');
+    }
+
+    public function message(): BelongsTo
+    {
+        return $this->belongsTo(Message::class);
+    }
 }

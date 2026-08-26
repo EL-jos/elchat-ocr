@@ -131,54 +131,52 @@ class VisitorIntelligenceQueryService
     public function sessionDetail(Site $site, string $sessionId): array
     {
         $session = VisitorSession::query()->where('site_id', $site->id)->with(['summary', 'visitor'])->findOrFail($sessionId);
-        // Timestamps can legitimately be identical when the browser flushes a
-        // batch. Keep a stable secondary order so frame_index and the replay
-        // animation never change between two reads of the same session.
         $events = AnalyticsEvent::query()
             ->where('site_id', $site->id)
             ->where('session_id', $session->session_key)
-            ->orderBy('occurred_at', 'asc')
-            ->orderBy('created_at', 'asc')
-            ->orderBy('id', 'asc')
-            ->get();
+            ->orderBy('occurred_at')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get(['id', 'event_type', 'resource_type', 'resource_id', 'label', 'metadata', 'conversation_id', 'occurred_at']);
         $conversationIds = $events->pluck('conversation_id')->filter()->unique()->values();
-        $conversations = Conversation::query()->where('site_id', $site->id)->whereIn('id', $conversationIds)->withCount('messages')->get(['id', 'site_id', 'visitor_id', 'status', 'summary', 'created_at', 'updated_at']);
+        $conversations = Conversation::query()
+            ->where('site_id', $site->id)
+            ->whereIn('id', $conversationIds)
+            ->withCount('messages')
+            ->get(['id', 'site_id', 'visitor_id', 'status', 'summary', 'created_at', 'updated_at']);
         $legacyFrameFiles = $this->legacyFrameFiles($site, $session);
 
         return [
             'session' => $session,
             'summary' => $session->summary,
-            'timeline' => $events->map(function ($event) use ($legacyFrameFiles) {
+            'timeline' => $events->map(function (AnalyticsEvent $event) use ($legacyFrameFiles): array {
                 $metadata = $event->metadata ?? [];
                 $label = $this->nullableReplayText($event->label);
                 foreach (['path', 'title', 'target', 'reason', 'end_reason'] as $key) {
                     if (array_key_exists($key, $metadata)) $metadata[$key] = $this->nullableReplayText($metadata[$key]);
                 }
                 $screenshotPath = $metadata['screenshot_path'] ?? null;
-                if (
-                    empty($screenshotPath)
-                    && empty($metadata['screenshot_url'])
-                    && $legacyFrameFiles
-                ) {
+                if (empty($screenshotPath) && empty($metadata['screenshot_url']) && $legacyFrameFiles) {
                     $screenshotPath = $this->legacyFramePathForEvent($metadata, $legacyFrameFiles);
                     if ($screenshotPath) $metadata['screenshot_path'] = $screenshotPath;
                 }
-                if (
-                    empty($metadata['screenshot_url'])
-                    && is_string($screenshotPath)
-                    && str_starts_with($screenshotPath, 'visitor-intelligence/frames/')
-                ) {
+                if (empty($metadata['screenshot_url']) && is_string($screenshotPath) && str_starts_with($screenshotPath, 'visitor-intelligence/frames/')) {
                     $metadata['screenshot_url'] = Storage::disk(
                         (string) config('visitor-intelligence.frame_storage_disk', 'public')
                     )->url($screenshotPath);
                 }
 
                 return [
-                    'id' => $event->id, 'event_type' => $event->event_type, 'resource_type' => $event->resource_type,
-                    'resource_id' => $event->resource_id, 'label' => $label, 'metadata' => $metadata,
-                    'conversation_id' => $event->conversation_id, 'occurred_at' => $event->occurred_at?->toISOString(),
+                    'id' => $event->id,
+                    'event_type' => $event->event_type,
+                    'resource_type' => $event->resource_type,
+                    'resource_id' => $event->resource_id,
+                    'label' => $label,
+                    'metadata' => $metadata,
+                    'conversation_id' => $event->conversation_id,
+                    'occurred_at' => $event->occurred_at?->toISOString(),
                 ];
-            })->values(),
+            })->values()->all(),
             'conversations' => $conversations,
         ];
     }
@@ -257,12 +255,28 @@ class VisitorIntelligenceQueryService
         [$from, $to] = $this->period($filters);
         $sessionIds = $this->sessionQuery($site, $from, $to, $filters)->pluck('id');
         $sessionKeys = VisitorSession::query()->whereIn('id', $sessionIds)->pluck('session_key');
-        $events = AnalyticsEvent::query()->where('site_id', $site->id)->whereIn('session_id', $sessionKeys)->whereIn('event_type', [AnalyticsEventType::PAGE_VIEW->value, AnalyticsEventType::NAVIGATION->value])->orderBy('occurred_at')->get(['session_id', 'event_type', 'metadata']);
+        $events = AnalyticsEvent::query()
+            ->where('site_id', $site->id)
+            ->whereIn('session_id', $sessionKeys)
+            ->whereIn('event_type', [AnalyticsEventType::PAGE_VIEW->value, AnalyticsEventType::NAVIGATION->value])
+            ->orderBy('occurred_at')
+            ->get(['session_id', 'event_type', 'metadata']);
         $paths = $events->groupBy('session_id')->map(fn ($rows) => $rows->map(fn ($row) => data_get($row->metadata, 'path'))->filter()->unique()->take(12)->implode(' > '))->filter();
         $frequent = $paths->countBy()->sortDesc()->take(20)->map(fn ($count, $path) => ['path' => $path, 'sessions' => $count])->values()->all();
         $convertedSessions = VisitorSession::query()->whereIn('id', $sessionIds)->where('converted', true)->pluck('session_key');
         $conversionPaths = $paths->only($convertedSessions->all())->countBy()->sortDesc()->take(20)->map(fn ($count, $path) => ['path' => $path, 'sessions' => $count])->values()->all();
-        $dropOff = VisitorSession::query()->whereIn('id', $sessionIds)->where('converted', false)->whereNotNull('exit_url')->select('exit_url', DB::raw('COUNT(*) as sessions'))->groupBy('exit_url')->orderByDesc('sessions')->limit(20)->get()->map(fn ($row) => ['page' => $row->exit_url, 'sessions' => (int) $row->sessions])->values()->all();
+        $dropOff = VisitorSession::query()
+            ->whereIn('id', $sessionIds)
+            ->where('converted', false)
+            ->whereNotNull('exit_url')
+            ->select('exit_url', DB::raw('COUNT(*) as sessions'))
+            ->groupBy('exit_url')
+            ->orderByDesc('sessions')
+            ->limit(20)
+            ->get()
+            ->map(fn ($row) => ['page' => $row->exit_url, 'sessions' => (int) $row->sessions])
+            ->values()
+            ->all();
         $journeyEvents = AnalyticsEvent::query()->where('site_id', $site->id)->whereIn('session_id', $sessionKeys);
         $funnel = [
             ['key' => 'sessions', 'label' => 'Sessions', 'sessions' => $sessionIds->count()],

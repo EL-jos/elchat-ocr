@@ -5,6 +5,7 @@ namespace App\Domain\Sales;
 use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
 use App\Models\Sales\ProspectingConfig;
+use App\Models\Sales\ProspectMessage;
 
 /**
  * Implémente la checklist du §21 du cahier des charges. N'exécute rien
@@ -20,11 +21,11 @@ class ProspectingPolicyEngine
 
     public function canDiscover(ProspectingConfig $config, ProspectingCampaign $campaign): PolicyDecision
     {
-        if (!$config->is_active) {
-            return PolicyDecision::deny('config_inactive', "Configuration de prospection désactivée.");
+        if (! $config->is_active) {
+            return PolicyDecision::deny('config_inactive', 'Configuration de prospection désactivée.');
         }
-        if (!$config->agent->is_active) {
-            return PolicyDecision::deny('agent_inactive', "Agent Sales Hunter désactivé sur ce site.");
+        if (! $config->agent->is_active) {
+            return PolicyDecision::deny('agent_inactive', 'Agent Sales Hunter désactivé sur ce site.');
         }
 
         $alreadyToday = Prospect::where('campaign_id', $campaign->id)
@@ -40,8 +41,8 @@ class ProspectingPolicyEngine
 
     public function canContact(ProspectingConfig $config, Prospect $prospect): PolicyDecision
     {
-        if (!$prospect->isContactable()) {
-            return PolicyDecision::deny('do_not_contact', "Ce prospect a demandé à ne plus être contacté.");
+        if (! $prospect->isContactable()) {
+            return PolicyDecision::deny('do_not_contact', 'Ce prospect a demandé à ne plus être contacté.');
         }
 
         // Distinct de do_not_contact : ici c'est l'ADRESSE qui est invalide
@@ -50,11 +51,11 @@ class ProspectingPolicyEngine
             return PolicyDecision::deny('invalid_email_address', "L'adresse email de ce prospect a généré un {$this->emailStatusLabel($prospect->email_status)} — contact bloqué.");
         }
 
-        if (!$this->withinAllowedHours($config)) {
-            return PolicyDecision::deny('outside_allowed_hours', "Hors des horaires de prospection autorisés.");
+        if (! $this->withinAllowedHours($config)) {
+            return PolicyDecision::deny('outside_allowed_hours', 'Hors des horaires de prospection autorisés.');
         }
 
-        $sentToday = \App\Models\Sales\ProspectMessage::whereHas('prospect', fn ($q) => $q->where('campaign_id', $prospect->campaign_id))
+        $sentToday = ProspectMessage::whereHas('prospect', fn ($q) => $q->where('campaign_id', $prospect->campaign_id))
             ->where('direction', 'outbound')->whereIn('status', ['approved', 'accepted', 'delivered'])
             ->whereDate('created_at', today())->count();
         $dailyLimit = $config->limitFor('max_outbound_actions_per_day', 20);
@@ -75,9 +76,12 @@ class ProspectingPolicyEngine
     private function withinAllowedHours(ProspectingConfig $config): bool
     {
         $allowed = $config->limits['allowed_hours'] ?? null;
-        if (!$allowed) return true;
+        if (! $allowed) {
+            return true;
+        }
 
         $currentHour = (int) now()->format('H');
+
         return $currentHour >= ($allowed['from'] ?? 0) && $currentHour < ($allowed['to'] ?? 24);
     }
 
