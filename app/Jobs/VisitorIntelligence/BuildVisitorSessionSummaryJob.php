@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\VisitorIntelligence;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\VisitorSession;
 use App\Services\VisitorIntelligence\VisitorIntelligenceSummaryService;
@@ -15,6 +16,7 @@ use Throwable;
 
 class BuildVisitorSessionSummaryJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;

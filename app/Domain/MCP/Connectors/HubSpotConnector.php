@@ -122,7 +122,8 @@ class HubSpotConnector extends AbstractConnector
                 'properties' => [
                     'firstname' => ['type' => 'string'], 'lastname' => ['type' => 'string'],
                     'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company' => ['type' => 'string'],
-                ], 'required' => ['email'],
+                    'address' => ['type' => 'string'], 'website' => ['type' => 'string'],
+                ], 'anyOf' => [['required' => ['email']], ['required' => ['phone']]],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_or_update_contact'),
 
             new ToolSchema('hubspot', 'find_contact',
@@ -156,7 +157,9 @@ class HubSpotConnector extends AbstractConnector
             $contact = $this->client($c)->post('/crm/v3/objects/contacts', [
                 'properties' => array_filter([
                     'firstname' => $p['firstname'] ?? null, 'lastname' => $p['lastname'] ?? null,
-                    'email' => $p['email'], 'phone' => $p['phone'] ?? null, 'company' => $p['company'] ?? null,
+                    'email' => $p['email'] ?? null, 'phone' => $p['phone'] ?? null,
+                    'company' => $p['company'] ?? null, 'address' => $p['address'] ?? null,
+                    'website' => $p['website'] ?? null,
                 ]),
             ])->json();
         } catch (RequestException $e) {
@@ -168,9 +171,9 @@ class HubSpotConnector extends AbstractConnector
         $this->recordSuccess();
 
         return ToolResult::ok(
-            ['contact_id' => $contact['id'], 'email' => $p['email']],
+            ['contact_id' => $contact['id'], 'email' => $p['email'] ?? null],
             'Contact créé.',
-            identity: ['email' => $p['email'], 'firstname' => $p['firstname'] ?? null, 'lastname' => $p['lastname'] ?? null, 'phone' => $p['phone'] ?? null],
+            identity: ['email' => $p['email'] ?? null, 'firstname' => $p['firstname'] ?? null, 'lastname' => $p['lastname'] ?? null, 'phone' => $p['phone'] ?? null],
         );
     }
 

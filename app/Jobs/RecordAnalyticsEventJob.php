@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Services\analytics\AnalyticsEventService;
 use Illuminate\Bus\Queueable;
@@ -13,6 +14,7 @@ use Throwable;
 
 class RecordAnalyticsEventJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 5;

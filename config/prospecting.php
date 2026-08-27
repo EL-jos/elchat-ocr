@@ -61,7 +61,7 @@ return [
         'max_results' => (int) env('PROSPECTING_WEB_SEARCH_MAX_RESULTS', 5),
         'max_total_results' => (int) env('PROSPECTING_WEB_SEARCH_MAX_TOTAL_RESULTS', 15),
         'completion_enabled' => (bool) env('PROSPECTING_WEB_COMPLETION_ENABLED', true),
-        'completion_max_results' => (int) env('PROSPECTING_WEB_COMPLETION_MAX_RESULTS', 3),
-        'completion_max_total_results' => (int) env('PROSPECTING_WEB_COMPLETION_MAX_TOTAL_RESULTS', 10),
+        'completion_max_results' => (int) env('PROSPECTING_WEB_COMPLETION_MAX_RESULTS', 2),
+        'completion_max_total_results' => (int) env('PROSPECTING_WEB_COMPLETION_MAX_TOTAL_RESULTS', 5),
     ],
 ];

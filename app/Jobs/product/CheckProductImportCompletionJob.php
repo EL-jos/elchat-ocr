@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\product;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\ProductImport;
 use App\Services\MercureService;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class CheckProductImportCompletionJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**

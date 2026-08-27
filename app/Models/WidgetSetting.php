@@ -11,6 +11,8 @@ class WidgetSetting extends BaseModel
     protected $casts = [
         'widget_enabled' => 'boolean',
         'ai_enabled' => 'boolean',
+        'auto_open_enabled' => 'boolean',
+        'auto_open_delay' => 'integer',
         'require_authentication' => 'boolean',
         'ai_engagement_enabled' => 'boolean',
         'ai_engagement_max_per_session' => 'integer',

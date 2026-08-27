@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Conversation;
 use App\Models\Message;
@@ -22,6 +23,7 @@ use Illuminate\Support\Str;
  */
 class ProcessInboundProspectReplyJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     private const UNSUBSCRIBE_MARKERS = [

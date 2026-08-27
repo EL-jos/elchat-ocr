@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Services\Social\SocialReplyEngine;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 
 class SocialMessageReceivedJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable;
     use Queueable;
     use InteractsWithQueue;

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\vision;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Vision\PageImage;
 use App\Services\IndexService;
@@ -16,6 +17,7 @@ use Throwable;
 
 class ProcessImageOcrJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;

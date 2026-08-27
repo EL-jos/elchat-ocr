@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Social\SocialAccount;
 use App\Models\Social\SocialConversation;
@@ -17,6 +18,7 @@ use Throwable;
 
 class SlackReplyJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;

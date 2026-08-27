@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Domain\Sales\ProspectCrmSyncService;
 use App\Domain\Sales\ProspectInformationCompletionService;
@@ -14,6 +15,7 @@ use App\Models\Conversation;
 use App\Models\Sales\Prospect;
 use App\Services\analytics\AnalyticsEventService;
 use App\Services\mcp\MCPActionGateService;
+use App\Services\Sales\SalesHunterRealtimeService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,6 +27,7 @@ use Throwable;
 /** Enrichit, score, synchronise puis délègue l'analyse commerciale à l'agent installé. */
 class ProcessProspectQualificationJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(private readonly string $prospectId) {}
@@ -39,6 +42,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
         AnalyticsEventService $analytics,
         ProspectingRunCompletionService $completion,
         SalesHunterConversationCleanupService $conversationCleanup,
+        SalesHunterRealtimeService $realtime,
     ): void {
         $prospect = Prospect::with('campaign.config.agent', 'site')->findOrFail($this->prospectId);
         if ($prospect->status !== 'discovered') {
@@ -52,6 +56,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
                 'status' => 'rejected',
                 'score_reasons' => [['points' => 0, 'reason' => 'La campagne a été arrêtée avant la qualification.', 'basis' => 'policy']],
             ]);
+            $this->publishProspect($prospect, $realtime);
             if ($prospect->run) {
                 $completion->finishIfReady($prospect->run);
             }
@@ -66,6 +71,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
         // ou une adresse définitivement invalide rejettent le prospect.
         if (! $decision->allowed && in_array($decision->reasonCode, ['do_not_contact', 'invalid_email_address'], true)) {
             $prospect->update(['status' => 'rejected', 'score_reasons' => [['points' => 0, 'reason' => $decision->message, 'basis' => 'policy']]]);
+            $this->publishProspect($prospect, $realtime);
             $analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CANDIDATE_REJECTED, [
                 'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
             ], ['reason' => $decision->reasonCode], async: true);
@@ -120,6 +126,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
             'score' => $scored['score'], 'score_reasons' => $scored['reasons'],
             'qualification_data' => ['minimum_score' => (int) ($settings['minimum_score'] ?? 70), 'signals' => $signals],
         ]);
+        $this->publishProspect($prospect, $realtime);
         foreach ($scored['reasons'] as $reason) {
             $prospect->evidence()->create([
                 'kind' => $reason['basis'] ?? 'inference', 'source_key' => 'qualification',
@@ -132,6 +139,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
 
         if ($scored['score'] < (int) ($settings['minimum_score'] ?? 70)) {
             $prospect->update(['status' => 'rejected']);
+            $this->publishProspect($prospect, $realtime);
             $analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CANDIDATE_REJECTED, [
                 'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
             ], ['reason' => 'minimum_score', 'score' => $scored['score']], async: true);
@@ -143,6 +151,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
         }
 
         $prospect->update(['status' => 'qualified']);
+        $this->publishProspect($prospect, $realtime);
         $analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CANDIDATE_QUALIFIED, [
             'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
         ], ['score' => $scored['score']], async: true);
@@ -158,6 +167,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
 
         $crmSync->sync($prospect->fresh(), $settings['crm_connector_slug'] ?? null, $conversation);
         $prospect->refresh();
+        $this->publishProspect($prospect, $realtime);
         $crmSynchronized = in_array($prospect->crm_sync_status, ['created', 'duplicate', 'linked'], true);
 
         if (! $decision->allowed) {
@@ -174,6 +184,8 @@ class ProcessProspectQualificationJob implements ShouldQueue
             if ($crmSynchronized) {
                 $conversationCleanup->cleanup($conversation);
             }
+
+            $this->publishProspect($prospect, $realtime);
 
             return;
         }
@@ -195,6 +207,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
         if ($prospect->run) {
             $completion->finishIfReady($prospect->run);
         }
+        $this->publishProspect($prospect, $realtime);
     }
 
     private function buildInstruction(Prospect $prospect, $config): string
@@ -209,6 +222,37 @@ class ProcessProspectQualificationJob implements ShouldQueue
             ."Ne rédige aucun message ni promesse à partir d'informations absentes. Mets à jour le statut seulement si les éléments observés le justifient.";
     }
 
+    private function publishProspect(Prospect $prospect, SalesHunterRealtimeService $realtime): void
+    {
+        $prospect = $prospect->fresh();
+        if (! $prospect) {
+            return;
+        }
+
+        $realtime->publish($prospect->site_id, 'prospect_updated', [
+            'campaign_id' => $prospect->campaign_id,
+            'prospect' => [
+                'id' => $prospect->id,
+                'campaign_id' => $prospect->campaign_id,
+                'name' => $prospect->name,
+                'company' => $prospect->company,
+                'website' => $prospect->website,
+                'domain' => $prospect->domain,
+                'email' => $prospect->email,
+                'phone' => $prospect->phone,
+                'source' => $prospect->source,
+                'location' => $prospect->location,
+                'sector' => $prospect->sector,
+                'score' => $prospect->score,
+                'score_reasons' => $prospect->score_reasons,
+                'status' => $prospect->status,
+                'crm_sync_status' => $prospect->crm_sync_status,
+                'crm_sync_error' => $prospect->crm_sync_error,
+                'last_activity_at' => optional($prospect->last_activity_at)->toISOString(),
+            ],
+        ]);
+    }
+
     public function failed(Throwable $exception): void
     {
         $prospect = Prospect::with('site', 'run')->find($this->prospectId);
@@ -221,6 +265,7 @@ class ProcessProspectQualificationJob implements ShouldQueue
             'crm_sync_error' => $exception->getMessage(),
             'score_reasons' => [['points' => 0, 'reason' => 'La qualification a échoué après les tentatives de reprise.', 'basis' => 'policy']],
         ]);
+        $this->publishProspect($prospect, app(SalesHunterRealtimeService::class));
         app(AnalyticsEventService::class)->capture($prospect->site, AnalyticsEventType::PROSPECT_CANDIDATE_REJECTED, [
             'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
         ], ['reason' => 'qualification_failed'], async: false);

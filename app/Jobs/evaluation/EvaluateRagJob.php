@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\evaluation;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Chunk;
 use App\Models\RagEvaluationQuery;
@@ -21,6 +22,7 @@ use Throwable;
 
 class EvaluateRagJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 300;

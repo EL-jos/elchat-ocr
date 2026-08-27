@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\AnalyticsEvent;
 use App\Models\Site;
@@ -17,6 +18,7 @@ use InvalidArgumentException;
 
 class AggregateAnalyticsDayJob implements ShouldBeUnique, ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;

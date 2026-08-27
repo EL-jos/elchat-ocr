@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\sitemap;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Jobs\Middleware\DocumentOperationLock;
 use App\Models\CrawlJob;
@@ -16,6 +17,7 @@ use Throwable;
 
 class ProcessSitemapJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable;
 
     public int $tries = 120;

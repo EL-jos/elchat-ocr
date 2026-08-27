@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\document;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Jobs\Middleware\DocumentOperationLock;
 use App\Models\Document;
@@ -17,6 +18,7 @@ use Throwable;
 
 class IndexDocumentJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 120;

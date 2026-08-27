@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Social\SocialAccount;
 use App\Models\Social\SocialEvent;
@@ -14,6 +15,7 @@ use Throwable;
 
 class ImapProcessEventJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable;
 
     public int   $tries   = 3;

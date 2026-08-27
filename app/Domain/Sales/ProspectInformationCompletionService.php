@@ -35,16 +35,16 @@ class ProspectInformationCompletionService
                 ['role' => 'user', 'content' => $this->prompt($prospect, $icp, $missing)],
             ], [
                 'model' => config('prospecting.web_search.model'),
-                'max_tokens' => 1800,
-                'max_tokens_cap' => 3500,
+                'max_tokens' => 1400,
+                'max_tokens_cap' => 2400,
                 'detect_truncation' => true,
                 'response_format' => ['type' => 'json_object'],
                 'tools' => [[
                     'type' => 'openrouter:web_search',
                     'parameters' => [
                         'engine' => config('prospecting.web_search.engine', 'auto'),
-                        'max_results' => max(1, min(10, (int) config('prospecting.web_search.completion_max_results', 3))),
-                        'max_total_results' => max(1, min(20, (int) config('prospecting.web_search.completion_max_total_results', 10))),
+                        'max_results' => max(1, min(10, (int) config('prospecting.web_search.completion_max_results', 2))),
+                        'max_total_results' => max(1, min(20, (int) config('prospecting.web_search.completion_max_total_results', 5))),
                     ],
                 ]],
             ]);

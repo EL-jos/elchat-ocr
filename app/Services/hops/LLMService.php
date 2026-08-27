@@ -17,8 +17,8 @@ class LLMService
 
     public function chat(array $messages, array $options = []): string
     {
-        $model = $options['model'] ?? $this->primaryModel;
-        $fallbackModel = (string) ($options['fallback_model'] ?? config('mcp.llm.fallback_model', 'deepseek/deepseek-chat-v3.1'));
+        $model = LLMModelResolver::normalize((string) ($options['model'] ?? $this->primaryModel));
+        $fallbackModel = LLMModelResolver::normalize((string) ($options['fallback_model'] ?? config('mcp.llm.fallback_model', 'deepseek/deepseek-chat-v3.1')));
 
         // 🔥 NOUVEAU (opt-in) : détection de troncature via finish_reason.
         // Désactivé par défaut => comportement identique pour tous les
@@ -95,6 +95,7 @@ class LLMService
             || str_contains($message, 'model not found')
             || str_contains($message, 'unknown model')
             || str_contains($message, 'invalid model')
+            || str_contains($message, 'not a valid model')
             || str_contains($message, '"code":404');
     }
 
@@ -125,16 +126,60 @@ class LLMService
         }
 
         $response = Http::timeout($this->timeout)
+            ->withOptions(['stream' => true])
             ->withHeaders([
                 'Authorization' => 'Bearer '.config('mcp.llm.api_key', env('OPENROUTER_API_KEY')),
             ])
             ->post('https://openrouter.ai/api/v1/chat/completions', $payload);
 
-        if (! $response->successful()) {
-            throw new Exception('LLM API error: '.$response->body());
+        $maxResponseBytes = max(262144, min(16 * 1024 * 1024, (int) config('mcp.llm.max_response_bytes', 4194304)));
+
+        try {
+            if (! $response->successful()) {
+                [$body] = $this->readResponseBody($response, 8000);
+                throw new Exception('LLM API error: '.mb_strcut($body, 0, 8000));
+            }
+
+            [$body, $complete] = $this->readResponseBody($response, $maxResponseBytes);
+            if (! $complete) {
+                throw new Exception('LLM response exceeded the configured memory limit.');
+            }
+
+            $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            throw new Exception('LLM API returned invalid JSON.', previous: $exception);
+        } finally {
+            $response->close();
         }
 
-        return $response->json();
+        if (! is_array($decoded)) {
+            throw new Exception('LLM API returned an invalid response shape.');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Lit une réponse HTTP par petits blocs afin qu'une réponse web-search
+     * anormalement volumineuse ne soit jamais copiée entièrement en mémoire.
+     *
+     * @return array{0: string, 1: bool} contenu lu et réponse entièrement lue
+     */
+    private function readResponseBody(\Illuminate\Http\Client\Response $response, int $maxBytes): array
+    {
+        $stream = $response->toPsrResponse()->getBody();
+        $body = '';
+        $readLimit = $maxBytes + 1;
+
+        while (! $stream->eof() && strlen($body) < $readLimit) {
+            $chunk = $stream->read(min(8192, $readLimit - strlen($body)));
+            if ($chunk === '') {
+                break;
+            }
+            $body .= $chunk;
+        }
+
+        return [$body, $stream->eof() && strlen($body) <= $maxBytes];
     }
 
     // =====================================================
@@ -152,6 +197,15 @@ class LLMService
     {
         // nettoyage agressif
         $text = trim($text);
+        $maxJsonChars = max(10000, min(2 * 1024 * 1024, (int) ($options['max_json_chars'] ?? config('mcp.llm.max_json_chars', 1048576))));
+        if (strlen($text) > $maxJsonChars) {
+            Log::warning('LLM JSON response discarded because it exceeded the configured size limit', [
+                'bytes' => strlen($text),
+                'max_bytes' => $maxJsonChars,
+            ]);
+
+            return [];
+        }
 
         // remove markdown
         $text = preg_replace('/```json|```/', '', $text);

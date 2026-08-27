@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Domain\Email\DTO\EmailEvent;
 use App\Models\Sales\ProspectMessage;
@@ -18,6 +19,7 @@ use Illuminate\Queue\SerializesModels;
  */
 class ProcessEmailEventJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public function __construct(private readonly EmailEvent $event)

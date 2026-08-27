@@ -26,7 +26,7 @@ class ProspectingRunCompletionService
             'prospects_rejected' => $prospects->where('status', 'rejected')->count(),
             'crm_created' => $prospects->where('crm_sync_status', 'created')->count(),
             'crm_duplicates' => $prospects->where('crm_sync_status', 'duplicate')->count(),
-            'crm_pending' => $prospects->whereIn('crm_sync_status', ['pending_crm', 'pending_email', 'failed'])->count(),
+            'crm_pending' => $prospects->whereIn('crm_sync_status', ['pending_crm', 'pending_email', 'pending_contact_info', 'failed'])->count(),
             'sources' => $prospects->groupBy('source')->map->count()->all(),
         ];
         $completed = ProspectingRun::whereKey($run->id)->where('status', 'running')->update([
@@ -59,7 +59,7 @@ class ProspectingRunCompletionService
     {
         $insights = [];
         if (($stats['crm_pending'] ?? 0) > 0) {
-            $insights[] = ['category' => 'crm', 'text' => 'Certains prospects restent en attente de synchronisation CRM ou d’email.'];
+            $insights[] = ['category' => 'crm', 'text' => 'Certains prospects restent en attente de synchronisation CRM ou de coordonnées de contact.'];
         }
         if (($stats['prospects_rejected'] ?? 0) > 0) {
             $insights[] = ['category' => 'qualification', 'text' => 'Des candidats ont été écartés car leur score était inférieur au seuil configuré.'];

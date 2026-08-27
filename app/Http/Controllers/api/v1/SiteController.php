@@ -475,6 +475,8 @@ class SiteController extends Controller
                     'offsetX'    => $settings->button_offset_x,
                     'offsetY'    => $settings->button_offset_y,
                 ],
+                'auto_open_enabled' => (bool) $settings->auto_open_enabled,
+                'auto_open_delay' => (int) ($settings->auto_open_delay ?? 5),
                 'ai_engagement_enabled' => (bool) $settings->ai_engagement_enabled,
                 'ai_engagement_widget_behavior' => $settings->ai_engagement_widget_behavior ?: 'notification_only',
             ],

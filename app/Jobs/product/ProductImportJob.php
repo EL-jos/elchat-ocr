@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\product;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Mappers\ProductFileParser;
 use App\Mappers\ProductMapper;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 
 class ProductImportJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 600;

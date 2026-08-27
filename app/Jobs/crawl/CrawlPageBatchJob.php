@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\crawl;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Chunk;
 use App\Models\CrawlJob;
@@ -22,6 +23,7 @@ use Throwable;
 // CrawlPageBatchJob.php
 class CrawlPageBatchJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 300;

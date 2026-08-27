@@ -26,29 +26,37 @@ class ProspectCrmSyncService
 
             return;
         }
-        if (! $prospect->email) {
-            $prospect->update(['crm_sync_status' => 'pending_email', 'crm_sync_error' => 'Une adresse email est nécessaire pour créer le contact CRM.']);
+        if (blank($prospect->email) && blank($prospect->phone)) {
+            $prospect->update([
+                'crm_sync_status' => 'pending_contact_info',
+                'crm_sync_error' => 'Un numéro de téléphone ou une adresse email est nécessaire pour créer le contact CRM.',
+            ]);
 
             return;
         }
 
-        $check = $this->crm->find($prospect->site, $conversation, $prospect->email, $connectorSlug);
-        $this->analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CRM_CHECK_COMPLETED, [
-            'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
-        ], ['connector_slug' => $connectorSlug, 'success' => $check->success, 'exists' => $check->data['exists'] ?? null], async: true);
-
-        if ($check->success && ($check->data['exists'] ?? false)) {
-            $prospect->update(['crm_sync_status' => 'duplicate', 'crm_ref' => ['connector_slug' => $connectorSlug, 'existing' => true], 'crm_sync_error' => null]);
-            $this->analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CRM_UPDATED, [
+        // Une adresse email permet de dédupliquer avant création. En son
+        // absence, la création reste possible avec un téléphone ; le CRM
+        // doit alors retourner une erreur s'il impose une contrainte propre.
+        if (filled($prospect->email)) {
+            $check = $this->crm->find($prospect->site, $conversation, $prospect->email, $connectorSlug);
+            $this->analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CRM_CHECK_COMPLETED, [
                 'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
-            ], ['connector_slug' => $connectorSlug, 'action' => 'existing_contact_linked'], async: true);
+            ], ['connector_slug' => $connectorSlug, 'success' => $check->success, 'exists' => $check->data['exists'] ?? null], async: true);
 
-            return;
-        }
-        if (! $check->success && $check->errorCode !== 'not_found') {
-            $prospect->update(['crm_sync_status' => 'failed', 'crm_sync_error' => $check->errorMessage]);
+            if ($check->success && ($check->data['exists'] ?? false)) {
+                $prospect->update(['crm_sync_status' => 'duplicate', 'crm_ref' => ['connector_slug' => $connectorSlug, 'existing' => true], 'crm_sync_error' => null]);
+                $this->analytics->capture($prospect->site, AnalyticsEventType::PROSPECT_CRM_UPDATED, [
+                    'resource_type' => 'sales_prospect', 'resource_id' => $prospect->id,
+                ], ['connector_slug' => $connectorSlug, 'action' => 'existing_contact_linked'], async: true);
 
-            return;
+                return;
+            }
+            if (! $check->success && $check->errorCode !== 'not_found') {
+                $prospect->update(['crm_sync_status' => 'failed', 'crm_sync_error' => $check->errorMessage]);
+
+                return;
+            }
         }
 
         $created = $this->crm->create($prospect->site, $conversation, $prospect->toArray(), $connectorSlug);

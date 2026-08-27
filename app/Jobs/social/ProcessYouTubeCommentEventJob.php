@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Exceptions\YouTubeParentNotReadyException;
 use App\Models\Social\SocialEvent;
@@ -14,6 +15,7 @@ use Throwable;
 
 class ProcessYouTubeCommentEventJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable;
 
     /**

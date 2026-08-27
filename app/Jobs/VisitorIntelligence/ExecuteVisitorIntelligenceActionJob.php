@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\VisitorIntelligence;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\VisitorIntelligenceAction;
 use App\Services\VisitorIntelligence\VisitorIntelligenceActionService;
@@ -14,6 +15,7 @@ use Throwable;
 
 class ExecuteVisitorIntelligenceActionJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;

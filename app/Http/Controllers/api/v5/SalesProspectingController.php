@@ -14,6 +14,7 @@ use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
 use App\Models\Sales\ProspectingConfig;
 use App\Models\Site;
+use App\Services\Sales\SalesHunterRealtimeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,7 @@ class SalesProspectingController extends Controller
     public function __construct(
         private readonly AgentTemplateInstaller $installer,
         private readonly ProspectingSourceRegistry $sources,
+        private readonly SalesHunterRealtimeService $realtime,
     ) {}
 
     // ── Banque d'agents ──────────────────────────────────────────────
@@ -235,6 +237,10 @@ class SalesProspectingController extends Controller
             'stats' => [],
         ]);
 
+        $this->realtime->publish($site->id, 'campaign_created', [
+            'campaign' => $this->campaignPayload($campaign),
+        ]);
+
         return response()->json(['data' => $campaign]);
     }
 
@@ -326,8 +332,12 @@ class SalesProspectingController extends Controller
         abort_if(in_array($campaign->status, ['completed', 'failed'], true), 409, 'Cette campagne est déjà terminée.');
 
         $this->markCampaignStopped($campaign, 'manual_stop');
+        $updated = $campaign->fresh();
+        $this->realtime->publish($site->id, 'campaign_stopped', [
+            'campaign' => $this->campaignPayload($updated),
+        ]);
 
-        return response()->json(['data' => $campaign->fresh(), 'status' => 'stopped']);
+        return response()->json(['data' => $updated, 'status' => 'stopped']);
     }
 
     public function destroyCampaign(Request $request, Site $site, ProspectingCampaign $campaign)
@@ -337,7 +347,11 @@ class SalesProspectingController extends Controller
         abort_if(in_array($campaign->status, ['scheduled', 'running'], true), 409, 'Arrêtez la campagne avant de la supprimer.');
         abort_if($campaign->runs()->where('status', 'running')->exists(), 409, 'La campagne est encore en cours de traitement. Réessayez après son arrêt.');
 
+        $campaignId = (string) $campaign->id;
         DB::transaction(fn () => $campaign->delete());
+        $this->realtime->publish($site->id, 'campaign_deleted', [
+            'campaign_id' => $campaignId,
+        ]);
 
         return response()->json(['status' => 'deleted']);
     }
@@ -461,6 +475,20 @@ class SalesProspectingController extends Controller
                 'stopped_at' => now()->toIso8601String(),
             ]),
         ]);
+    }
+
+    private function campaignPayload(ProspectingCampaign $campaign): array
+    {
+        return [
+            'id' => $campaign->id,
+            'site_id' => $campaign->site_id,
+            'name' => $campaign->name,
+            'status' => $campaign->status,
+            'next_run_at' => optional($campaign->next_run_at)->toISOString(),
+            'started_at' => optional($campaign->started_at)->toISOString(),
+            'completed_at' => optional($campaign->completed_at)->toISOString(),
+            'stats' => $campaign->stats ?? [],
+        ];
     }
 
     private function ensureSiteAccess(Request $request, Site $site): void

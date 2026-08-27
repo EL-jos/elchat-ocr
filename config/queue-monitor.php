@@ -23,7 +23,7 @@ return [
     // The optional UI settings.
     'ui' => [
         // Enable the UI
-        'enabled' => false,
+        'enabled' => true,
 
         // Accepts route group configuration
         'route' => [

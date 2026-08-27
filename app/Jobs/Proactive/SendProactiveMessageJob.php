@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\Proactive;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Domain\Proactive\ProactiveDeliveryService;
 use Illuminate\Bus\Queueable;
@@ -12,6 +13,7 @@ use Illuminate\Queue\SerializesModels;
 
 class SendProactiveMessageJob implements ShouldQueue, ShouldBeUnique
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;

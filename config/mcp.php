@@ -40,6 +40,8 @@ return [
         'api_key' => env('OPENROUTER_API_KEY'),
         'model' => env('MCP_LLM_MODEL', 'openai/gpt-4.1-mini'),
         'fallback_model' => env('MCP_LLM_FALLBACK_MODEL', 'deepseek/deepseek-chat-v3.1'),
+        'max_response_bytes' => (int) env('MCP_LLM_MAX_RESPONSE_BYTES', 4194304),
+        'max_json_chars' => (int) env('MCP_LLM_MAX_JSON_CHARS', 1048576),
     ],
 
     /*

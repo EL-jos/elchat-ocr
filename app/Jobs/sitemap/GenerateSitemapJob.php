@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\sitemap;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Document;
 use App\Models\Site;
@@ -18,6 +19,7 @@ use Symfony\Component\HttpClient\HttpClient;
 
 class GenerateSitemapJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected string $siteId;

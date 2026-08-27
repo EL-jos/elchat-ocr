@@ -78,7 +78,8 @@
             offsetY: '1rem',
             html: '<img src="https://elchat.io/assets/icon-quickmenu-chatbot.gif" style="user-select: none; pointer-events: none" width="70" alt="Chat" />',
         },
-        auto_open_delay: 5 // pas d'auto-open par défaut
+        auto_open_enabled: false,
+        auto_open_delay: 5
     };
 
     let config = DEFAULT_CONFIG;
@@ -1322,7 +1323,15 @@
                     offsetY: b.offsetY || DEFAULT_CONFIG.button.offsetY
                 };
 
-                config.auto_open_delay = Number(data.config.auto_open_delay) || 0;
+                // L'ouverture automatique globale est explicitement opt-in.
+                // Cela reste désactivé si un ancien endpoint ne renvoie pas
+                // encore le nouveau champ.
+                config.auto_open_enabled = data.config.auto_open_enabled === true;
+
+                const autoOpenDelay = Number(data.config.auto_open_delay);
+                config.auto_open_delay = Number.isFinite(autoOpenDelay) && autoOpenDelay >= 0
+                    ? autoOpenDelay
+                    : DEFAULT_CONFIG.auto_open_delay;
             }
             createButton();
             setupAutoOpen();
@@ -1382,9 +1391,9 @@
        3️⃣ Auto-open configurable
     ========================= */
     function setupAutoOpen() {
-        if (userClosed) return; // ✅ ignore auto-open si l'utilisateur a fermé
-        const delay = Number(config.auto_open_delay) || 0;
-        if (delay <= 0) return;
+        if (!config.auto_open_enabled || userClosed) return; // ✅ opt-in et ignore si l'utilisateur a fermé
+        const delay = Number(config.auto_open_delay);
+        if (!Number.isFinite(delay) || delay < 0) return;
 
         autoOpenTimer = setTimeout(() => {
             if (!isOpened) openIframe();

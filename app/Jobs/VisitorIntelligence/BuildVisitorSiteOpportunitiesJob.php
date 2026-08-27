@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\VisitorIntelligence;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Site;
 use App\Services\VisitorIntelligence\VisitorIntelligenceAggregateOpportunityService;
@@ -14,6 +15,7 @@ use Illuminate\Queue\SerializesModels;
 
 class BuildVisitorSiteOpportunitiesJob implements ShouldQueue, ShouldBeUnique
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Enums\Social\ReplyStatus;
 use App\Models\Social\SocialAccount;
@@ -19,6 +20,7 @@ use Throwable;
 
 class EmailReplyJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable;
 
     public int   $tries   = 3;

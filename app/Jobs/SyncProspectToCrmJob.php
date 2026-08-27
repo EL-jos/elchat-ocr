@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Domain\Sales\ProspectInformationCompletionService;
 use App\Domain\Sales\ProspectCrmSyncService;
@@ -15,9 +16,11 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
+use Throwable;
 
 class SyncProspectToCrmJob implements ShouldQueue, ShouldBeUnique
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $uniqueFor = 600;
@@ -85,5 +88,13 @@ class SyncProspectToCrmJob implements ShouldQueue, ShouldBeUnique
         if (in_array($prospect->crm_sync_status, ['created', 'duplicate', 'linked'], true)) {
             $conversationCleanup->cleanup($conversation);
         }
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        Prospect::whereKey($this->prospectId)->update([
+            'crm_sync_status' => 'failed',
+            'crm_sync_error' => Str::limit($exception->getMessage(), 1000),
+        ]);
     }
 }

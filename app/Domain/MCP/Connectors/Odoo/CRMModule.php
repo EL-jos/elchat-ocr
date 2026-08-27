@@ -13,8 +13,8 @@ class CRMModule implements OdooModuleInterface
     {
         return [
             new ToolSchema('odoo', 'crm_create_contact',
-                "Crée un nouveau contact Odoo ou retourne le contact existant lorsque l'adresse e-mail est déjà enregistrée. Utiliser lorsque l'utilisateur souhaite ajouter un nouveau contact et qu'une adresse e-mail valide est disponible. Cet outil évite automatiquement les doublons à partir de l'adresse e-mail. Ne pas appeler crm_find_contact au préalable sauf si l'utilisateur souhaite uniquement vérifier l'existence d'un contact sans le créer. Ne jamais inventer une adresse e-mail ou créer un contact à partir d'informations incomplètes.", [
-                'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company_name' => ['type' => 'string']], 'required' => ['email'],
+                "Crée un nouveau contact Odoo ou retourne le contact existant lorsque l'adresse e-mail est déjà enregistrée. Utiliser lorsque l'utilisateur souhaite ajouter un nouveau contact et qu'une adresse e-mail ou un numéro de téléphone valide est disponible. Cet outil évite automatiquement les doublons à partir de l'adresse e-mail. Ne pas appeler crm_find_contact au préalable sauf si l'utilisateur souhaite uniquement vérifier l'existence d'un contact sans le créer. Ne jamais inventer une adresse e-mail ou créer un contact à partir d'informations incomplètes.", [
+                'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company_name' => ['type' => 'string']], 'anyOf' => [['required' => ['email']], ['required' => ['phone']]],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_or_update_contact'),
 
             new ToolSchema('odoo', 'crm_find_contact',
@@ -65,13 +65,16 @@ class CRMModule implements OdooModuleInterface
 
     private function createContact(array $p, OdooClient $client): ToolResult
     {
-        $existing = $this->findPartner($p['email'], $client);
-        if ($existing) return ToolResult::ok(['contact_id' => $existing['id']], 'Contact déjà existant.', identity: ['email' => $p['email']]);
+        if (!empty($p['email'])) {
+            $existing = $this->findPartner($p['email'], $client);
+            if ($existing) return ToolResult::ok(['contact_id' => $existing['id']], 'Contact déjà existant.', identity: ['email' => $p['email']]);
+        }
 
         $id = $client->create('res.partner', array_filter([
-            'name' => $p['name'] ?? $p['email'], 'email' => $p['email'], 'phone' => $p['phone'] ?? null, 'company_name' => $p['company_name'] ?? null,
+            'name' => $p['name'] ?? $p['email'] ?? $p['phone'] ?? 'Prospect', 'email' => $p['email'] ?? null,
+            'phone' => $p['phone'] ?? null, 'company_name' => $p['company_name'] ?? null,
         ]));
-        return ToolResult::ok(['contact_id' => $id], 'Contact créé.', identity: ['email' => $p['email'], 'firstname' => $p['name'] ?? null, 'phone' => $p['phone'] ?? null]);
+        return ToolResult::ok(['contact_id' => $id], 'Contact créé.', identity: ['email' => $p['email'] ?? null, 'firstname' => $p['name'] ?? null, 'phone' => $p['phone'] ?? null]);
     }
 
     private function findContact(array $p, OdooClient $client): ToolResult

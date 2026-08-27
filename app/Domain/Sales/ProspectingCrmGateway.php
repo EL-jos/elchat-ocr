@@ -33,6 +33,10 @@ class ProspectingCrmGateway
 
     public function create(Site $site, Conversation $conversation, array $candidate, ?string $connectorSlug = null): ToolResult
     {
+        if (blank($candidate['email'] ?? null) && blank($candidate['phone'] ?? null)) {
+            return ToolResult::fail('missing_contact_info', 'Un numéro de téléphone ou une adresse email est nécessaire pour créer le contact CRM.');
+        }
+
         $tool = $this->tool($site, 'create', $connectorSlug);
         if (! $tool) {
             return ToolResult::fail('crm_unavailable', 'Aucun outil CRM de création de contact n’est connecté.');
@@ -45,6 +49,7 @@ class ProspectingCrmGateway
             ? array_filter([
                 'firstname' => $firstName, 'lastname' => $lastName, 'email' => $candidate['email'] ?? null,
                 'phone' => $candidate['phone'] ?? null, 'company' => $candidate['company'] ?? $name,
+                'address' => $candidate['address'] ?? null, 'website' => $candidate['website'] ?? null,
             ], fn ($value) => $value !== null && trim((string) $value) !== '')
             : array_filter([
                 'name' => $name, 'email' => $candidate['email'] ?? null, 'phone' => $candidate['phone'] ?? null,
