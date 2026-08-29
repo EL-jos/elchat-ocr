@@ -93,6 +93,7 @@
     let visualEvents = [];
     let visualFlushTimer = null;
     let frameTimer = null;
+    let widgetFrameTimer = null;
     let frameInFlight = false;
     let frameRequestedAgain = false;
     let lastFrameCapturedAt = 0;
@@ -145,6 +146,8 @@
     let proactivePollTimer = null;
     let proactivePollInFlight = false;
     let lastProactiveMessageId = null;
+    let lastWidgetObservedScrollX = null;
+    let lastWidgetObservedScrollY = null;
 
     const VISUAL_FRAME_INTERVAL = 700;
     const VISUAL_FLUSH_SIZE = 20;
@@ -746,6 +749,52 @@
             });
     }
 
+    function requestWidgetFrameCapture(delay = 260) {
+        if (!visitorUUID || !iframe || !isOpened) return;
+        if (widgetFrameTimer) clearTimeout(widgetFrameTimer);
+        widgetFrameTimer = setTimeout(() => {
+            widgetFrameTimer = null;
+            if (!iframe || !isOpened || !iframe.contentWindow) return;
+            iframe.contentWindow.postMessage({
+                source: 'elchat',
+                type: 'WIDGET_VISUAL_FRAME_REQUEST',
+            }, IFRAME_ORIGIN);
+        }, Math.max(0, delay));
+    }
+
+    function receiveWidgetFrame(frame) {
+        if (!visitorUUID || !iframe || !isOpened || !frame || typeof frame.data_url !== 'string') return;
+        const hostViewport = pageViewportState();
+        const rect = iframe.getBoundingClientRect();
+        const widgetContext = {
+            page_url: window.location.href,
+            path: window.location.pathname || '/',
+            title: document.title || '',
+            metadata: {
+                surface: 'widget',
+                device: deviceType(),
+                host_viewport_width: hostViewport.viewportWidth,
+                host_viewport_height: hostViewport.viewportHeight,
+                widget_left: Math.round(Math.max(0, rect.left)),
+                widget_top: Math.round(Math.max(0, rect.top)),
+                widget_width: Math.round(Math.max(1, rect.width)),
+                widget_height: Math.round(Math.max(1, rect.height)),
+            },
+        };
+        uploadFrame({
+            ...frame,
+            surface: 'widget',
+            host_viewport_width: hostViewport.viewportWidth,
+            host_viewport_height: hostViewport.viewportHeight,
+            widget_left: Math.round(Math.max(0, rect.left)),
+            widget_top: Math.round(Math.max(0, rect.top)),
+            widget_width: Math.round(Math.max(1, rect.width)),
+            widget_height: Math.round(Math.max(1, rect.height)),
+        }, widgetContext).catch(error => {
+            console.warn('[ELChat] Visitor Intelligence widget frame relay failed', error);
+        });
+    }
+
     function ensureHtml2Canvas() {
         if (typeof window.html2canvas === 'function') return Promise.resolve(window.html2canvas);
         if (html2canvasPromise) return html2canvasPromise;
@@ -1238,12 +1287,13 @@
         return new Blob([bytes], { type: mime });
     }
 
-    function uploadFrame(frame) {
-        const context = pendingFrameContext || lastVisualContext || {};
+    function uploadFrame(frame, frameContext = null) {
+        const context = frameContext || pendingFrameContext || lastVisualContext || {};
+        const surface = frame.surface || context.metadata?.surface || 'page';
         const metadata = {
             ...(context.metadata || {}),
             device: deviceType(),
-            surface: 'page',
+            surface,
             screenshot_width: Number(frame.width) || 0,
             screenshot_height: Number(frame.height) || 0,
             viewport_width: Number(frame.viewport_width) || Number(context.metadata && context.metadata.viewport_width) || 0,
@@ -1262,13 +1312,19 @@
             cursor_page_y: frame.cursor_page_y ?? context.metadata?.cursor_page_y ?? null,
             scroll_positions: JSON.stringify(frame.scroll_positions || []),
         };
+        [
+            'host_viewport_width', 'host_viewport_height',
+            'widget_left', 'widget_top', 'widget_width', 'widget_height',
+        ].forEach(key => {
+            if (frame[key] !== undefined && frame[key] !== null) metadata[key] = Number(frame[key]) || 0;
+        });
         const blob = dataUrlToBlob(frame.data_url);
         if (!blob) return Promise.reject(new Error('invalid frame data URL'));
         const body = new FormData();
         body.append('visitor_uuid', visitorUUID);
         body.append('session_id', SESSION_ID);
         body.append('event_id', `${SESSION_ID}-frame-${++frameSequence}`);
-        body.append('occurred_at', new Date().toISOString());
+        body.append('occurred_at', frame.occurred_at || new Date().toISOString());
         body.append('page_url', context.page_url || window.location.href);
         body.append('path', context.path || window.location.pathname || '/');
         body.append('title', context.title || document.title || '');
@@ -1464,6 +1520,7 @@
             // replay alive when a desktop browser delays or drops a message
             // during iframe startup.
             scheduleFrameCapture(450);
+            requestWidgetFrameCapture(520);
         }, { once: true });
 
         Object.assign(iframe.style, {
@@ -1547,6 +1604,10 @@
                 markPageActivity('widget_opened');
                 enqueueVisualEvent('widget_opened', { device: deviceType(), surface: 'widget' });
                 scheduleFrameCapture(80);
+                requestWidgetFrameCapture(120);
+                break;
+            case 'WIDGET_VISUAL_FRAME':
+                receiveWidgetFrame(event.data.payload || {});
                 break;
             case 'VISITOR_VISUAL_EVENT': {
                 markPageActivity('widget_interaction');
@@ -1557,6 +1618,18 @@
                 });
                 if (tracked.event_type !== 'pointer_move') {
                     scheduleFrameCapture(tracked.event_type === 'page_view' ? 180 : 300);
+                    requestWidgetFrameCapture(tracked.event_type === 'page_view' ? 220 : 340);
+                } else if (String(visual.metadata?.surface || '').toLowerCase() === 'widget') {
+                    const scrollX = Number(visual.metadata?.scroll_x);
+                    const scrollY = Number(visual.metadata?.scroll_y);
+                    if (
+                        (Number.isFinite(scrollX) && scrollX !== lastWidgetObservedScrollX)
+                        || (Number.isFinite(scrollY) && scrollY !== lastWidgetObservedScrollY)
+                    ) {
+                        lastWidgetObservedScrollX = Number.isFinite(scrollX) ? scrollX : lastWidgetObservedScrollX;
+                        lastWidgetObservedScrollY = Number.isFinite(scrollY) ? scrollY : lastWidgetObservedScrollY;
+                        requestWidgetFrameCapture(220);
+                    }
                 }
                 if (tracked.event_type === 'page_view') flushVisualEvents();
                 break;
@@ -1741,6 +1814,10 @@
         if (frameTimer) {
             clearTimeout(frameTimer);
             frameTimer = null;
+        }
+        if (widgetFrameTimer) {
+            clearTimeout(widgetFrameTimer);
+            widgetFrameTimer = null;
         }
         frameRequestedAgain = false;
         if (iframe) {

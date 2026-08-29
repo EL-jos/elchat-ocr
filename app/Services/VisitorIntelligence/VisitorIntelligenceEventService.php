@@ -285,7 +285,8 @@ class VisitorIntelligenceEventService
             'surface', 'screenshot_url', 'screenshot_path', 'screenshot_bytes',
             'screenshot_width', 'screenshot_height', 'page_width', 'page_height',
             'scroll_x', 'scroll_y', 'scroll_source', 'scroll_positions', 'cursor_page_x', 'cursor_page_y', 'frame_index',
-            'capture_mode', 'capture_scale',
+            'capture_mode', 'capture_scale', 'host_viewport_width', 'host_viewport_height',
+            'widget_left', 'widget_top', 'widget_width', 'widget_height',
         ];
         $result = [];
         foreach (array_merge($metadata, array_filter([
@@ -326,6 +327,8 @@ class VisitorIntelligenceEventService
                 'viewport_width', 'viewport_height', 'cursor_x', 'cursor_y',
                 'screenshot_bytes', 'screenshot_width', 'screenshot_height', 'page_width', 'page_height',
                 'scroll_x', 'scroll_y', 'cursor_page_x', 'cursor_page_y', 'frame_index',
+                'host_viewport_width', 'host_viewport_height', 'widget_left', 'widget_top',
+                'widget_width', 'widget_height',
             ], true)) {
                 if (!is_numeric($value)) continue;
                 $value = (int) $value;
