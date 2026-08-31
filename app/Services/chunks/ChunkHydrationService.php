@@ -4,6 +4,7 @@ namespace App\Services\chunks;
 
 use App\Models\Chunk;
 use App\Models\Message;
+use App\Domain\MCP\Security\ActorContext;
 use Illuminate\Support\Facades\Log;
 
 class ChunkHydrationService
@@ -11,7 +12,7 @@ class ChunkHydrationService
     /**
      * Hydrate les résultats Qdrant avec MySQL
      */
-    public function hydrate(array $results): array
+    public function hydrate(array $results, ?ActorContext $actor = null): array
     {
         //Log::info("resultat QDRANT", $results);
         if (empty($results)) {
@@ -40,6 +41,14 @@ class ChunkHydrationService
         foreach ($results as $result) {
             $chunk = $chunks->get($result['id']);
             if (!$chunk) continue;
+
+            // Les sources Microsoft sont privées par défaut. Elles ne peuvent
+            // entrer dans le contexte RAG que lorsqu'un acteur back-office a
+            // été explicitement propagé par le pipeline. L'absence d'acteur
+            // est fail-closed (jobs, évaluations et visiteurs).
+            if (($chunk->metadata['source_system'] ?? null) === 'microsoft_365' && !$actor?->isAdmin) {
+                continue;
+            }
 
             $textContent = '';
 

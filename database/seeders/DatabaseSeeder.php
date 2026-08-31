@@ -29,9 +29,12 @@ class DatabaseSeeder extends Seeder
         //Role::create(['id' => (string) Str::uuid(), 'name' => 'visitor']);
         $this->call([
             //UserSeed::class,
-            AIRoleSeeder::class,
+            //AIRoleSeeder::class,
             //ChatbotCtaSeeder::class,
-            TypeSiteSeeder::class,
+            //TypeSiteSeeder::class,
+            McpConnectorSeeder::class,
+            McpCapabilityPlaybookSeeder::class,
+            McpMicrosoft365Seeder::class,
         ]);
     }
 }

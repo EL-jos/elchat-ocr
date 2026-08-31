@@ -6,11 +6,16 @@ use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
 use App\Domain\MCP\Registry\ConnectorRegistry;
 use App\Domain\MCP\Security\CredentialVault;
 use App\Domain\MCP\Security\PermissionEngine;
+use App\Domain\Microsoft365\Microsoft365OAuthService;
+use App\Domain\Microsoft365\Microsoft365ScopeCatalog;
+use App\Http\Controllers\Concerns\AuthorizesSiteAccess;
 use App\Http\Controllers\Controller;
 use App\Models\Site;
 use App\Models\Mcp\McpConnector;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /**
  * API du "marketplace de connecteurs" côté admin site (consommée par le
@@ -18,18 +23,22 @@ use Illuminate\Support\Facades\Log;
  */
 class MCPConnectorController extends Controller
 {
-    private const GOOGLE_OAUTH_CONNECTORS = [
+    use AuthorizesSiteAccess;
+
+    private const POST_MESSAGE_OAUTH_CONNECTORS = [
         'google_calendar',
         'google_drive',
         'google_analytics',
         'google_search_console',
         'google_ads',
+        'microsoft_365',
     ];
 
     public function __construct(
         private readonly CredentialVault $vault,
         private readonly PermissionEngine $permissions, // 🆕
         private readonly ConnectorRegistry $registry,   // 🆕
+        private readonly Microsoft365OAuthService $microsoftOAuth,
     )
     {
     }
@@ -40,6 +49,8 @@ class MCPConnectorController extends Controller
      */
     public function index(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
+
         $connectors = McpConnector::where('is_active', true)
             ->with(['siteConnectors' => fn ($q) => $q->where('site_id', $site->id)])
             ->get()
@@ -55,6 +66,10 @@ class MCPConnectorController extends Controller
                     'description' => $connector->description,
                     'status' => $activation->status ?? 'not_connected',
                     'connected_at' => $activation->connected_at ?? null,
+                    'provider_tenant_id' => $activation->provider_tenant_id ?? null,
+                    'provider_principal_id' => $activation->provider_principal_id ?? null,
+                    'provider_principal_upn' => $activation->provider_principal_upn ?? null,
+                    'granted_scopes' => $activation->granted_scopes ?? [],
                 ];
             });
 
@@ -68,6 +83,8 @@ class MCPConnectorController extends Controller
      */
     public function activateWithApiKey(Request $request, Site $site, string $slug)
     {
+        $this->authorizeSiteAccess($request, $site);
+
         $validated = $request->validate([
             'credentials' => ['present', 'array'], // 🆕 'present' au lieu de 'required' : autorise un tableau vide (connecteurs internes)
             'settings' => ['array'],
@@ -99,24 +116,48 @@ class MCPConnectorController extends Controller
 
     public function deactivate(Request $request, Site $site, string $slug)
     {
+        $this->authorizeSiteAccess($request, $site);
+
         $this->vault->revoke($site, $slug);
 
         return response()->json(['status' => 'revoked']);
     }
 
     /**
-     * Démarre le flux OAuth2 pour un connecteur donné (Google Calendar...).
+     * Démarre le flux OAuth2 pour un connecteur donné.
      * Retourne l'URL d'autorisation à ouvrir côté Angular.
      */
     public function oauthRedirect(Request $request, Site $site, string $slug)
     {
+        $this->authorizeSiteAccess($request, $site);
+
+        if ($slug === 'microsoft_365') {
+            // Les permissions ne sont plus choisies dans le dashboard. Elles
+            // sont déclarées une fois dans l'inscription Microsoft Entra de
+            // l'application ELChat et demandées via Graph /.default.
+            $scopes = Microsoft365ScopeCatalog::applicationScopes();
+            $forceConsent = $request->boolean('force_consent');
+
+            $state = Str::random(64);
+            Cache::put('mcp:oauth:microsoft365:' . hash('sha256', $state), [
+                'site_id' => (string) $site->id,
+                'scopes' => $scopes,
+            ], now()->addMinutes(10));
+
+            return response()->json([
+                'authorization_url' => $this->microsoftOAuth->authorizeUrl($state, $scopes, $forceConsent),
+                'scopes' => $scopes,
+                'authorization_source' => 'microsoft_entra_app_registration',
+            ]);
+        }
+
         $redirectUri = route('mcp.oauth.callback', ['slug' => $slug]);
         $state = encrypt([
             'site_id' => $site->id,
             'connector' => $slug,
-            // Les connecteurs Google reviennent dans la fenêtre OAuth et
+            // Google et Microsoft 365 reviennent dans la fenêtre OAuth et
             // notifient le dashboard sans remplacer la page courante.
-            'response_mode' => in_array($slug, self::GOOGLE_OAUTH_CONNECTORS, true)
+            'response_mode' => in_array($slug, self::POST_MESSAGE_OAUTH_CONNECTORS, true)
                 ? 'post_message'
                 : 'redirect',
         ]);
@@ -211,6 +252,10 @@ class MCPConnectorController extends Controller
 
     public function oauthCallback(Request $request, string $slug)
     {
+        if ($slug === 'microsoft_365') {
+            return $this->microsoftOAuthCallback($request);
+        }
+
         $state = decrypt($request->query('state'));
 
         if (($state['connector'] ?? null) !== $slug) {
@@ -219,7 +264,7 @@ class MCPConnectorController extends Controller
 
         $site = Site::findOrFail($state['site_id']);
         $usePostMessage = ($state['response_mode'] ?? null) === 'post_message'
-            && in_array($slug, self::GOOGLE_OAUTH_CONNECTORS, true);
+            && in_array($slug, self::POST_MESSAGE_OAUTH_CONNECTORS, true);
         $code = $request->query('code');
         $redirectUri = route('mcp.oauth.callback', ['slug' => $slug]);
 
@@ -271,7 +316,7 @@ class MCPConnectorController extends Controller
         }
 
         $tokenEndpoint = match (true) {
-            in_array($slug, self::GOOGLE_OAUTH_CONNECTORS, true) => 'https://oauth2.googleapis.com/token',
+            in_array($slug, self::POST_MESSAGE_OAUTH_CONNECTORS, true) => 'https://oauth2.googleapis.com/token',
             $slug === 'onedrive' => 'https://login.microsoftonline.com/' . config('mcp.connectors.onedrive.tenant', 'common') . '/oauth2/v2.0/token',
             $slug === 'hootsuite' => 'https://platform.hootsuite.com/oauth2/token', // grant_type standard, mêmes champs que Google/OneDrive
             default => abort(404, "OAuth non supporté pour {$slug}"),
@@ -376,6 +421,74 @@ class MCPConnectorController extends Controller
         ]);
     }
 
+    private function microsoftOAuthCallback(Request $request)
+    {
+        $state = (string) $request->query('state', '');
+        $payload = $state !== ''
+            ? Cache::pull('mcp:oauth:microsoft365:' . hash('sha256', $state))
+            : null;
+
+        if (!is_array($payload) || empty($payload['site_id'])) {
+            abort(400, 'La demande de connexion Microsoft 365 est expirée ou invalide.');
+        }
+
+        $site = Site::findOrFail($payload['site_id']);
+        $usePostMessage = true;
+
+        if ($request->filled('error')) {
+            $message = $request->query('error') === 'access_denied'
+                ? 'Autorisation Microsoft 365 annulée. Aucune connexion n’a été enregistrée.'
+                : 'Microsoft 365 n’a pas pu autoriser cette connexion.';
+            return $this->oauthResult($site, 'microsoft_365', false, $message, $usePostMessage);
+        }
+
+        $code = $request->query('code');
+        if (!is_string($code) || $code === '') {
+            return $this->oauthResult($site, 'microsoft_365', false, 'Le code Microsoft 365 est absent. Veuillez recommencer.', $usePostMessage);
+        }
+
+        try {
+            $tokenResponse = $this->microsoftOAuth->exchangeCode($code);
+            $credentials = $this->microsoftOAuth->normalizeToken($tokenResponse);
+            if (empty($credentials['granted_scopes'])) {
+                // Microsoft may omit `scope` in a token response. The state
+                // payload is the server-side allowlisted request, never raw
+                // frontend input, so it is a safe fallback for tool scoping.
+                $credentials['granted_scopes'] = $payload['scopes'] ?? [];
+            }
+            $profile = $this->microsoftOAuth->profile($credentials['access_token']);
+        } catch (\Throwable $exception) {
+            Log::warning('MCP Microsoft 365: échec OAuth callback', ['type' => get_class($exception)]);
+            return $this->oauthResult($site, 'microsoft_365', false, 'La connexion Microsoft 365 n’a pas pu être finalisée.', $usePostMessage);
+        }
+
+        $existing = $site->mcpSiteConnectors()
+            ->whereHas('mcpConnector', fn ($q) => $q->where('slug', 'microsoft_365'))
+            ->first();
+        $tenantId = $this->microsoftOAuth->tenantIdFromToken($tokenResponse);
+        if ($existing?->provider_tenant_id && $tenantId && $existing->provider_tenant_id !== $tenantId) {
+            return $this->oauthResult($site, 'microsoft_365', false, 'Ce site est déjà relié à un autre tenant Microsoft. Désactivez d’abord la connexion existante.', $usePostMessage);
+        }
+
+        $metadata = [
+            'provider_tenant_id' => $tenantId,
+            'provider_principal_id' => $profile['id'] ?? null,
+            'provider_principal_upn' => $profile['userPrincipalName'] ?? ($profile['mail'] ?? null),
+            'granted_scopes' => $credentials['granted_scopes'] ?? ($payload['scopes'] ?? []),
+        ];
+
+        $this->vault->store($site, 'microsoft_365', $credentials, [], $metadata);
+        if ($this->registry->has('microsoft_365')) {
+            $connector = $this->registry->get('microsoft_365');
+            $tools = method_exists($connector, 'toolsAvailableFor')
+                ? $connector->toolsAvailableFor($this->vault->retrieve($site, 'microsoft_365') ?? [])
+                : $connector->listTools();
+            $this->permissions->seedDefaultsIfMissing($site, $tools);
+        }
+
+        return $this->oauthResult($site, 'microsoft_365', true, 'Microsoft 365 est maintenant connecté à ELChat.', $usePostMessage);
+    }
+
     private function connectorUrl(Site $site, string $slug): string
     {
         $dashboardUrl = rtrim((string) config('app.frontend_dashboard_url', 'https://elchat.io'), '/');
@@ -437,6 +550,8 @@ class MCPConnectorController extends Controller
 
     public function getSettings(Request $request, Site $site, string $slug)
     {
+        $this->authorizeSiteAccess($request, $site);
+
         $record = $site->mcpSiteConnectors()
             ->whereHas('mcpConnector', fn ($q) => $q->where('slug', $slug))
             ->first();
@@ -451,6 +566,8 @@ class MCPConnectorController extends Controller
      */
     public function updateSettings(Request $request, Site $site, string $slug)
     {
+        $this->authorizeSiteAccess($request, $site);
+
         $validated = $request->validate([
             'timezone' => ['nullable', 'timezone'],
             'working_hours' => ['nullable', 'array'],

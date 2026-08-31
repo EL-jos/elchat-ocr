@@ -3,6 +3,7 @@
 namespace App\Services\hops;
 
 use App\Models\Conversation;
+use App\Domain\MCP\Security\ActorContext;
 use App\Models\Site;
 use App\Models\UnansweredQuestion;
 use App\Services\chunks\ChunkHydrationService;
@@ -43,7 +44,7 @@ class MultiHopPipelineService
         protected CTARelevanceService $CTARelevanceService,
         protected PromptBuilder $promptBuilder,
     ){}
-    public function handle(string $question, QueryPlan $plan, Site $site, Conversation $conversation = null, array $history = [],): HopResponse
+    public function handle(string $question, QueryPlan $plan, Site $site, Conversation $conversation = null, array $history = [], ?ActorContext $actor = null): HopResponse
     {
         $state = $this->initState($plan);
 
@@ -63,7 +64,7 @@ class MultiHopPipelineService
 
             $query = $this->buildQueryFromObjective($nextObjective, $state, $question);
 
-            $results = $this->retrieve($query, $site, $state, $plan);
+            $results = $this->retrieve($query, $site, $state, $plan, $actor);
 
             if (empty($results)) break;
 
@@ -338,7 +339,7 @@ class MultiHopPipelineService
 
         return $question;
     }
-    protected function retrieve(string $query, Site $site, array $state, QueryPlan $plan): array
+    protected function retrieve(string $query, Site $site, array $state, QueryPlan $plan, ?ActorContext $actor = null): array
     {
         $queries = $plan->subQueries ?? [];
         if (empty($queries)) {
@@ -397,7 +398,7 @@ class MultiHopPipelineService
             ->toArray();
         //Log::info("APRES RECHERCHE HYBRIDE APRES CLASSEMENT", $resultsHybridSearch);
 
-        $hydrated = $this->chunkHydrationService->hydrate($resultsHybridSearch);
+        $hydrated = $this->chunkHydrationService->hydrate($resultsHybridSearch, $actor);
         // 🔥 diversité par source / entité
         return collect($hydrated)
             ->groupBy(fn($r) => $r['metadata']['entity'] ?? 'generic')

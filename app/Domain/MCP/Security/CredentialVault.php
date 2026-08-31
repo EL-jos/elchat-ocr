@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Log;
  */
 class CredentialVault
 {
-    public function store(Site $site, string $connectorSlug, array $credentials, array $settings = []): McpSiteConnector
+    public function store(Site $site, string $connectorSlug, array $credentials, array $settings = [], array $metadata = []): McpSiteConnector
     {
         $connector = McpConnector::where('slug', $connectorSlug)->firstOrFail();
 
@@ -26,6 +26,10 @@ class CredentialVault
                 'settings' => $settings,
                 'status' => 'connected',
                 'connected_at' => now(),
+                'provider_tenant_id' => $metadata['provider_tenant_id'] ?? null,
+                'provider_principal_id' => $metadata['provider_principal_id'] ?? null,
+                'provider_principal_upn' => $metadata['provider_principal_upn'] ?? null,
+                'granted_scopes' => $metadata['granted_scopes'] ?? ($credentials['granted_scopes'] ?? null),
             ]
         );
     }
@@ -47,7 +51,17 @@ class CredentialVault
             return null;
         }
 
-        return array_merge($decrypted, $record->settings ?? []);
+        if (!is_array($decrypted)) {
+            Log::error("MCP: identifiants invalides pour site {$site->id} / {$connectorSlug}");
+            return null;
+        }
+
+        $credentials = array_merge($decrypted, $record->settings ?? []);
+        if (!array_key_exists('granted_scopes', $credentials) && $record->granted_scopes !== null) {
+            $credentials['granted_scopes'] = $record->granted_scopes;
+        }
+
+        return $credentials;
     }
 
     /**
@@ -85,6 +99,10 @@ class CredentialVault
             ->update([
                 'status' => 'revoked',
                 'credentials_encrypted' => null,
+                'provider_tenant_id' => null,
+                'provider_principal_id' => null,
+                'provider_principal_upn' => null,
+                'granted_scopes' => null,
             ]);
     }
 }

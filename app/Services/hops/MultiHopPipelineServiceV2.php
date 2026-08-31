@@ -3,6 +3,7 @@
 namespace App\Services\hops;
 
 use App\Contracts\ConversationEngineInterface;
+use App\Domain\MCP\Security\ActorContext;
 use App\Models\Conversation;
 use App\Models\Site;
 use App\Services\chunks\ChunkHydrationService;
@@ -48,7 +49,8 @@ class MultiHopPipelineServiceV2
         Site $site,
         ?Conversation $conversation = null,
         ?array $history = [],
-        ?ConversationDirective $directive = null
+        ?ConversationDirective $directive = null,
+        ?ActorContext $actor = null,
     ): HopResponse {
 
         Log::info("MULTI-HOP ACTIVATED");
@@ -73,7 +75,7 @@ class MultiHopPipelineServiceV2
         if (empty($state['evidence'])) {
             foreach ($seedQueries as $q) {
 
-                $results = $this->retrieve($q, $site, $state);
+                $results = $this->retrieve($q, $site, $state, $actor);
 
                 if (empty($results)) continue;
 
@@ -119,7 +121,7 @@ class MultiHopPipelineServiceV2
             ]);
 
             // 📡 4. RETRIEVE
-            $results = $this->retrieve($query, $site, $state);
+            $results = $this->retrieve($query, $site, $state, $actor);
 
             if (empty($results)) continue;
             Log::info("RESULTAT DE RETRIVE", $results);
@@ -383,7 +385,7 @@ CONTENT;
     // =====================================================
     // 📡 RETRIEVE
     // =====================================================
-    protected function retrieve(string $query, Site $site, array $state): array
+    protected function retrieve(string $query, Site $site, array $state, ?ActorContext $actor = null): array
     {
         $embedding = $this->embeddingService->getEmbedding($query);
 
@@ -394,7 +396,7 @@ CONTENT;
             limit: 20
         );
 
-        $results = $this->chunkHydrationService->hydrate($results);
+        $results = $this->chunkHydrationService->hydrate($results, $actor);
 
         // ❗ anti re-fetch
         return array_filter($results, fn($r)

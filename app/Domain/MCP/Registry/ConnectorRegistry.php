@@ -3,6 +3,8 @@
 namespace App\Domain\MCP\Registry;
 
 use App\Domain\MCP\Contracts\MCPConnectorInterface;
+use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
+use App\Domain\MCP\Security\CredentialVault;
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
 use App\Models\Site;
 use Illuminate\Support\Collection;
@@ -54,16 +56,20 @@ class ConnectorRegistry
             ->get()
             ->pluck('mcpConnector.slug');
 
-        $tools = [];
+        $availableTools = [];
         foreach ($activeConnectors as $slug) {
             if (!$this->has($slug)) {
                 continue; // connecteur activé en base mais pas (encore) implémenté côté code -> ignoré silencieusement
             }
-            foreach ($this->get($slug)->listTools() as $tool) {
-                $tools[] = $tool->toOpenAIFormat();
+            $connector = $this->get($slug);
+            $schemas = $connector instanceof ProvidesSiteScopedTools
+                ? $connector->toolsAvailableFor(app(CredentialVault::class)->retrieve($site, $slug) ?? [])
+                : $connector->listTools();
+            foreach ($schemas as $tool) {
+                $availableTools[] = $tool->toOpenAIFormat();
             }
         }
 
-        return $tools;
+        return $availableTools;
     }
 }

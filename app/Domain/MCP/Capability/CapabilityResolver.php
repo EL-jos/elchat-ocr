@@ -92,15 +92,109 @@ class CapabilityResolver
             }
 
             foreach ($schemas as $tool) {
+                $module = method_exists($connector, 'moduleMetadataForTool')
+                    ? $connector->moduleMetadataForTool($tool->name)
+                    : null;
                 $tools[] = [
                     'tool_name' => $tool->qualifiedName(),
                     'label' => $tool->description,
+                    'module' => $module,
                     'connector' => ['slug' => $slug, 'name' => $names[$slug]->name ?? $slug, 'icon_url' => $names[$slug]->icon_url ?? null],
                 ];
             }
         }
 
         return $tools;
+    }
+
+    /**
+     * Catalogue destiné à l'administration des capacités.
+     *
+     * Un tool dont le scope Microsoft n'est pas encore présent dans le token
+     * doit rester visible pour expliquer pourquoi il ne peut pas être choisi.
+     * Il ne rejoint pas pour autant availableToolsCatalog() : le runtime et
+     * la résolution des workflows restent strictement fail-closed.
+     */
+    public function configurationToolsCatalog(Site $site): array
+    {
+        $connections = $site->mcpSiteConnectors()
+            ->where('status', 'connected')
+            ->with('mcpConnector')
+            ->get();
+        $names = McpConnector::whereIn('slug', $connections->pluck('mcpConnector.slug'))->get()->keyBy('slug');
+
+        $tools = [];
+        foreach ($connections as $connection) {
+            $slug = (string) ($connection->mcpConnector?->slug ?? '');
+            if ($slug === '' || !$this->registry->has($slug)) {
+                continue;
+            }
+
+            $connector = $this->registry->get($slug);
+            $schemas = $connector->listTools();
+            $availableNames = null;
+
+            if ($connector instanceof ProvidesSiteScopedTools) {
+                $credentials = $this->vault->retrieve($site, $slug);
+                $availableNames = $credentials
+                    ? collect($connector->toolsAvailableFor($credentials))->map(fn ($tool) => $tool->qualifiedName())->all()
+                    : [];
+            }
+
+            foreach ($schemas as $tool) {
+                $module = method_exists($connector, 'moduleMetadataForTool')
+                    ? $connector->moduleMetadataForTool($tool->name)
+                    : null;
+                $tools[] = [
+                    'tool_name' => $tool->qualifiedName(),
+                    'label' => $tool->description,
+                    'available' => $availableNames === null || in_array($tool->qualifiedName(), $availableNames, true),
+                    'module' => $module,
+                    'connector' => [
+                        'slug' => $slug,
+                        'name' => $names[$slug]->name ?? $slug,
+                        'icon_url' => $names[$slug]->icon_url ?? null,
+                    ],
+                ];
+            }
+        }
+
+        return $tools;
+    }
+
+    /**
+     * Catalogue des applications d’un connecteur modulaire, y compris celles
+     * qui n’ont pas d’API Graph publique. Il sert à expliquer clairement leur
+     * état dans l’interface sans exposer de faux outils au modèle.
+     */
+    public function configurationModulesCatalog(Site $site): array
+    {
+        $connections = $site->mcpSiteConnectors()
+            ->where('status', 'connected')
+            ->with('mcpConnector')
+            ->get();
+        $names = McpConnector::whereIn('slug', $connections->pluck('mcpConnector.slug'))->get()->keyBy('slug');
+
+        $modules = [];
+        foreach ($connections as $connection) {
+            $slug = (string) ($connection->mcpConnector?->slug ?? '');
+            if ($slug === '' || !$this->registry->has($slug)) continue;
+            $connector = $this->registry->get($slug);
+            if (!method_exists($connector, 'modulesMetadata')) continue;
+
+            foreach ($connector->modulesMetadata() as $module) {
+                $modules[] = [
+                    ...$module,
+                    'connector' => [
+                        'slug' => $slug,
+                        'name' => $names[$slug]->name ?? $slug,
+                        'icon_url' => $names[$slug]->icon_url ?? null,
+                    ],
+                ];
+            }
+        }
+
+        return $modules;
     }
 
     /**
@@ -116,7 +210,11 @@ class CapabilityResolver
 
         foreach ($activeSlugs as $slug) {
             if (!$this->registry->has($slug)) continue;
-            foreach ($this->registry->get($slug)->listTools() as $tool) {
+            $connector = $this->registry->get($slug);
+            $tools = $connector instanceof ProvidesSiteScopedTools
+                ? $connector->toolsAvailableFor($this->vault->retrieve($site, $slug) ?? [])
+                : $connector->listTools();
+            foreach ($tools as $tool) {
                 if (!$tool->capability) continue;
                 $grouped[$tool->capability][] = $tool->qualifiedName();
             }

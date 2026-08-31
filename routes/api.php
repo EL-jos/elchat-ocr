@@ -32,6 +32,7 @@ use App\Http\Controllers\api\v5\AIEngagementController;
 use App\Http\Controllers\api\v5\MCPAgentController;
 use App\Http\Controllers\api\v5\MCPCapabilityController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
+use App\Http\Controllers\api\v5\Microsoft365SyncController;
 use App\Http\Controllers\api\v5\MCPPendingActionController;
 use App\Http\Controllers\api\v5\MCPPermissionController;
 use App\Http\Controllers\api\v5\MCPWorkflowController;
@@ -178,6 +179,11 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::prefix('/site/{site}/mcp')->group(function () {
+
+            Route::controller(Microsoft365SyncController::class)->prefix('/microsoft-365')->group(function () {
+                Route::get('/sources', 'index');
+                Route::post('/sync', 'sync');
+            });
 
             Route::controller(MCPConnectorController::class)->group(function () {
                 Route::get('/connectors', 'index');

@@ -9,6 +9,7 @@ use App\Services\lexical\LexicalIndexService;
 use App\Services\vector\VectorIndexService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class DocumentLifecycleService
@@ -69,8 +70,13 @@ class DocumentLifecycleService
     {
         $deletedChunks = $this->purgeChunks($document, $site);
         $path = $document->path;
+        $storageDisk = $document->storage_disk;
+        $storagePath = $document->storage_path;
 
         $document->delete();
+        if ($storageDisk && $storagePath) {
+            Storage::disk($storageDisk)->delete($storagePath);
+        }
         $this->deleteManagedFile($path);
 
         return $deletedChunks;

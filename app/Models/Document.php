@@ -11,6 +11,7 @@ class Document extends BaseModel
         'file_size' => 'integer',
         'index_revision' => 'integer',
         'last_indexed_at' => 'datetime',
+        'source_metadata' => 'array',
     ];
 
     public static function booted()

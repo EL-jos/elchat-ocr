@@ -6,6 +6,7 @@ use App\Domain\MCP\Capability\CapabilityActionPlaybookEngine;
 use App\Domain\MCP\Capability\CapabilityPlaybookEngine;
 use App\Domain\MCP\Capability\CapabilityResolver;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuthorizesSiteAccess;
 use App\Models\Mcp\{McpCapability, McpCapabilityPreference, McpConnector};
 use App\Models\Site;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ use Illuminate\Support\Str;
 
 class MCPCapabilityController extends Controller
 {
+    use AuthorizesSiteAccess;
     public function __construct(
         private readonly CapabilityResolver $resolver,
         private readonly CapabilityPlaybookEngine $playbookEngine, // 🆕
@@ -23,16 +25,22 @@ class MCPCapabilityController extends Controller
     /** Outils actifs disponibles sur ce site — alimente le sélecteur de la création/édition d'une capacité. */
     public function toolsCatalog(Request $request, Site $site)
     {
-        return response()->json(['data' => $this->resolver->availableToolsCatalog($site)]);
+        $this->authorizeSiteAccess($request, $site);
+        return response()->json([
+            'data' => $this->resolver->configurationToolsCatalog($site),
+            'modules' => $this->resolver->configurationModulesCatalog($site),
+        ]);
     }
 
     public function definitions(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         return response()->json(['data' => McpCapability::where('site_id', $site->id)->orderBy('label')->get()]);
     }
 
     public function store(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $validated = $this->validatedDefinition($request);
         $capability = McpCapability::create([
             'id' => (string) Str::uuid(), 'site_id' => $site->id,
@@ -44,6 +52,7 @@ class MCPCapabilityController extends Controller
 
     public function update(Request $request, Site $site, McpCapability $capability)
     {
+        $this->authorizeSiteAccess($request, $site);
         abort_unless($capability->site_id === $site->id, 404);
         $capability->update($this->validatedDefinition($request));
         return response()->json(['data' => $capability]);
@@ -51,6 +60,7 @@ class MCPCapabilityController extends Controller
 
     public function destroy(Request $request, Site $site, McpCapability $capability)
     {
+        $this->authorizeSiteAccess($request, $site);
         abort_unless($capability->site_id === $site->id, 404);
         $capability->delete();
         return response()->json(['status' => 'deleted']);
@@ -59,6 +69,7 @@ class MCPCapabilityController extends Controller
     /** 🆕 Bootstrap pratique, jamais obligatoire — voir CapabilityResolver::suggestFromToolTags. */
     public function suggest(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $created = [];
         foreach ($this->resolver->suggestFromToolTags($site) as $suggestion) {
             if (McpCapability::where('site_id', $site->id)->where('key', $suggestion['key'])->exists()) continue;
@@ -79,12 +90,14 @@ class MCPCapabilityController extends Controller
      */
     public function recommended(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         return response()->json(['data' => $this->playbookEngine->suggestFor($site)]);
     }
 
     /** 🆕 L'admin ignore une suggestion — ne la revoit plus pour ce site. */
     public function dismissRecommendation(Request $request, Site $site, string $key)
     {
+        $this->authorizeSiteAccess($request, $site);
         $this->playbookEngine->dismiss($site, $key);
         return response()->json(['status' => 'dismissed']);
     }
@@ -92,18 +105,21 @@ class MCPCapabilityController extends Controller
     /** 🆕 Combos d'actions (même connecteur ou cross-connecteur) — bandeau de CapabilityManagerComponent. */
     public function recommendedActions(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         return response()->json(['data' => $this->actionPlaybookEngine->suggestFor($site)]);
     }
 
     /** 🆕 Accepte : crée directement la McpCapability correspondante. */
     public function acceptActionRecommendation(Request $request, Site $site, string $key)
     {
+        $this->authorizeSiteAccess($request, $site);
         $capability = $this->actionPlaybookEngine->accept($site, $key);
         return response()->json(['data' => $capability]);
     }
 
     public function dismissActionRecommendation(Request $request, Site $site, string $key)
     {
+        $this->authorizeSiteAccess($request, $site);
         $this->actionPlaybookEngine->dismiss($site, $key);
         return response()->json(['status' => 'dismissed']);
     }
@@ -111,6 +127,7 @@ class MCPCapabilityController extends Controller
     /** Conflits actuels (2+ connecteurs actifs pour une même capacité). */
     public function index(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $providers = $this->resolver->providersFor($site);
         $preferences = McpCapabilityPreference::where('site_id', $site->id)->pluck('connector_slug', 'capability');
         $labels = McpCapability::where('site_id', $site->id)->pluck('label', 'key');
@@ -130,6 +147,7 @@ class MCPCapabilityController extends Controller
 
     public function updatePreference(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $validated = $request->validate(['capability' => ['required', 'string'], 'connector_slug' => ['required', 'string']]);
         McpCapabilityPreference::updateOrCreate(
             ['site_id' => $site->id, 'capability' => $validated['capability']],
@@ -141,6 +159,7 @@ class MCPCapabilityController extends Controller
     /** Catalogue complet — alimente le sélecteur de l'éditeur de workflow. */
     public function catalog(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $definitions = McpCapability::where('site_id', $site->id)->get();
         $providers = $this->resolver->providersFor($site);
         $preferences = McpCapabilityPreference::where('site_id', $site->id)->pluck('connector_slug', 'capability');

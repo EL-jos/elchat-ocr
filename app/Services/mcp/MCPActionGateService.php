@@ -403,7 +403,7 @@ class MCPActionGateService
     private function executeAuthorized(Site $site, Conversation $conversation, ActorContext $actor, string $connectorSlug, string $toolName, array $params, int $hop, bool $forced = false): ToolResult
     {
         if ($connectorSlug === RAGToolAdapter::CONNECTOR_SLUG) {
-            $result = $this->ragTool->search($site, $params['query'] ?? '');
+            $result = $this->ragTool->search($site, $params['query'] ?? '', actor: $actor);
             $this->audit->log($site, $connectorSlug, $toolName, $params, 'auto', $result->success ? 'success' : 'error', $result, conversationId: $conversation->id, hopNumber: $hop);
 
             if ($result->success) {
@@ -431,13 +431,21 @@ class MCPActionGateService
         );
         $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_STARTED, $callKey, $connectorSlug, $toolName);
 
-        if (! $forced) {
-            try {
-                $this->permissions->authorize($site, $actor, $connectorSlug, $toolName);
-            } catch (Throwable $exception) {
-                $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'permission_denied');
-                throw $exception;
-            }
+        try {
+            // Une confirmation ne doit contourner que la seconde demande de
+            // confirmation. Le mode deny, le périmètre de l'acteur et une
+            // éventuelle modification de permission sont toujours revalidés.
+            $this->permissions->authorize(
+                $site,
+                $actor,
+                $connectorSlug,
+                $toolName,
+                skipConfirmation: $forced,
+                consumeDailyLimit: !$forced,
+            );
+        } catch (Throwable $exception) {
+            $this->trackMcpAction($site, $conversation, AnalyticsEventType::MCP_ACTION_FAILED, $callKey, $connectorSlug, $toolName, errorCode: 'permission_denied');
+            throw $exception;
         }
 
         $credentials = $this->vault->retrieve($site, $connectorSlug);

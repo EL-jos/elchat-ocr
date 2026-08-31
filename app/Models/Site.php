@@ -93,4 +93,8 @@ class Site extends BaseModel
     public function mcpSiteCapabilities(){
         return $this->hasMany(McpCapability::class);
     }
+
+    public function microsoft365Sources(){
+        return $this->hasMany(\App\Models\Mcp\Microsoft365Source::class);
+    }
 }

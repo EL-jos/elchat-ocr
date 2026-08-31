@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\v5;
 
 use App\Domain\MCP\Orchestration\MCPGateResult;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuthorizesSiteAccess;
 use App\Models\Mcp\McpPendingAction;
 use App\Models\Message;
 use App\Models\Site;
@@ -15,6 +16,7 @@ use Illuminate\Support\Str;
 
 class MCPPendingActionController extends Controller
 {
+    use AuthorizesSiteAccess;
     public function __construct(
         private readonly MCPActionGateService $gate,
         private readonly MercureService $mercureService,
@@ -27,6 +29,7 @@ class MCPPendingActionController extends Controller
      */
     public function index(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         if (!$request->user()?->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
@@ -59,17 +62,22 @@ class MCPPendingActionController extends Controller
      */
     public function resolve(Request $request, Site $site, McpPendingAction $pendingAction)
     {
-        
+        abort_unless((string) $pendingAction->site_id === (string) $site->id, 404);
         $validated = $request->validate(['approved' => ['required', 'boolean']]);
 
         if ($pendingAction->status !== 'pending') {
             return response()->json(['message' => 'Cette action a déjà été traitée.'], 409);
         }
 
+        if ($pendingAction->expires_at && $pendingAction->expires_at->isPast()) {
+            return response()->json(['message' => 'Cette action de confirmation a expiré.'], 410);
+        }
+
         $userId = auth()->id();
         $visitorId = $request->input('visitor_id');
 
         if ($pendingAction->confirm_actor === 'admin') {
+            $this->authorizeSiteAccess($request, $site);
             if (!$request->user()?->isAdmin()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
@@ -81,11 +89,20 @@ class MCPPendingActionController extends Controller
             }
         }
 
-        $pendingAction->update([
-            'status' => $validated['approved'] ? 'approved' : 'rejected',
-            'resolved_by_user_id' => $userId,
-            'resolved_at' => now(),
-        ]);
+        $updated = McpPendingAction::query()
+            ->whereKey($pendingAction->id)
+            ->where('status', 'pending')
+            ->update([
+                'status' => $validated['approved'] ? 'approved' : 'rejected',
+                'resolved_by_user_id' => $userId,
+                'resolved_at' => now(),
+            ]);
+
+        if ($updated !== 1) {
+            return response()->json(['message' => 'Cette action a déjà été traitée.'], 409);
+        }
+
+        $pendingAction->refresh();
 
         $site = $pendingAction->site;
         /** @var MCPGateResult $result */

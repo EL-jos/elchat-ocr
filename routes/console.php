@@ -3,6 +3,9 @@
 use App\Jobs\Proactive\SendProactiveMessageJob;
 use App\Jobs\RunProspectingCampaignJob;
 use App\Jobs\SyncProspectToCrmJob;
+use App\Jobs\Microsoft365SyncJob;
+use App\Models\Mcp\McpSiteConnector;
+use App\Models\Site;
 use App\Models\Proactive\ProactiveMessage;
 use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
@@ -45,6 +48,17 @@ Schedule::command('analytics:prune')
     ->dailyAt('03:30')
     ->withoutOverlapping(120)
     ->onOneServer();
+
+// Delta sync Microsoft 365 : le curseur Graph est conservé par drive/site,
+// les fichiers sont téléchargés uniquement vers le stockage privé puis
+// réindexés par la file documentaire existante.
+Schedule::call(function () {
+    McpSiteConnector::query()
+        ->where('status', 'connected')
+        ->whereHas('mcpConnector', fn ($q) => $q->where('slug', 'microsoft_365'))
+        ->pluck('site_id')
+        ->each(fn (string $siteId) => Microsoft365SyncJob::dispatch(Site::find($siteId)));
+})->everyFifteenMinutes()->name('microsoft365-delta-sync')->withoutOverlapping(900)->onOneServer();
 Schedule::command('visitor-intelligence:prune')
     // Run hourly so the 48-hour replay retention is not extended by another
     // full day waiting for the nightly scheduler.

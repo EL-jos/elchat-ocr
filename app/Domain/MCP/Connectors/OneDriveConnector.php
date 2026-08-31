@@ -3,12 +3,13 @@
 namespace App\Domain\MCP\Connectors;
 
 use App\Domain\MCP\Connectors\Concerns\RefreshesOAuthToken;
+use App\Domain\Microsoft365\MicrosoftGraphClient;
+use App\Domain\Microsoft365\Exceptions\MicrosoftGraphException;
 use App\Domain\MCP\Contracts\ToolResult;
 use App\Domain\MCP\Contracts\ToolSchema;
 use App\Domain\MCP\Exceptions\AuthExpiredException;
 use App\Domain\MCP\Exceptions\ConnectorUnavailableException;
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
-use Illuminate\Http\Client\RequestException;
 
 /**
  * Microsoft Graph. credentials attendus : { access_token, refresh_token, expires_at }
@@ -171,11 +172,11 @@ Bonnes pratiques :
     {
         try {
             $res = $this->client($c)->get("me/drive/root/search(q='" . urlencode($p['query']) . "')");
-        } catch (RequestException $e) {
-            throw new ConnectorUnavailableException('OneDrive indisponible: ' . $e->getMessage());
+        } catch (MicrosoftGraphException $e) {
+            return $this->graphFailure($e);
         }
         $this->recordSuccess();
-        $files = collect($res->json('value', []))->map(fn ($f) => ['id' => $f['id'], 'name' => $f['name'], 'webUrl' => $f['webUrl']])->all();
+        $files = collect($res['value'] ?? [])->map(fn ($f) => ['id' => $f['id'], 'name' => $f['name'], 'webUrl' => $f['webUrl'] ?? null])->all();
         if (empty($files)) return ToolResult::fail('not_found', 'Aucun fichier trouvé.');
         return ToolResult::ok(['files' => $files], count($files) . ' fichier(s) trouvé(s)');
     }
@@ -183,10 +184,9 @@ Bonnes pratiques :
     private function getFile(array $p, array $c): ToolResult
     {
         try {
-            $file = $this->client($c)->get("me/drive/items/{$p['file_id']}")->json();
-        } catch (RequestException $e) {
-            if ($e->response?->status() === 404) return ToolResult::fail('not_found', 'Fichier introuvable.');
-            throw new ConnectorUnavailableException('OneDrive indisponible: ' . $e->getMessage());
+            $file = $this->client($c)->get("me/drive/items/{$p['file_id']}");
+        } catch (MicrosoftGraphException $e) {
+            return $this->graphFailure($e);
         }
         $this->recordSuccess();
         return ToolResult::ok(['id' => $file['id'], 'name' => $file['name'], 'webUrl' => $file['webUrl']], "Fichier : {$file['name']}");
@@ -196,21 +196,19 @@ Bonnes pratiques :
     {
         try {
             $res = $this->client($c)->get('me/drive/recent');
-        } catch (RequestException $e) {
-            throw new ConnectorUnavailableException('OneDrive indisponible: ' . $e->getMessage());
+        } catch (MicrosoftGraphException $e) {
+            return $this->graphFailure($e);
         }
         $this->recordSuccess();
-        return ToolResult::ok(['files' => $res->json('value', [])], 'Fichiers récents récupérés.');
+        return ToolResult::ok(['files' => $res['value'] ?? []], 'Fichiers récents récupérés.');
     }
 
     private function uploadFile(array $p, array $c): ToolResult
     {
         try {
-            $file = $this->http('https://graph.microsoft.com/v1.0/')->withToken($c['access_token'])
-                ->withBody($p['content'], 'text/plain')
-                ->put("me/drive/root:/{$p['name']}:/content")->json();
-        } catch (RequestException $e) {
-            throw new ConnectorUnavailableException('OneDrive indisponible: ' . $e->getMessage());
+            $file = $this->client($c)->putContent("me/drive/root:/" . rawurlencode($p['name']) . ":/content", $p['content'], 'text/plain');
+        } catch (MicrosoftGraphException $e) {
+            return $this->graphFailure($e);
         }
         $this->recordSuccess();
         return ToolResult::ok(['file_id' => $file['id']], "Fichier « {$p['name']} » créé dans OneDrive.");
@@ -222,16 +220,35 @@ Bonnes pratiques :
             $this->client($c)->post("me/drive/items/{$p['file_id']}/invite", [
                 'recipients' => [['email' => $p['email']]], 'requireSignIn' => true, 'roles' => ['read'],
             ]);
-        } catch (RequestException $e) {
-            if ($e->response?->status() === 404) return ToolResult::fail('not_found', 'Fichier introuvable.');
-            throw new ConnectorUnavailableException('OneDrive indisponible: ' . $e->getMessage());
+        } catch (MicrosoftGraphException $e) {
+            return $this->graphFailure($e);
         }
         $this->recordSuccess();
         return ToolResult::ok(['file_id' => $p['file_id']], "Fichier partagé avec {$p['email']}.");
     }
 
-    private function client(array $c)
+    private function client(array $c): MicrosoftGraphClient
     {
-        return $this->http(self::API_BASE)->withToken($c['access_token']);
+        return MicrosoftGraphClient::forToken($c['access_token']);
+    }
+
+    private function graphFailure(MicrosoftGraphException $exception): ToolResult
+    {
+        if ($exception->isAuthFailure()) {
+            throw new AuthExpiredException('La session OneDrive a expiré, reconnexion requise.');
+        }
+
+        if ($exception->isNotFound()) {
+            return ToolResult::fail('not_found', 'La ressource OneDrive demandée est introuvable.');
+        }
+
+        if (in_array($exception->status, [403, 429], true)) {
+            return ToolResult::fail(
+                $exception->status === 403 ? 'forbidden' : 'rate_limited',
+                'OneDrive a refusé cette opération avec les droits actuellement accordés.',
+            );
+        }
+
+        throw new ConnectorUnavailableException('OneDrive est momentanément indisponible.');
     }
 }

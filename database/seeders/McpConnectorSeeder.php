@@ -19,6 +19,7 @@ use App\Domain\MCP\Connectors\KlaviyoConnector;
 use App\Domain\MCP\Connectors\MailchimpConnector;
 use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
+use App\Domain\MCP\Connectors\Microsoft365Connector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
@@ -99,6 +100,12 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => MicrosoftTeamsConnector::class,
             'description' => "Notifie votre équipe directement dans Teams.",
             'icon_url' => 'https://api.iconify.design/logos:microsoft-teams.svg', 'is_active' => true,
+        ]);
+        McpConnector::updateOrCreate(['slug' => 'microsoft_365'], [
+            'name' => 'Microsoft 365', 'category' => 'microsoft_365', 'auth_type' => 'oauth2',
+            'adapter_class' => Microsoft365Connector::class,
+            'description' => 'Documents OneDrive/SharePoint, Excel, Outlook et Teams via Microsoft Graph, avec permissions déléguées et confirmation des actions sensibles.',
+            'icon_url' => 'https://upload.wikimedia.org/wikipedia/commons/0/0e/Microsoft_365_%282022%29.svg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=original', 'is_active' => true,
         ]);
         McpConnector::updateOrCreate(['slug' => 'asana'], [
             'name' => 'Asana', 'category' => 'project_management', 'auth_type' => 'api_key',

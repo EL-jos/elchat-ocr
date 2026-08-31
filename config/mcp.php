@@ -17,6 +17,7 @@ use App\Domain\MCP\Connectors\KlaviyoConnector;
 use App\Domain\MCP\Connectors\MailchimpConnector;
 use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
+use App\Domain\MCP\Connectors\Microsoft365Connector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
@@ -80,6 +81,12 @@ return [
         ],
         'slack' => ['class' => SlackConnector::class],
         'microsoft_teams' => ['class' => MicrosoftTeamsConnector::class],
+        'microsoft_365' => [
+            'class' => Microsoft365Connector::class,
+            'client_id' => env('MICROSOFT_CLIENT_ID'),
+            'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
+            'tenant' => env('MICROSOFT_TENANT', 'common'),
+        ],
         'asana' => ['class' => AsanaConnector::class],
         'notion' => ['class' => NotionConnector::class],
 
