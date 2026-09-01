@@ -32,6 +32,8 @@ class MCPConnectorController extends Controller
         'google_search_console',
         'google_ads',
         'microsoft_365',
+        'jira',
+        'monday',
     ];
 
     public function __construct(
@@ -151,16 +153,22 @@ class MCPConnectorController extends Controller
             ]);
         }
 
-        $redirectUri = route('mcp.oauth.callback', ['slug' => $slug]);
-        $state = encrypt([
+        $redirectUri = $this->oauthRedirectUri($slug);
+        $statePayload = [
             'site_id' => $site->id,
             'connector' => $slug,
-            // Google et Microsoft 365 reviennent dans la fenêtre OAuth et
-            // notifient le dashboard sans remplacer la page courante.
+            // Les fournisseurs OAuth compatibles reviennent dans la fenêtre
+            // popup et notifient le dashboard sans remplacer la page courante.
             'response_mode' => in_array($slug, self::POST_MESSAGE_OAUTH_CONNECTORS, true)
                 ? 'post_message'
                 : 'redirect',
-        ]);
+        ];
+
+        if ($slug === 'monday' && config('mcp.connectors.monday.use_pkce', false)) {
+            $statePayload['code_verifier'] = $this->pkceVerifier();
+        }
+
+        $state = encrypt($statePayload);
 
         if ($slug === 'meta_ads') {
             $appId = config('mcp.connectors.meta_ads.app_id');
@@ -211,6 +219,60 @@ class MCPConnectorController extends Controller
                 ]);
 
             return response()->json(['authorization_url' => $url]);
+        }
+
+        if ($slug === 'jira') {
+            $clientId = config('mcp.connectors.jira.client_id');
+            if (!$clientId) {
+                Log::error('MCP: JIRA_CLIENT_ID absent ou config non rechargée.');
+                return response()->json(['message' => 'Connecteur Jira mal configuré côté serveur.'], 500);
+            }
+
+            $url = 'https://auth.atlassian.com/authorize?' . http_build_query([
+                'audience' => 'api.atlassian.com',
+                'client_id' => $clientId,
+                'redirect_uri' => $redirectUri,
+                'response_type' => 'code',
+                'prompt' => 'consent',
+                'scope' => implode(' ', [
+                    'read:jira-work', 'write:jira-work', 'read:jira-user', 'offline_access',
+                ]),
+                'state' => $state,
+            ]);
+
+            return response()->json([
+                'authorization_url' => $url,
+                'scopes' => ['read:jira-work', 'write:jira-work', 'read:jira-user', 'offline_access'],
+            ]);
+        }
+
+        if ($slug === 'monday') {
+            $clientId = config('mcp.connectors.monday.client_id');
+            if (!$clientId) {
+                Log::error('MCP: MONDAY_CLIENT_ID absent ou config non rechargée.');
+                return response()->json(['message' => 'Connecteur monday.com mal configuré côté serveur.'], 500);
+            }
+
+            $mondayParams = [
+                'client_id' => $clientId,
+                'redirect_uri' => $redirectUri,
+                'response_type' => 'code',
+                'scope' => implode(' ', [
+                    'account:read', 'boards:read', 'boards:write', 'me:read',
+                    'updates:read', 'updates:write', 'users:read', 'workspaces:read',
+                ]),
+                'state' => $state,
+            ];
+
+            if (config('mcp.connectors.monday.use_pkce', false)) {
+                $mondayParams['code_challenge'] = $this->pkceChallenge($statePayload['code_verifier']);
+                $mondayParams['code_challenge_method'] = 'S256';
+            }
+
+            return response()->json([
+                'authorization_url' => 'https://auth.monday.com/oauth2/authorize?' . http_build_query($mondayParams),
+                'scopes' => preg_split('/\s+/', $mondayParams['scope']),
+            ]);
         }
 
         if ($slug === 'onedrive') {
@@ -266,7 +328,7 @@ class MCPConnectorController extends Controller
         $usePostMessage = ($state['response_mode'] ?? null) === 'post_message'
             && in_array($slug, self::POST_MESSAGE_OAUTH_CONNECTORS, true);
         $code = $request->query('code');
-        $redirectUri = route('mcp.oauth.callback', ['slug' => $slug]);
+        $redirectUri = $this->oauthRedirectUri($slug);
 
         if ($request->filled('error')) {
             $message = $request->query('error') === 'access_denied'
@@ -289,6 +351,14 @@ class MCPConnectorController extends Controller
         if ($slug === 'meta_ads') {
             $this->handleMetaOAuthCallback($site, $slug, $code, $redirectUri);
             return redirect($this->connectorUrl($site, $slug));
+        }
+
+        if ($slug === 'jira') {
+            return $this->handleJiraOAuthCallback($site, $code, $redirectUri, $usePostMessage);
+        }
+
+        if ($slug === 'monday') {
+            return $this->handleMondayOAuthCallback($site, $code, $redirectUri, $state, $usePostMessage);
         }
 
         if ($slug === 'buffer') {
@@ -390,7 +460,7 @@ class MCPConnectorController extends Controller
     }
 
     /**
-     * Termine un OAuth dans la popup Google. Si le callback a été ouvert
+     * Termine un OAuth dans la popup. Si le callback a été ouvert
      * sans parent (favoris, navigateur restrictif...), la vue revient vers le
      * dashboard afin de conserver le comportement historique.
      */
@@ -489,11 +559,156 @@ class MCPConnectorController extends Controller
         return $this->oauthResult($site, 'microsoft_365', true, 'Microsoft 365 est maintenant connecté à ELChat.', $usePostMessage);
     }
 
+    private function handleJiraOAuthCallback(Site $site, string $code, string $redirectUri, bool $usePostMessage)
+    {
+        try {
+            $tokenResponse = \Illuminate\Support\Facades\Http::asJson()->post('https://auth.atlassian.com/oauth/token', [
+                'grant_type' => 'authorization_code',
+                'client_id' => config('mcp.connectors.jira.client_id'),
+                'client_secret' => config('mcp.connectors.jira.client_secret'),
+                'code' => $code,
+                'redirect_uri' => $redirectUri,
+            ])->throw()->json();
+
+            if (empty($tokenResponse['access_token'])) {
+                throw new \RuntimeException('access_token absent');
+            }
+
+            $resources = \Illuminate\Support\Facades\Http::withToken($tokenResponse['access_token'])
+                ->acceptJson()->get('https://api.atlassian.com/oauth/token/accessible-resources')
+                ->throw()->json();
+        } catch (\Throwable $exception) {
+            Log::warning('MCP Jira: échec OAuth callback', ['type' => get_class($exception)]);
+            return $this->oauthResult($site, 'jira', false, 'La connexion Jira n’a pas pu être finalisée. Vérifiez la configuration OAuth Jira puis réessayez.', $usePostMessage);
+        }
+
+        $resource = collect(is_array($resources) ? $resources : [])->first(function ($candidate) {
+            $scopes = $this->oauthScopes($candidate['scopes'] ?? []);
+            return in_array('read:jira-work', $scopes, true)
+                || in_array('write:jira-work', $scopes, true)
+                || (empty($scopes) && str_contains((string) ($candidate['url'] ?? ''), '.atlassian.net'));
+        });
+
+        if (!$resource || empty($resource['id'])) {
+            return $this->oauthResult($site, 'jira', false, 'Aucun site Jira Cloud accessible n’a été sélectionné pour cette connexion.', $usePostMessage);
+        }
+
+        $credentials = [
+            'access_token' => $tokenResponse['access_token'],
+            'cloud_id' => $resource['id'],
+            'site_url' => $resource['url'] ?? null,
+            'expires_at' => now()->addSeconds((int) ($tokenResponse['expires_in'] ?? 3600))->timestamp,
+            'granted_scopes' => $this->oauthScopes($tokenResponse['scope'] ?? ($resource['scopes'] ?? [])),
+        ];
+        if (!empty($tokenResponse['refresh_token'])) $credentials['refresh_token'] = $tokenResponse['refresh_token'];
+
+        $this->vault->store($site, 'jira', $credentials, [], [
+            'provider_tenant_id' => $resource['id'],
+            'granted_scopes' => $credentials['granted_scopes'],
+        ]);
+        if ($this->registry->has('jira')) {
+            $this->permissions->seedDefaultsIfMissing($site, $this->registry->get('jira')->listTools());
+        }
+
+        return $this->oauthResult($site, 'jira', true, 'Jira est maintenant connecté à ELChat.', $usePostMessage);
+    }
+
+    private function handleMondayOAuthCallback(Site $site, string $code, string $redirectUri, array $state, bool $usePostMessage)
+    {
+        $payload = [
+            'grant_type' => 'authorization_code',
+            'client_id' => config('mcp.connectors.monday.client_id'),
+            'client_secret' => config('mcp.connectors.monday.client_secret'),
+            'code' => $code,
+            'redirect_uri' => $redirectUri,
+        ];
+        $usePkce = config('mcp.connectors.monday.use_pkce', false);
+        if ($usePkce && !empty($state['code_verifier'])) $payload['code_verifier'] = $state['code_verifier'];
+
+        try {
+            $request = $usePkce
+                ? \Illuminate\Support\Facades\Http::asJson()
+                : \Illuminate\Support\Facades\Http::asForm();
+            $tokenResponse = $request->post(config('mcp.connectors.monday.token_endpoint'), $payload)->throw()->json();
+        } catch (\Throwable $exception) {
+            Log::warning('MCP monday: échec OAuth callback', ['type' => get_class($exception)]);
+            return $this->oauthResult($site, 'monday', false, 'La connexion monday.com n’a pas pu être finalisée. Vérifiez la configuration OAuth monday puis réessayez.', $usePostMessage);
+        }
+
+        if (empty($tokenResponse['access_token'])) {
+            return $this->oauthResult($site, 'monday', false, 'monday.com n’a pas retourné de jeton d’accès valide. Veuillez réessayer.', $usePostMessage);
+        }
+
+        $credentials = [
+            'access_token' => $tokenResponse['access_token'],
+            'granted_scopes' => $this->oauthScopes($tokenResponse['scope'] ?? []),
+        ];
+        if (!empty($tokenResponse['refresh_token'])) $credentials['refresh_token'] = $tokenResponse['refresh_token'];
+        $expiresAt = $tokenResponse['expires_in'] ?? $this->jwtExpiration($tokenResponse['access_token']);
+        if ($expiresAt) {
+            $credentials['expires_at'] = isset($tokenResponse['expires_in'])
+                ? now()->addSeconds((int) $expiresAt)->timestamp
+                : (int) $expiresAt;
+        }
+
+        $this->vault->store($site, 'monday', $credentials, [], ['granted_scopes' => $credentials['granted_scopes']]);
+        if ($this->registry->has('monday')) {
+            $this->permissions->seedDefaultsIfMissing($site, $this->registry->get('monday')->listTools());
+        }
+
+        return $this->oauthResult($site, 'monday', true, 'monday.com est maintenant connecté à ELChat.', $usePostMessage);
+    }
+
     private function connectorUrl(Site $site, string $slug): string
     {
         $dashboardUrl = rtrim((string) config('app.frontend_dashboard_url', 'https://elchat.io'), '/');
 
         return "{$dashboardUrl}/app/site/{$site->id}/settings/connectors?connected=" . urlencode($slug);
+    }
+
+    private function pkceVerifier(): string
+    {
+        return rtrim(strtr(base64_encode(random_bytes(64)), '+/', '-_'), '=');
+    }
+
+    private function pkceChallenge(string $verifier): string
+    {
+        return rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+    }
+
+    private function oauthScopes(mixed $scopes): array
+    {
+        return collect(is_array($scopes) ? $scopes : (preg_split('/[\s,]+/', trim((string) $scopes)) ?: []))
+            ->filter()->values()->all();
+    }
+
+    private function jwtExpiration(string $token): ?int
+    {
+        $parts = explode('.', $token);
+        if (count($parts) < 2) return null;
+
+        $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')) ?: '', true);
+        return is_array($payload) && isset($payload['exp']) ? (int) $payload['exp'] : null;
+    }
+
+    /**
+     * Retourne l'URI déclarée chez le fournisseur OAuth quand elle est
+     * configurée. Le fallback conserve le fonctionnement local des autres
+     * connecteurs, qui utilisent l'URL générée depuis APP_URL.
+     */
+    private function oauthRedirectUri(string $slug): string
+    {
+        $configured = match ($slug) {
+            'jira' => config('mcp.connectors.jira.redirect_uri'),
+            'monday' => config('mcp.connectors.monday.redirect_uri'),
+            default => null,
+        };
+
+        if (is_string($configured) && trim($configured) !== '') {
+            return trim($configured);
+        }
+
+        return route('mcp.oauth.callback', ['slug' => $slug]);
     }
 
     private function frontendOrigin(): string
@@ -584,6 +799,12 @@ class MCPConnectorController extends Controller
 
             // meta_ads
             'ad_account_id' => ['nullable', 'string', 'regex:/^(act_)?[0-9]+$/'],
+
+            // jira
+            'default_project_key' => ['nullable', 'string', 'max:32', 'regex:/^[A-Za-z0-9_-]+$/'],
+
+            // monday
+            'default_board_id' => ['nullable', 'string', 'max:64', 'regex:/^[0-9]+$/'],
 
             // semrush
             'domain' => ['nullable', 'string', 'max:255'],

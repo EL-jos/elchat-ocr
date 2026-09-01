@@ -14,10 +14,12 @@ use App\Domain\MCP\Connectors\GoogleSearchConsoleConnector;
 use App\Domain\MCP\Connectors\HootsuiteConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
 use App\Domain\MCP\Connectors\KlaviyoConnector;
+use App\Domain\MCP\Connectors\JiraConnector;
 use App\Domain\MCP\Connectors\MailchimpConnector;
 use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\Microsoft365Connector;
+use App\Domain\MCP\Connectors\MondayConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
@@ -89,6 +91,24 @@ return [
         ],
         'asana' => ['class' => AsanaConnector::class],
         'notion' => ['class' => NotionConnector::class],
+
+        'jira' => [
+            'class' => JiraConnector::class,
+            'client_id' => env('JIRA_CLIENT_ID'),
+            'client_secret' => env('JIRA_CLIENT_SECRET'),
+            'redirect_uri' => env('JIRA_REDIRECT_URI'),
+        ],
+        'monday' => [
+            'class' => MondayConnector::class,
+            'client_id' => env('MONDAY_CLIENT_ID'),
+            'client_secret' => env('MONDAY_CLIENT_SECRET'),
+            'redirect_uri' => env('MONDAY_REDIRECT_URI'),
+            // Legacy OAuth2 remains the default for existing monday apps.
+            // New OAuth 2.1 apps can opt in with MONDAY_OAUTH_USE_PKCE=true
+            // and the token endpoint documented below.
+            'token_endpoint' => env('MONDAY_OAUTH_TOKEN_ENDPOINT', 'https://auth.monday.com/oauth2/token'),
+            'use_pkce' => filter_var(env('MONDAY_OAUTH_USE_PKCE', false), FILTER_VALIDATE_BOOL),
+        ],
 
         'odoo' => ['class' => OdooConnector::class],
 

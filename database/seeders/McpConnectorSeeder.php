@@ -15,11 +15,13 @@ use App\Domain\MCP\Connectors\GoogleDriveConnector;
 use App\Domain\MCP\Connectors\GoogleSearchConsoleConnector;
 use App\Domain\MCP\Connectors\HootsuiteConnector;
 use App\Domain\MCP\Connectors\HubSpotConnector;
+use App\Domain\MCP\Connectors\JiraConnector;
 use App\Domain\MCP\Connectors\KlaviyoConnector;
 use App\Domain\MCP\Connectors\MailchimpConnector;
 use App\Domain\MCP\Connectors\MetaAdsConnector;
 use App\Domain\MCP\Connectors\MicrosoftTeamsConnector;
 use App\Domain\MCP\Connectors\Microsoft365Connector;
+use App\Domain\MCP\Connectors\MondayConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
@@ -118,6 +120,20 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => NotionConnector::class,
             'description' => 'Pages et base de connaissances Notion.',
             'icon_url' => 'https://cdn.simpleicons.org/notion', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'jira'], [
+            'name' => 'Jira', 'category' => 'project_management', 'auth_type' => 'oauth2',
+            'adapter_class' => JiraConnector::class,
+            'description' => 'Projets, issues, statuts et commentaires Jira Cloud.',
+            'icon_url' => 'https://cdn.simpleicons.org/jira/0052CC', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'monday'], [
+            'name' => 'monday.com', 'category' => 'project_management', 'auth_type' => 'oauth2',
+            'adapter_class' => MondayConnector::class,
+            'description' => 'Tableaux, éléments, valeurs de colonnes et mises à jour monday.com.',
+            'icon_url' => 'https://upload.wikimedia.org/wikipedia/commons/c/c6/Monday_logo.svg', 'is_active' => true,
         ]);
 
         McpConnector::updateOrCreate(['slug' => 'odoo'], [
