@@ -25,6 +25,7 @@ class WidgetSetting extends BaseModel
         'ai_engagement_min_pages' => 'integer',
         'ai_engagement_min_score' => 'integer',
         'ai_engagement_strategies' => 'array',
+        'content_translations' => 'array',
     ];
 
     public function site(){
