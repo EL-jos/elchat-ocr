@@ -3,6 +3,7 @@
 namespace App\Services\validator;
 
 use Exception;
+use App\Services\hops\LLMService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -51,6 +52,20 @@ Réponds uniquement avec un nombre entre 0 et 1.
             ]
         ];
 
+        try {
+            return (float) $this->llm()->chat($prompt, [
+                'task' => 'answer_grounding',
+                'temperature' => 0.6,
+                'max_tokens' => 350,
+            ]);
+        } catch (\Throwable $exception) {
+            Log::warning('GroundingChecker: modèles LLM indisponibles', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            return 0.3;
+        }
+
         // --- DÉBUT DE LA LOGIQUE DE RETRY ---
         $maxRetries = 5;
         $delaySeconds = 1; // Délai de base pour le backoff exponentiel
@@ -62,7 +77,7 @@ Réponds uniquement avec un nombre entre 0 et 1.
                     'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
                     'Content-Type' => 'application/json', // Bonne pratique
                 ])->post('https://openrouter.ai/api/v1/chat/completions', [
-                    'model' => 'meta-llama/llama-3.1-8b-instruct',
+                    'model' => config('llm.tasks.answer_grounding.model'),
                     'messages' => $prompt,
                     'temperature' => 0.6,
                     'max_tokens' => 350//$settings->ai_max_tokens,
@@ -143,5 +158,10 @@ Réponds uniquement avec un nombre entre 0 et 1.
         }
 
         return 0.3;
+    }
+
+    private function llm(): LLMService
+    {
+        return app(LLMService::class);
     }
 }

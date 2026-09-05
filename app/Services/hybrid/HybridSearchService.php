@@ -4,7 +4,8 @@ namespace App\Services\hybrid;
 
 use App\Services\lexical\LexicalIndexService;
 use App\Services\vector\VectorSearchService;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Support\Facades\Http;
 
 class HybridSearchService
 {
@@ -25,13 +26,47 @@ class HybridSearchService
 
         $collection = "chunks_{$siteId}";
 
-        // 1️⃣ Retrieve
-        $vectorResults = $this->vectorSearch->search(
-            embedding: $embedding,
-            siteId: $siteId,
-            limit: $limit,
-            scoreThreshold: $scoreThreshold,
-            collection: $collection,
+        // 1️⃣ Retrieve en parallèle. Le chemin REST est limité à cette
+        // recherche hybride afin de conserver le SDK Meilisearch ailleurs.
+        $qdrantUrl = rtrim((string) config('qdrant.url'), '/')
+            . "/collections/{$collection}/points/search";
+
+        $responses = Http::pool(function (Pool $pool) use (
+            $qdrantUrl,
+            $query,
+            $embedding,
+            $siteId,
+            $limit,
+            $scoreThreshold,
+        ) {
+            return [
+                'vector' => $pool->as('vector')
+                    ->timeout((int) config('qdrant.timeout', 8))
+                    ->withHeaders([
+                        'api-key' => config('qdrant.api_key'),
+                        'Content-Type' => 'application/json',
+                    ])
+                    ->post(
+                        $qdrantUrl,
+                        $this->vectorSearch->buildSearchPayload($embedding, $limit, $scoreThreshold),
+                    ),
+
+                'keyword' => $pool->as('keyword')
+                    ->timeout(8)
+                    ->withHeaders([
+                        'Authorization' => 'Bearer ' . config('meilisearch.key'),
+                        'Content-Type' => 'application/json',
+                    ])
+                    ->post(
+                        $this->lexicalSearch->buildSearchUrl($siteId),
+                        $this->lexicalSearch->buildSearchPayload($query, $limit),
+                    ),
+            ];
+        });
+
+        $vectorResults = $this->vectorSearch->parseSearchResponse(
+            $responses['vector'] ?? null,
+            $collection,
         );
 
         $vectorResults = collect($vectorResults)
@@ -39,10 +74,8 @@ class HybridSearchService
             ->values()
             ->toArray();
 
-        $keywordResults = $this->lexicalSearch->search(
-            query: $query,
-            siteId: $siteId,
-            limit: $limit
+        $keywordResults = $this->lexicalSearch->parseSearchResponse(
+            $responses['keyword'] ?? null,
         );
 
         /*Log::info("RESULTAT LEXICAL", [

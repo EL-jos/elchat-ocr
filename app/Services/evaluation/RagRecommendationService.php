@@ -456,6 +456,7 @@ IMPORTANT :
                     ])
                 ]
             ], [
+                'task' => 'rag_recommendation',
                 'temperature' => 0.1,
                 'max_tokens' => 700,
             ]);

@@ -202,8 +202,19 @@ class PageController extends Controller
 
             foreach ($files as $file) {
                 $documentPath = $this->moveImage($file);
-                $extension = $files->getClientOriginalExtension();
-                $document = new Document([ 'id' => (string) Str::uuid(), 'path' => $documentPath, 'type' => $type, 'extension' => $extension]);
+                $extension = $file->getClientOriginalExtension();
+                $document = new Document([
+                    'id' => (string) Str::uuid(),
+                    'path' => $documentPath,
+                    'type' => $type,
+                    'purpose' => 'page_import',
+                    'title' => pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                    'original_name' => $file->getClientOriginalName(),
+                    'extension' => $extension,
+                    'mime_type' => $file->getClientMimeType(),
+                    'file_size' => file_exists(public_path($documentPath)) ? filesize(public_path($documentPath)) : null,
+                    'indexing_status' => 'queued',
+                ]);
                 $document = $site->documents()->save($document);
             }
 
@@ -211,7 +222,18 @@ class PageController extends Controller
 
             $documentPath = $this->moveImage($files);
             $extension = $files->getClientOriginalExtension();
-            $document = new Document([ 'id' => (string) Str::uuid(), 'path' => $documentPath, 'type' => $type, 'extension' => $extension]);
+            $document = new Document([
+                'id' => (string) Str::uuid(),
+                'path' => $documentPath,
+                'type' => $type,
+                'purpose' => 'page_import',
+                'title' => pathinfo($files->getClientOriginalName(), PATHINFO_FILENAME),
+                'original_name' => $files->getClientOriginalName(),
+                'extension' => $extension,
+                'mime_type' => $files->getClientMimeType(),
+                'file_size' => file_exists(public_path($documentPath)) ? filesize(public_path($documentPath)) : null,
+                'indexing_status' => 'queued',
+            ]);
             $document = $site->documents()->save($document);
 
         }

@@ -65,14 +65,14 @@
                         <a @class(["nav-link p-0", "active" => $routeName === 'about.page']) href="{{ route('about.page') }}">À propos</a>
                     </li>
                     <li class="nav-item">
-                        <a @class(["nav-link p-0", "active" => $routeName === 'services.page']) href="{{ route('services.page') }}">Services</a>
+                        <a @class(["nav-link p-0", "active" => $routeName === 'services.page']) href="{{ route('services.page') }}">Capacités</a>
                     </li>
 
                     <li class="nav-item">
                         <a @class(["nav-link p-0", "active" => $routeName === 'tarifs']) href="{{ route('abonnements.page') }}">Tarifs</a>
                     </li>
                     <li class="nav-item">
-                        <a @class(["nav-link p-0", "active" => $routeName === 'faqs.page']) href="{{ route('faqs.page') }}">Faq's</a>
+                        <a @class(["nav-link p-0", "active" => $routeName === 'faqs.page']) href="{{ route('faqs.page') }}">FAQ</a>
                     </li>
                     <li class="nav-item free-trial"><a class="nav-link font-weight-700" href="">Essayer gratuitement</a></li>
                 </ul>
@@ -83,7 +83,7 @@
                 <ul class="list-unstyled mb-0">
                     <!-- <li class="d-inline-block free-trial"><a class="text-white" href="contact.html">Try Free
                                 Trial</a></li> -->
-                    <li class="d-inline-block"><a href="{{ route('contact.page') }}" class="contact-btn d-inline-block">Contactez-nous</a></li>
+                    <li class="d-inline-block"><a href="{{ route('contact.page') }}" class="contact-btn d-inline-block">Demander une démo</a></li>
                     <!-- list unstyled -->
                 </ul>
                 <!-- header contact -->
@@ -366,19 +366,18 @@
                          class="img-fluid position-absolute robot2 animated-robot"></figure>
             <div class="heading-title-con text-center mb-0">
                     <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                          data-wow-delay="0.2s">Passez à l’action</span>
+                           data-wow-delay="0.2s">Votre premier cas d’usage</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Prêt à transformer vos connaissances<br> en conversations intelligentes ?
+                    Prêt à relier vos connaissances,<br> vos outils et vos décisions ?
                 </h2>
                 <p class="wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
-                    Connectez votre site web, vos documents et vos canaux sociaux à ELChat <br>
-                    et commencez à automatiser vos interactions clients en quelques minutes. <br>
-                    Répondez plus vite, engagez mieux et convertissez davantage.
+                    Identifions un processus concret, les données nécessaires et le bon niveau d’autonomie. <br>
+                    Vous pourrez ensuite mesurer le résultat avant d’étendre ELChat à d’autres équipes.
                 </p>
                 <a href="{{ route('about.page') }}" class="text-decoration-none primary_btn d-inline-block wow fadeInLeft"
-                   data-wow-duration="2s" data-wow-delay="0.6s">Commencer</a>
+                   data-wow-duration="2s" data-wow-delay="0.6s">Découvrir notre approche</a>
                 <a href="{{ route('contact.page') }}" class="text-decoration-none secondary_btn d-inline-block wow fadeInRight"
-                   data-wow-duration="2s" data-wow-delay="0.7s">Live Demo</a>
+                   data-wow-duration="2s" data-wow-delay="0.7s">Demander une démo</a>
                 <!-- heading title con -->
             </div>
             <!-- cta inner con -->
@@ -400,8 +399,8 @@
                             </figure>
                         </a>
                         <p class="text-size-16 text">
-                            ELChat est une plateforme d’IA conversationnelle alimentée par les connaissances de votre entreprise.
-                            Elle connecte vos données, vos clients et vos canaux de communication pour automatiser des conversations pertinentes, cohérentes et orientées résultats.
+                            ELChat est une plateforme d’IA opérationnelle qui relie connaissances, événements, outils métier,
+                            workflows et agents spécialisés pour transformer le contexte en décisions et actions mesurables.
                         </p>
                         <ul class="list-unstyled mb-0 social-icons">
                             <li><a href="https://www.facebook.com/" class="text-decoration-none"><i
@@ -420,11 +419,11 @@
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('about.page') }}"
                                                                           class="text-decoration-none">À propos</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('services.page')}}"
-                                                                          class="text-decoration-none">Services</a></li>
+                                                                           class="text-decoration-none">Capacités</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('faqs.page') }}"
-                                                                          class="text-decoration-none">Faq's</a></li>
+                                                                           class="text-decoration-none">FAQ</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('abonnements.page') }}"
-                                                                          class="text-decoration-none">Abonnements</a></li>
+                                                                           class="text-decoration-none">Tarifs</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('politique_de_confidentialite.page') }}"
                                                                           class="text-decoration-none">Politique de confidentialité</a></li>
                             <li><i class="fa-solid fa-arrow-right"></i><a href="{{ route('cgu.page') }}"
@@ -461,10 +460,10 @@
                 </div>
                 <div class="col-xl-4 col-lg-4 col-md-5 col-sm-12 col-12">
                     <div class="email-form">
-                        <h4 class="heading">Newsletter</h4>
+                        <h4 class="heading">Actualités ELChat</h4>
                         <form action="javascript:;">
                             <div class="form-group position-relative mb-0">
-                                <input type="text" class="form_style" placeholder="Entrez votre adresse e-mail"
+                                <input type="text" class="form_style" placeholder="Votre adresse e-mail professionnelle"
                                        name="email">
                                 <button><i class="send fa-sharp fa-solid fa-paper-plane"></i></button>
                             </div>

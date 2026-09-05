@@ -2,19 +2,19 @@
 
 @section('seo')
     <!-- Primary Meta Tags -->
-    <title>ELChat | Plateforme d'IA Conversationnelle pour Entreprises</title>
+    <title>ELChat | Plateforme d'IA opérationnelle pour entreprises</title>
 
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <meta name="title" content="ELChat | Plateforme d'IA Conversationnelle pour Entreprises">
+    <meta name="title" content="ELChat | Plateforme d'IA opérationnelle pour entreprises">
 
     <meta name="description"
-          content="Transformez les connaissances de votre entreprise en conversations intelligentes. ELChat connecte votre site web, vos documents, vos FAQ, vos produits et vos réseaux sociaux pour automatiser l'engagement client, le support et la génération de prospects grâce à l'intelligence artificielle.">
+          content="ELChat relie connaissances, événements et outils métier pour aider les entreprises à décider, automatiser leurs processus, reprendre les conversations au bon moment et mesurer les résultats avec l'IA.">
 
     <meta name="keywords"
-          content="IA conversationnelle, plateforme IA, intelligence artificielle entreprise, assistant IA, chatbot intelligent, automatisation des conversations, support client IA, génération de leads IA, engagement client, IA Instagram, IA YouTube, automatisation réseaux sociaux, base de connaissances IA, FAQ intelligente, IA entreprise, ELChat">
+          content="plateforme IA entreprise, IA opérationnelle, Visitor Intelligence, replay parcours visiteurs, engagement proactif, relance contextuelle, automatisation métier, agents IA, workflows IA, RAG entreprise, intelligence décisionnelle, connecteurs MCP, prospection IA, ELChat">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -29,10 +29,10 @@
     <meta property="og:site_name" content="ELChat">
 
     <meta property="og:title"
-          content="ELChat | Une IA qui comprend réellement votre entreprise">
+          content="ELChat | De la connaissance à l'action, dans une seule plateforme">
 
     <meta property="og:description"
-          content="Connectez votre site web, vos documents, vos FAQ et vos produits. ELChat transforme les connaissances de votre entreprise en conversations intelligentes et automatise vos interactions sur vos canaux d'engagement.">
+          content="Unifiez vos connaissances, connectez vos outils et déployez des workflows et agents IA capables d'analyser, d'agir et de mesurer les résultats.">
 
     <meta property="og:url" content="https://elchat.io/accueil">
 
@@ -46,10 +46,10 @@
     <meta name="twitter:card" content="summary_large_image">
 
     <meta name="twitter:title"
-          content="ELChat | Plateforme d'IA Conversationnelle pour Entreprises">
+          content="ELChat | Plateforme d'IA opérationnelle pour entreprises">
 
     <meta name="twitter:description"
-          content="Une plateforme d'IA conversationnelle alimentée par les connaissances de votre entreprise et connectée à vos canaux d'engagement.">
+          content="Une plateforme pour connaître, comprendre, décider, agir, mesurer et apprendre avec l'IA.">
 
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
@@ -70,14 +70,13 @@
                             <li class="position-relative d-inline-block"><i class="fa-solid fa-circle-check"></i>Aucune carte bancaire requise</li>--}}
                         </ul>
                         <h1>
-                            L'<span class="d-inline-block font-weight-bold color-blue">IA</span> conversationnelle <br> alimentée par les <span class="d-inline-block font-weight-bold color-blue">connaissances</span> de votre entreprise
+                            L'<span class="d-inline-block font-weight-bold color-blue">IA</span> qui transforme vos <span class="d-inline-block font-weight-bold color-blue">connaissances</span> en actions
                         </h1>
                         <p>
-                            Connectez votre site web, vos documents, vos FAQ et vos catalogues produits.
-                            ELChat transforme ces informations en conversations intelligentes et automatise l'engagement avec vos prospects et clients sur l'ensemble de vos canaux numériques.
+                            Unifiez vos données, connectez vos outils et confiez à ELChat les tâches que l’IA peut réellement accélérer : comprendre le contexte, recommander une décision, reprendre une conversation au moment opportun, exécuter un workflow et mesurer son résultat.
                         </p>
-                        <a href="{{ route('about.page') }}" class="text-decoration-none primary_btn d-inline-block">Essai gratuit</a>
-                        <a href="{{ route('contact.page') }}" class="text-decoration-none secondary_btn d-inline-block">Nous contacter</a>
+                        <a href="{{ route('about.page') }}" class="text-decoration-none primary_btn d-inline-block">Découvrir la plateforme</a>
+                        <a href="{{ route('contact.page') }}" class="text-decoration-none secondary_btn d-inline-block">Demander une démo</a>
                         <!-- banner content con -->
                     </div>
                     <!-- col -->
@@ -115,7 +114,7 @@
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                      data-wow-delay="0.2s">Nos clients</span>
+                      data-wow-delay="0.2s">Pensé pour les entreprises</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
                     Ils nous font déjà confiance
                 </h2>
@@ -126,19 +125,19 @@
                     <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
                         <div class="client-logo-inner d-flex align-items-center justify-content-between">
                             <p class="wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">
-                                Pour automatiser, centraliser et optimiser les conversations avec leurs clients <br>
-                                sur l'ensemble de leurs canaux de communication:</p>
+                                Pour automatiser, centraliser et optimiser <br> leurs relations avec leurs clients
+                            </p>
                             <div class="logos-con d-flex align-items-center justify-content-between wow fadeIn"
                                  data-wow-duration="2s" data-wow-delay="0.2s">
-                                <figure><img src="https://drmaxisliterie.re/assets/img/logo_sticky.svg" alt="shopify" class="img-fluid wow fadeInRight"
+                                <figure><img src="https://drmaxisliterie.re/assets/img/logo_sticky.svg" alt="Dr. Maxis" class="img-fluid wow fadeInRight"
                                              data-wow-duration="2s" data-wow-delay="0.6s"></figure>
-                                <figure><img src="https://inayya.re/wp-content/uploads/2026/02/logo-inayya-web.png" alt="slack" class="img-fluid wow fadeInRight"
+                                <figure><img src="https://inayya.re/wp-content/uploads/2026/02/logo-inayya-web.png" alt="Inayya" class="img-fluid wow fadeInRight"
                                              data-wow-duration="2s" data-wow-delay="1.0s"></figure>
-                                <figure><img src="https://webenvue-mutualise-02.s3.eu-west-3.amazonaws.com/cm2s/2026/02/logo-cm2s-noir.svg" alt="zendesk" class="img-fluid wow fadeInRight"
+                                <figure><img src="https://webenvue-mutualise-02.s3.eu-west-3.amazonaws.com/cm2s/2026/02/logo-cm2s-noir.svg" alt="CM2S" class="img-fluid wow fadeInRight"
                                              data-wow-duration="2s" data-wow-delay="1.4s"></figure>
-                                {{--<figure><img src="assets/images/client-logo4.png" alt="discord" class="img-fluid wow fadeInRight"
+                                <figure style="background-color: #000; padding: .15rem 0;"><img src="https://www.cuisinehabitat.mu/assets/images/logos/logo.svg" alt="Cuisine Habitat Maurice" class="img-fluid wow fadeInRight"
                                              data-wow-duration="2s" data-wow-delay="1.8s"></figure>
-                                <figure><img src="assets/images/client-logo5.png" alt="telegram" class="img-fluid wow fadeInRight"
+                                {{--<figure><img src="assets/images/client-logo5.png" alt="telegram" class="img-fluid wow fadeInRight"
                                              data-wow-duration="2s" data-wow-delay="2.2s"></figure>--}}
                             </div>
                             <!-- client logo inner -->
@@ -159,20 +158,19 @@
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                      data-wow-delay="0.2s">Fonctionnalités clés</span>
+                      data-wow-delay="0.2s">Les piliers d’ELChat</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Une IA qui comprend votre entreprise,<br> apprend de vos données & engage vos clients
+                    De la connaissance métier<br> à l’exécution mesurable
                 </h2>
                 <!-- heading title con -->
             </div>
             <div class="row all_row wow fadeIn" data-wow-duration="2s" data-wow-delay="0.4s">
                 <div class="col-lg-4 col-md-6 all_column wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="feature-box position-relative all_boxes">
-                        <h4>IA conversationnelle contextuelle</h4>
+                        <h4>Knowledge Intelligence & RAG</h4>
                         <p class="mb-0">
-                            ELChat ne se limite pas à répondre.
-                            Il analyse vos conversations et génère des réponses basées sur vos connaissances réelles :
-                            site web, documents, FAQ et produits. Chaque interaction est cohérente avec votre activité.
+                            Indexez vos sites, documents, FAQ et catalogues dans une base de connaissances exploitable par l’IA.
+                            ELChat retrouve le bon contexte, cite ses sources et identifie les informations à améliorer.
                         </p>
                         <img src="{{ asset('assets/images/feature-img1-icon1.png')}}" alt="feature image"
                              class="img-fluid position-absolute feature-icon1  wow fadeInUp" data-wow-duration="2s"
@@ -189,11 +187,10 @@
                 </div>
                 <div class="col-lg-4 col-md-6 all_column wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="feature-box position-relative all_boxes bg-green">
-                        <h4>Connexion multi-canaux</h4>
+                        <h4>Workflows & connecteurs métier</h4>
                         <p class="mb-0">
-                            Centralisez tous vos échanges sur une seule plateforme.
-                            ELChat s’intègre à vos réseaux sociaux, votre site web et vos canaux de messagerie pour engager vos prospects là où ils se trouvent.
-                            Une seule IA, tous vos points de contact.
+                            Reliez CRM, e-commerce, agenda, stockage, marketing et outils d’équipe.
+                            Vos workflows peuvent rechercher une information, préparer une action ou l’exécuter selon les permissions et validations définies.
                         </p>
                         <img src="{{ asset('assets/images/feature-img2-icon1.png')}}" alt="feature image"
                              class="img-fluid position-absolute feature-icon2  wow fadeInLeft" data-wow-duration="2s"
@@ -218,10 +215,10 @@
                 </div>
                 <div class="col-lg-4 col-md-6 all_column  wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="feature-box position-relative all_boxes">
-                        <h4>Analyse et optimisation en temps réel</h4>
+                        <h4>Business & Executive Intelligence</h4>
                         <p class="mb-0">
-                            Suivez les performances de vos conversations, comprenez le comportement de vos utilisateurs et optimisez vos réponses automatiquement.
-                            ELChat apprend continuellement de chaque interaction.
+                            Transformez les événements clients, commerciaux et opérationnels en indicateurs lisibles.
+                            ELChat aide à diagnostiquer une situation, prioriser la prochaine action et suivre son impact.
                         </p>
                         <img src="{{ asset('assets/images/feature-img3-icon1.png')}}" alt="feature image"
                              class="img-fluid position-absolute feature-icon6 wow fadeInUp" data-wow-duration="2s"
@@ -265,7 +262,7 @@
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
                                   data-wow-delay="0.5s">Comment ça fonctionne</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.6s">
-                                Une IA qui apprend, comprend et agit
+                                Connaître, agir et progresser en continu
                             </h2>
                             <!-- heading title con -->
                         </div>
@@ -273,10 +270,10 @@
                             <li class="position-relative d-flex align-items-center">
                                 <span class="d-block color-blue">01</span>
                                 <div class="work-content-inner-con">
-                                    <h5>Connectez vos sources</h5>
+                                    <h5>Connaître et comprendre</h5>
                                     <p class="mb-0">
-                                        Connectez votre site web, vos documents, vos FAQ et vos produits.
-                                        ELChat analyse automatiquement vos données pour construire une base de connaissances complète et structurée.
+                                        Centralisez les contenus et signaux utiles à votre activité.
+                                        Le moteur RAG recherche le contexte pertinent pour répondre, analyser et éclairer la décision.
                                     </p>
                                     <!-- work content inner con -->
                                 </div>
@@ -284,10 +281,10 @@
                             <li class="position-relative d-flex align-items-center">
                                 <span class="d-block color-blue">02</span>
                                 <div class="work-content-inner-con">
-                                    <h5>Entraînez votre IA avec votre contenu</h5>
+                                    <h5>Décider et agir</h5>
                                     <p class="mb-0">
-                                        ELChat transforme vos informations en intelligence conversationnelle.
-                                        Chaque réponse est générée à partir de vos propres données : services, produits, politiques et contenus métier.
+                                        Déclenchez des workflows ou confiez un objectif à un agent spécialisé.
+                                        Les actions sensibles restent soumises aux règles d’accès et aux confirmations prévues.
                                     </p>
                                     <!-- work content inner con -->
                                 </div>
@@ -295,17 +292,17 @@
                             <li class="position-relative d-flex align-items-center">
                                 <span class="d-block color-blue">03</span>
                                 <div class="work-content-inner-con">
-                                    <h5>Déployez et automatisez vos conversations</h5>
+                                    <h5>Mesurer et apprendre</h5>
                                     <p class="mb-0">
-                                        Activez ELChat sur vos réseaux sociaux, votre site web et vos canaux de communication.
-                                        L’IA répond automatiquement à vos prospects et clients avec un niveau de précision aligné sur votre entreprise.
+                                        Suivez conversations, intentions, conversions, workflows et actions métier.
+                                        Ces événements révèlent les points de friction et les connaissances à renforcer.
                                     </p>
                                     <!-- work content inner con -->
                                 </div>
                             </li>
                         </ul>
                         <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">
-                            Essayez maintenant
+                            Étudier votre cas d’usage
                         </a>
                         <!-- work content con -->
                     </div>
@@ -318,6 +315,72 @@
         <!-- how it works con -->
     </section>
 
+    <!-- PROACTIVE ENGAGEMENT SECTION -->
+    <section class="float-left w-100 amazing-features-con position-relative padding-top padding-bottom main-box">
+        <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
+            <div class="heading-title-con text-center">
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">Engagement Proactif</span>
+                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
+                    Reprendre la conversation<br>au moment qui compte
+                </h2>
+                <p class="mx-auto" style="max-width: 760px;">
+                    Lorsqu’une intention forte, une demande inachevée ou une opportunité est détectée, ELChat peut proposer une reprise contextualisée de la conversation. Les agents, workflows, quotas et validations du tenant restent aux commandes.
+                </p>
+            </div>
+            <div class="row all_row wow fadeIn" data-wow-duration="2s" data-wow-delay="0.4s">
+                <div class="col-lg-4 col-md-6 all_column wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.5s">
+                    <div class="feature-box position-relative all_boxes">
+                        <h4>Un message contextualisé</h4>
+                        <p class="mb-0">ELChat s’appuie sur la mémoire, le résumé, les événements, le RAG et l’historique réel. Il ne complète pas les informations absentes.</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6 all_column wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.5s">
+                    <div class="feature-box position-relative all_boxes bg-green">
+                        <h4>Une reprise sans spam</h4>
+                        <p class="mb-0">Cooldowns, horaires, quotas, permissions et arrêt après réponse ou conversion empêchent les relances indésirables.</p>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-md-6 all_column wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
+                    <div class="feature-box position-relative all_boxes">
+                        <h4>Un résultat mesurable</h4>
+                        <p class="mb-0">Réponses, leads, rendez-vous, opportunités et ventes sont reliés à la séquence lorsque les données source le permettent.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
+                <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Parler d’un cas d’usage</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- VISITOR INTELLIGENCE SECTION -->
+    <section class="float-left w-100 position-relative why-choose-us-con padding-top padding-bottom main-box">
+        <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
+            <div class="heading-title-con text-center">
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">Visitor Intelligence</span>
+                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Comprendre le parcours<br>avant, pendant et après ELChat</h2>
+                <p class="mx-auto" style="max-width: 760px;">Observez le comportement réellement visible sur le site du tenant : pages consultées, scrolls, clics, interactions avec le widget et signaux de conversion. Les parcours terminés deviennent consultables dans le dashboard avec un replay adapté au périphérique du visiteur.</p>
+            </div>
+            <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
+                <div class="choose-box">
+                    <h6>Le viewport du visiteur</h6>
+                    <p class="mb-0">Les captures concernent uniquement la zone visible du site, sur desktop, mobile ou tablette, sans capturer la page entière.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Un parcours terminé</h6>
+                    <p class="mb-0">Le dashboard n’affiche pas un parcours incomplet en temps réel. Une notification arrive lorsque la session est terminée et prête à être analysée.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Replay et événements</h6>
+                    <p class="mb-0">L’administrateur peut lire, mettre en pause, cibler un événement, gérer l’inactivité et télécharger le replay en vidéo WebM.</p>
+                </div>
+            </div>
+            <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
+                <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Découvrir Visitor Intelligence</a>
+            </div>
+        </div>
+    </section>
+
     <!-- WHY CHOOSE US SECTION -->
     <section class="float-left w-100 position-relative why-choose-us-con padding-top padding-bottom main-box">
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
@@ -325,59 +388,55 @@
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
                       data-wow-delay="0.2s">Pourquoi ELChat</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Une plateforme d’IA conçue pour comprendre<br> et représenter votre entreprise
+                    Une plateforme conçue pour relier<br> intelligence, contrôle et exécution
                 </h2>
                 <!-- heading title con -->
             </div>
             <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
                 <div class="choose-box">
                     <figure><img src="{{ asset('assets/images/choose-icon1.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>IA alimentée par vos connaissances</h6>
+                    <h6>Un socle de connaissance fiable</h6>
                     <p class="mb-0">
-                        ELChat ne répond pas de manière générique.
-                        Il s’appuie sur votre site web, vos documents, vos FAQ et vos produits pour générer des réponses précises et cohérentes avec votre activité.
+                        Sites, documents, FAQ et produits alimentent un contexte propre à votre entreprise, avec recherche hybride, sources et suivi de qualité.
                     </p>
                     <!-- choose box -->
                 </div>
                 <div class="choose-box">
                     <figure><img src="{{ asset('assets/images/choose-icon2.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Engagement multi-canaux automatisé</h6>
+                    <h6>Des outils métier connectés</h6>
                     <p class="mb-0">
-                        Interagissez automatiquement avec vos clients sur votre site web, Instagram, YouTube, Facebook et autres canaux.
-                        ELChat centralise et automatise vos conversations là où vos utilisateurs se trouvent.
+                        Connectez vos canaux clients, CRM, boutiques, agendas, espaces documentaires et plateformes marketing sans multiplier les systèmes isolés.
                     </p>
                     <!-- choose box -->
                 </div>
                 <div class="choose-box">
                     <figure><img src="{{ asset('assets/images/choose-icon3.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Réponses contextuelles et intelligentes</h6>
+                    <h6>Une autonomie sous contrôle</h6>
                     <p class="mb-0">
-                        Chaque réponse est adaptée au contexte réel de l’utilisateur et enrichie par la connaissance de votre entreprise,
-                        pour une expérience plus naturelle et pertinente.
+                        Définissez ce que l’IA peut lire, proposer ou exécuter. Les permissions, confirmations et journaux d’audit encadrent chaque action sensible.
                     </p>
                     <!-- choose box -->
                 </div>
                 <div class="choose-box">
                     <figure><img src="{{ asset('assets/images/choose-icon4.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Conçu pour les entreprises en croissance</h6>
+                    <h6>Une adoption progressive</h6>
                     <p class="mb-0">
-                        ELChat évolue avec votre activité.
-                        Plus vous ajoutez de contenu, plus l’IA devient précise, pertinente et performante dans ses interactions.
+                        Commencez avec le socle Core, puis ajoutez l’omnicanal, l’automatisation métier ou les agents spécialisés selon vos priorités.
                     </p>
                     <!-- choose box -->
                 </div>
                 <div class="choose-box">
                     <figure><img src="{{ asset('assets/images/choose-icon5.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Une alternative aux chatbots classiques</h6>
+                    <h6>Au-delà du chatbot</h6>
                     <p class="mb-0">
-                        Contrairement aux chatbots traditionnels, ELChat comprend réellement votre entreprise et ne se limite pas à des réponses préprogrammées ou génériques.
+                        ELChat ne se limite pas à converser : la plateforme analyse des événements, coordonne des workflows et agit dans les outils connectés.
                     </p>
                     <!-- choose box -->
                 </div>
                 <!-- choose outer con -->
             </div>
             <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
-                <a href="{{ route('about.page')}}" class="text-decoration-none primary_btn d-inline-block">Essai Gratuit</a>
+                <a href="{{ route('about.page')}}" class="text-decoration-none primary_btn d-inline-block">Comprendre notre approche</a>
             </div>
             <!-- container -->
         </div>
@@ -391,18 +450,18 @@
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
                       data-wow-delay="0.4s">Tarification</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                    Une tarification simple, flexible et alignée<br> avec votre usage réel de l’IA
+                    Un socle commun, puis les capacités<br> utiles à votre organisation
                 </h2>
-                <p> Payez selon votre utilisation réelle : volume de messages, tokens IA, canaux connectés et niveau d’automatisation. ELChat s’adapte à la taille et à la croissance de votre entreprise. </p>
+                <p> Core démarre à 29 € par mois. Ajoutez ensuite Community, Business Automation ou Agentics selon vos usages ; l’offre Agency est étudiée sur devis. </p>
                 <!-- heading title con -->
             </div>
             <div class="row all_row wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3 class="">Starter</h3>
+                            <h3 class="">Core</h3>
                             <p>
-                                Pour les petites entreprises qui souhaitent lancer leur premier assistant IA.
+                                Le socle indispensable pour structurer et exploiter la connaissance de votre entreprise.
                             </p>
                             <div class="generic-price d-inline-block">
                                 <span class="d-block  starting-at">
@@ -418,35 +477,35 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    1 site web
+                                    Base de connaissances et RAG
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    1 réseau social connecté
+                                    Site, documents, FAQ et produits
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Assistant IA basé sur votre site et vos documents
+                                    Widget et réponses contextualisées
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Import de documents
+                                    Indexation et sources
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Indexation automatique du site web
+                                    Suivi de la qualité des connaissances
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Réponses avec sources
+                                    Historique et analytique d’usage
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Historique des conversations
+                                    À partir de 29 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Widget personnalisable
+                                    Capacités additionnelles au choix
                                 </li>
 
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 50 messages / mois
+                                    Même plateforme, sans changement de socle
                                 </li>
                             </ul>
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Parler de votre besoin</a>
                         </div>
                     </div>
                 </div>
@@ -454,14 +513,14 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="el-default-pricing pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3 class="">Business</h3>
+                            <h3 class="">Extensions</h3>
                             <p>
-                                Pour les entreprises qui souhaitent automatiser leur relation client sur plusieurs canaux.
+                                Ajoutez uniquement les capacités omnicanales et métier dont vos équipes ont besoin.
                             </p>
                             <div class="generic-price d-inline-block">
                                 <span class="d-block starting-at">À partir de :</span>
                                 <sup class="d-inline-block font-weight-normal">€</sup>
-                                <span class="d-inline-block price-text font-weight-600">79</span>
+                                <span class="d-inline-block price-text font-weight-600">19</span>
                                 <span class="d-inline-block per-month mb-0 position-relative font-weight-normal">
                                     /mois
                                 </span>
@@ -471,25 +530,25 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Tout Starter
+                                    Community Basic dès +19 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    2 réseaux sociaux connectés
+                                    Community Pro à +49 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    boîte e-mail professionnelle connectée
+                                    Canaux sociaux, messagerie et e-mail
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Catalogue produits
+                                    Business Automation Basic dès +39 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Suggestions automatiques d'amélioration de la base de connaissances
+                                    Business Automation Pro à +99 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 150 messages / mois
+                                    Workflows et connecteurs métier
                                 </li>
                             </ul>
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Composer votre solution</a>
                         </div>
                     </div>
                 </div>
@@ -497,16 +556,16 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3 class="">Pro</h3>
+                            <h3 class="">Agentics</h3>
                             <p>
-                                Pour les entreprises en croissance qui automatisent plusieurs sites et canaux à grande échelle.
+                                Déployez des agents IA spécialisés pour des objectifs commerciaux et opérationnels précis.
                             </p>
                             <div class="generic-price d-inline-block">
                                 <span class="d-block starting-at">
                                     À partir de :
                                 </span>
                                 <sup class="d-inline-block font-weight-normal">€</sup>
-                                <span class="d-inline-block price-text font-weight-600">199</span>
+                                <span class="d-inline-block price-text font-weight-600">59</span>
                                 <span class="d-inline-block per-month mb-0 position-relative font-weight-normal">
                                     /mois
                                 </span>
@@ -516,25 +575,25 @@
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0 ">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Tout Business
+                                    Agentics Basic dès +59 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu'à 3 sites
+                                    Agentics Pro à +149 € / mois
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu'à 3 réseaux sociaux par site
+                                    Banque d’agents spécialisés
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    1 boîte e-mail professionnelle connectée par site
+                                    Workflows coordonnés et permissions
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Gestion multi-sites
+                                    AI Sales Hunter disponible
                                 </li>
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Jusqu’à 300 messages / mois (GLOBAL)
+                                    Offre Agency en marque blanche sur devis
                                 </li>
                             </ul>
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Évaluer les agents</a>
                         </div>
                     </div>
                 </div>
@@ -554,9 +613,9 @@
                 <div class="col-xl-7 col-lg-10 col-12 mx-auto">
                     <div class="faq_content text-center">
                         <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                              data-wow-delay="0.2s">Faq's</span>
+                      data-wow-delay="0.2s">Questions fréquentes</span>
                         <h2 class=" wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                            Tout ce que vous devez savoir sur ELChat<br> et l’IA conversationnelle
+                            Les réponses essentielles avant<br> de déployer ELChat
                         </h2>
                     </div>
                 </div>
@@ -573,7 +632,7 @@
                                                data-target="#collapseOne" aria-expanded="false"
                                                aria-controls="collapseOne">
                                                 <h6>
-                                                    Qu’est-ce qu’ELChat exactement ?
+                                                    ELChat est-il un chatbot ?
                                                 </h6>
                                             </a>
                                         </div>
@@ -581,7 +640,7 @@
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    ELChat est une plateforme d’IA conversationnelle qui transforme les connaissances de votre entreprise (site web, documents, FAQ, produits) en conversations automatisées sur vos réseaux sociaux et digitaux.
+                                                    ELChat inclut un assistant conversationnel, mais son périmètre est plus large : connaissances, événements, connecteurs, workflows et agents spécialisés sont réunis pour aider l’entreprise à comprendre, décider et agir.
                                                 </p>
                                             </div>
                                         </div>
@@ -592,7 +651,7 @@
                                                data-target="#collapseTwo" aria-expanded="false"
                                                aria-controls="collapseTwo">
                                                 <h6>
-                                                    Comment ELChat génère ses réponses ?
+                                                    Comment ELChat utilise-t-il nos données ?
                                                 </h6>
                                             </a>
                                         </div>
@@ -600,9 +659,7 @@
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    ELChat combine plusieurs couches d’intelligence : vos connaissances (chunks issus de vos données),
-                                                    l’historique des conversations, et un modèle d’IA avancé.
-                                                    Chaque réponse est générée en tenant compte du contexte réel de votre entreprise.
+                                                    Les contenus importés ou indexés sont découpés et recherchés selon leur pertinence. ELChat utilise ce contexte pour produire une réponse ou une analyse reliée aux connaissances de votre entreprise, avec les sources disponibles.
                                                 </p>
                                             </div>
                                         </div>
@@ -612,17 +669,14 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseThree" aria-expanded="false"
                                                aria-controls="collapseThree">
-                                                <h6>Quelle est la différence entre messages, tokens et chunks ?</h6>
+                                                <h6>ELChat peut-il agir dans nos outils ?</h6>
                                             </a>
                                         </div>
                                         <div id="collapseThree" class="collapse" aria-labelledby="headingThree"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    <strong>Messages :</strong> chaque interaction utilisateur (commentaire, DM, réponse).<br><br>
-                                                    <strong>Tokens :</strong> unité de calcul utilisée par l’IA pour générer et comprendre les réponses.<br><br>
-                                                    <strong>Chunks :</strong> morceaux de vos données (site web, documents, FAQ) transformés en base de connaissances exploitable par l’IA.<br><br>
-                                                    ELChat relie ces trois éléments pour produire des réponses précises et contextualisées.
+                                                    Oui, par l’intermédiaire de connecteurs et de workflows. Les droits précisent ce que l’IA peut consulter, proposer ou exécuter, et les actions sensibles peuvent exiger une confirmation humaine.
                                                 </p>
                                             </div>
                                         </div>
@@ -632,15 +686,14 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseFour" aria-expanded="false"
                                                aria-controls="collapseFour">
-                                                <h6>Quels canaux sont supportés par ELChat ?</h6>
+                                                <h6>Comment fonctionne la tarification modulaire ?</h6>
                                             </a>
                                         </div>
                                         <div id="collapseFour" class="collapse" aria-labelledby="headingFour"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    ELChat s’intègre avec les principaux canaux d’engagement : Instagram, YouTube, Facebook, et bientôt TikTok, LinkedIn et WhatsApp.
-                                                    Toutes les interactions sont centralisées dans une seule plateforme.
+                                                    Core constitue le socle à 29 € par mois. Community, Business Automation et Agentics s’ajoutent au niveau Basic ou Pro ; l’offre Agency est proposée sur devis. Vous conservez la même plateforme et activez les capacités utiles.
                                                 </p>
                                             </div>
                                         </div>

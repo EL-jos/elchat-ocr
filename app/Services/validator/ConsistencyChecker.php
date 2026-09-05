@@ -3,6 +3,7 @@
 namespace App\Services\validator;
 
 use Exception;
+use App\Services\hops\LLMService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -27,6 +28,20 @@ La réponse est-elle cohérente ?
             ]
         ];
 
+        try {
+            return (float) $this->llm()->chat($prompt, [
+                'task' => 'answer_consistency',
+                'temperature' => 0.6,
+                'max_tokens' => 350,
+            ]);
+        } catch (\Throwable $exception) {
+            Log::warning('ConsistencyChecker: modèles LLM indisponibles', [
+                'error' => $exception->getMessage(),
+            ]);
+
+            return 0.7;
+        }
+
         // --- DÉBUT DE LA LOGIQUE DE RETRY ---
         $maxRetries = 5;
         $delaySeconds = 1; // Délai de base pour le backoff exponentiel
@@ -38,7 +53,7 @@ La réponse est-elle cohérente ?
                     'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
                     'Content-Type' => 'application/json', // Bonne pratique
                 ])->post('https://openrouter.ai/api/v1/chat/completions', [
-                    'model' => 'meta-llama/llama-3.1-8b-instruct',
+                    'model' => config('llm.tasks.answer_consistency.model'),
                     'messages' => $prompt,
                     'temperature' => 0.6,
                     'max_tokens' => 350//$settings->ai_max_tokens,
@@ -119,5 +134,10 @@ La réponse est-elle cohérente ?
         }
 
         return 0.7;
+    }
+
+    private function llm(): LLMService
+    {
+        return app(LLMService::class);
     }
 }

@@ -10,13 +10,15 @@ use Throwable;
 class LLMService
 {
     protected string $primaryModel = 'openai/gpt-4o-mini';
-    protected string $fallbackModel = 'anthropic/claude-3.5-haiku';
+
     protected int $maxRetries = 3;
+
     protected int $timeout = 120;
 
     public function chat(array $messages, array $options = []): string
     {
-        $model = $options['model'] ?? $this->primaryModel;
+        $model = LLMModelResolver::normalize((string) ($options['model'] ?? $this->primaryModel));
+        $fallbackModel = LLMModelResolver::normalize((string) ($options['fallback_model'] ?? config('mcp.llm.fallback_model', 'deepseek/deepseek-chat-v3.1')));
 
         // 🔥 NOUVEAU (opt-in) : détection de troncature via finish_reason.
         // Désactivé par défaut => comportement identique pour tous les
@@ -35,17 +37,17 @@ class LLMService
                 $response = $this->callAPI($messages, $model, $callOptions);
 
                 $choice = $response['choices'][0] ?? null;
-                $content = $choice['message']['content'] ?? null;
+                $content = $this->messageContent($choice['message']['content'] ?? null);
                 $finishReason = $choice['finish_reason'] ?? null;
 
                 $truncated = $detectTruncation && $finishReason === 'length';
 
-                if ($content && trim($content) !== '' && !$truncated) {
+                if ($content && trim($content) !== '' && ! $truncated) {
                     return trim($content);
                 }
 
                 if ($truncated) {
-                    Log::warning("LLM response truncated (finish_reason=length), retrying with higher max_tokens", [
+                    Log::warning('LLM response truncated (finish_reason=length), retrying with higher max_tokens', [
                         'attempt' => $attempt,
                         'model' => $model,
                         'previous_max_tokens' => $maxTokens,
@@ -56,23 +58,45 @@ class LLMService
                 }
 
             } catch (Throwable $e) {
-                Log::warning("LLM attempt failed", [
+                Log::warning('LLM attempt failed', [
                     'attempt' => $attempt,
-                    'error' => $e->getMessage()
+                    'model' => $model,
+                    'error' => $e->getMessage(),
                 ]);
+
+                // Un modèle sans endpoint ne redeviendra pas disponible au
+                // prochain retry : basculer immédiatement vers le modèle de
+                // secours configuré, au lieu de produire trois erreurs
+                // identiques.
+                if ($this->isUnavailableModelError($e)) {
+                    break;
+                }
             }
 
             usleep(200000 * $attempt); // backoff progressif
         }
 
         // 🔥 fallback modèle
-        if ($model !== $this->fallbackModel) {
+        if ($model !== $fallbackModel && $fallbackModel !== '') {
             return $this->chat($messages, array_merge($options, [
-                'model' => $this->fallbackModel
+                'model' => $fallbackModel,
+                'fallback_model' => $fallbackModel,
             ]));
         }
 
-        throw new Exception("LLM failed after retries");
+        throw new Exception('LLM failed after retries');
+    }
+
+    private function isUnavailableModelError(Throwable $exception): bool
+    {
+        $message = mb_strtolower($exception->getMessage());
+
+        return str_contains($message, 'no endpoints found')
+            || str_contains($message, 'model not found')
+            || str_contains($message, 'unknown model')
+            || str_contains($message, 'invalid model')
+            || str_contains($message, 'not a valid model')
+            || str_contains($message, '"code":404');
     }
 
     protected function callAPI(array $messages, string $model, array $options): array
@@ -87,23 +111,75 @@ class LLMService
         // 🔥 NOUVEAU (opt-in) : mode JSON strict côté provider.
         // Ajouté au payload UNIQUEMENT si l'appelant le demande via
         // $options['response_format']. N'affecte aucun autre appelant.
-        if (!empty($options['response_format'])) {
+        if (! empty($options['response_format'])) {
             $payload['response_format'] = is_array($options['response_format'])
                 ? $options['response_format']
                 : ['type' => 'json_object'];
         }
 
+        if (! empty($options['tools']) && is_array($options['tools'])) {
+            $payload['tools'] = $options['tools'];
+        }
+
+        if (array_key_exists('tool_choice', $options)) {
+            $payload['tool_choice'] = $options['tool_choice'];
+        }
+
         $response = Http::timeout($this->timeout)
+            ->withOptions(['stream' => true])
             ->withHeaders([
-                'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
+                'Authorization' => 'Bearer '.config('mcp.llm.api_key', env('OPENROUTER_API_KEY')),
             ])
             ->post('https://openrouter.ai/api/v1/chat/completions', $payload);
 
-        if (!$response->successful()) {
-            throw new Exception("LLM API error: " . $response->body());
+        $maxResponseBytes = max(262144, min(16 * 1024 * 1024, (int) config('mcp.llm.max_response_bytes', 4194304)));
+
+        try {
+            if (! $response->successful()) {
+                [$body] = $this->readResponseBody($response, 8000);
+                throw new Exception('LLM API error: '.mb_strcut($body, 0, 8000));
+            }
+
+            [$body, $complete] = $this->readResponseBody($response, $maxResponseBytes);
+            if (! $complete) {
+                throw new Exception('LLM response exceeded the configured memory limit.');
+            }
+
+            $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            throw new Exception('LLM API returned invalid JSON.', previous: $exception);
+        } finally {
+            $response->close();
         }
 
-        return $response->json();
+        if (! is_array($decoded)) {
+            throw new Exception('LLM API returned an invalid response shape.');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Lit une réponse HTTP par petits blocs afin qu'une réponse web-search
+     * anormalement volumineuse ne soit jamais copiée entièrement en mémoire.
+     *
+     * @return array{0: string, 1: bool} contenu lu et réponse entièrement lue
+     */
+    private function readResponseBody(\Illuminate\Http\Client\Response $response, int $maxBytes): array
+    {
+        $stream = $response->toPsrResponse()->getBody();
+        $body = '';
+        $readLimit = $maxBytes + 1;
+
+        while (! $stream->eof() && strlen($body) < $readLimit) {
+            $chunk = $stream->read(min(8192, $readLimit - strlen($body)));
+            if ($chunk === '') {
+                break;
+            }
+            $body .= $chunk;
+        }
+
+        return [$body, $stream->eof() && strlen($body) <= $maxBytes];
     }
 
     // =====================================================
@@ -121,6 +197,15 @@ class LLMService
     {
         // nettoyage agressif
         $text = trim($text);
+        $maxJsonChars = max(10000, min(2 * 1024 * 1024, (int) ($options['max_json_chars'] ?? config('mcp.llm.max_json_chars', 1048576))));
+        if (strlen($text) > $maxJsonChars) {
+            Log::warning('LLM JSON response discarded because it exceeded the configured size limit', [
+                'bytes' => strlen($text),
+                'max_bytes' => $maxJsonChars,
+            ]);
+
+            return [];
+        }
 
         // remove markdown
         $text = preg_replace('/```json|```/', '', $text);
@@ -148,8 +233,8 @@ class LLMService
         if ($salvageKey) {
             $salvaged = $this->salvagePartialArray($text, $salvageKey);
 
-            if (!empty($salvaged)) {
-                Log::warning("JSON parse failed, salvaged partial array", [
+            if (! empty($salvaged)) {
+                Log::warning('JSON parse failed, salvaged partial array', [
                     'key' => $salvageKey,
                     'recovered_count' => count($salvaged),
                 ]);
@@ -158,9 +243,36 @@ class LLMService
             }
         }
 
-        Log::warning("JSON parse failed", ['text' => $text]);
+        Log::warning('JSON parse failed', ['text' => $text]);
 
         return [];
+    }
+
+    /**
+     * OpenRouter normally returns text content as a string. Some models may
+     * return a list of content blocks instead, especially when server tools
+     * are enabled. Normalize both forms for every existing caller.
+     */
+    private function messageContent(mixed $content): ?string
+    {
+        if (is_string($content)) {
+            return $content;
+        }
+
+        if (! is_array($content)) {
+            return null;
+        }
+
+        $parts = [];
+        foreach ($content as $block) {
+            if (is_string($block)) {
+                $parts[] = $block;
+            } elseif (is_array($block) && isset($block['text']) && is_string($block['text'])) {
+                $parts[] = $block['text'];
+            }
+        }
+
+        return $parts ? implode("\n", $parts) : null;
     }
 
     /**
@@ -170,7 +282,7 @@ class LLMService
      */
     private function salvagePartialArray(string $text, string $key): array
     {
-        if (!preg_match('/"' . preg_quote($key, '/') . '"\s*:\s*\[/', $text, $m, PREG_OFFSET_CAPTURE)) {
+        if (! preg_match('/"'.preg_quote($key, '/').'"\s*:\s*\[/', $text, $m, PREG_OFFSET_CAPTURE)) {
             return [];
         }
 
@@ -195,11 +307,13 @@ class LLMService
                 } elseif ($char === '"') {
                     $inString = false;
                 }
+
                 continue;
             }
 
             if ($char === '"') {
                 $inString = true;
+
                 continue;
             }
 
@@ -208,6 +322,7 @@ class LLMService
                     $objStart = $i;
                 }
                 $depth++;
+
                 continue;
             }
 
@@ -221,6 +336,7 @@ class LLMService
                     }
                     $objStart = null;
                 }
+
                 continue;
             }
 

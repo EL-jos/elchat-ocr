@@ -37,12 +37,35 @@ return [
      */
     'enabled' => env('MCP_ENABLED', true),
 
+    /*
+     * Génération unifiée : le modèle de conversation reçoit les outils MCP
+     * autorisés avec le contexte RAG et choisit directement entre une réponse
+     * texte et un tool_call. Le kill switch permet un retour immédiat au
+     * comportement historique en cas de régression provider.
+     */
+    'unified_tool_calling' => env('MCP_UNIFIED_TOOL_CALLING', true),
+
+    /*
+     * Étend la décision unifiée aux sites qui ont plusieurs agents actifs.
+     * Désactiver cette option restaure uniquement le routage historique
+     * multi-agent, sans désactiver le flux unifié pour zéro ou un agent.
+     */
+    'unified_multi_agent_tool_calling' => env('MCP_UNIFIED_MULTI_AGENT_TOOL_CALLING', true),
+
+    /*
+     * Repli de sécurité uniquement lorsqu'une génération unifiée échoue avant
+     * toute exécution d'outil. Il ne s'active jamais après un effet métier,
+     * afin d'éviter toute double action.
+     */
+    'unified_multi_agent_legacy_fallback' => env('MCP_UNIFIED_MULTI_AGENT_LEGACY_FALLBACK', true),
+
     'llm' => [
         // Même clé que ChatService::callLLM (OPENROUTER_API_KEY) : un seul
         // fournisseur LLM pour toute l'application, y compris MCP.
         'api_key' => env('OPENROUTER_API_KEY'),
-        'model' => env('MCP_LLM_MODEL', 'openai/gpt-4.1-mini'),
-        'fallback_model' => env('MCP_LLM_FALLBACK_MODEL', 'deepseek/deepseek-chat-v3.1'),
+        // Compatibilité legacy : la source de vérité est config/llm.php.
+        'model' => env('MCP_LLM_MODEL'),
+        'fallback_model' => env('MCP_LLM_FALLBACK_MODEL'),
         'max_response_bytes' => (int) env('MCP_LLM_MAX_RESPONSE_BYTES', 4194304),
         'max_json_chars' => (int) env('MCP_LLM_MAX_JSON_CHARS', 1048576),
     ],
@@ -191,5 +214,9 @@ return [
 
     'orchestrator' => [
         'max_hops' => env('MCP_MAX_HOPS', 12),
+        // Même plafond par défaut que l'orchestrateur historique ; une
+        // valeur dédiée permet de réduire le budget du nouveau flux sans
+        // modifier le comportement multi-agent.
+        'unified_max_hops' => env('MCP_UNIFIED_MAX_HOPS', env('MCP_MAX_HOPS', 12)),
     ],
 ];

@@ -34,7 +34,7 @@ class ProspectInformationCompletionService
                 ['role' => 'system', 'content' => 'Tu complètes des fiches de prospects B2B avec des données publiques, vérifiables et strictement sourcées.'],
                 ['role' => 'user', 'content' => $this->prompt($prospect, $icp, $missing)],
             ], [
-                'model' => config('prospecting.web_search.model'),
+                'task' => 'prospecting_web_search',
                 'max_tokens' => 1400,
                 'max_tokens_cap' => 2400,
                 'detect_truncation' => true,

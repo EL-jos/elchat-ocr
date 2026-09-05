@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\product;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Document;
 use App\Models\Product;
@@ -17,6 +18,7 @@ use Throwable;
 
 class ReindexProductJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 120;

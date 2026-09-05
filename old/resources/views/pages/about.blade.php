@@ -2,15 +2,15 @@
 
 @section('seo')
     <!-- Primary Meta Tags -->
-    <title>À Propos d'ELChat | Notre Vision de l'IA Conversationnelle</title>
+    <title>À propos d'ELChat | Notre vision de l'IA opérationnelle</title>
 
-    <meta name="title" content="À Propos d'ELChat | Notre Vision de l'IA Conversationnelle">
+    <meta name="title" content="À propos d'ELChat | Notre vision de l'IA opérationnelle">
 
     <meta name="description"
-          content="Découvrez la mission d'ELChat : aider les entreprises à transformer leurs connaissances en conversations intelligentes grâce à une plateforme d'IA conversationnelle connectée à leurs données, leurs produits et leurs canaux d'engagement.">
+          content="Découvrez la mission d'ELChat : rendre l'IA utile aux opérations en reliant connaissances, événements, décisions, workflows, agents et outils métier.">
 
     <meta name="keywords"
-          content="à propos ELChat, mission ELChat, vision ELChat, intelligence artificielle entreprise, plateforme IA conversationnelle, automatisation conversations, engagement client IA, innovation IA, entreprise IA">
+          content="à propos ELChat, mission ELChat, vision IA opérationnelle, plateforme IA entreprise, automatisation métier, agents IA, intelligence décisionnelle">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -23,10 +23,10 @@
     <meta property="og:site_name" content="ELChat">
 
     <meta property="og:title"
-          content="À Propos d'ELChat | Transformer les connaissances en conversations intelligentes">
+          content="À propos d'ELChat | Transformer la connaissance en action maîtrisée">
 
     <meta property="og:description"
-          content="ELChat a été conçu pour permettre aux entreprises de connecter leurs connaissances, leurs produits et leurs canaux d'engagement afin d'offrir des conversations plus pertinentes, plus rapides et plus efficaces grâce à l'IA.">
+          content="ELChat relie connaissances, événements et outils métier pour aider les entreprises à comprendre, décider, agir, mesurer et apprendre avec l'IA.">
 
     <meta property="og:url"
           content="https://elchat.io/a-propos">
@@ -41,7 +41,7 @@
           content="À Propos d'ELChat">
 
     <meta name="twitter:description"
-          content="Découvrez la vision derrière ELChat et notre mission : transformer les connaissances des entreprises en conversations intelligentes grâce à l'IA.">
+          content="Découvrez pourquoi ELChat réunit connaissance, automatisation et agents IA dans une plateforme opérationnelle conçue pour les entreprises.">
 
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
@@ -58,8 +58,7 @@
                     <div class="sub-banner-content-con">
                         <h1>À propos d’ELChat</h1>
                         <p>
-                            Une plateforme d’IA conversationnelle alimentée par les connaissances de votre entreprise
-                            et connectée à vos canaux d’engagement pour automatiser vos conversations clients.
+                            Notre ambition : relier la connaissance, la décision et l’action pour rendre l’IA concrètement utile aux équipes et aux dirigeants.
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
@@ -107,31 +106,30 @@
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
                                   data-wow-delay="0.2s">À propos d’ELChat</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.2s">
-                                Une IA qui comprend votre entreprise
-                                et parle comme votre équipe
+                                Une IA qui connaît votre entreprise<br>
+                                et agit selon vos règles
                             </h2>
                             <p class="wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">
-                                ELChat est une plateforme d’IA conversationnelle alimentée par les connaissances de votre entreprise
-                                : site web, documents, FAQ et produits et connectée à vos canaux d’engagement (réseaux sociaux,
-                                messagerie, support client).
-                                Elle transforme ces données en conversations intelligentes, cohérentes et orientées résultats.
+                                ELChat est né d’un constat simple : une IA isolée de vos données et de vos outils reste un moteur de réponses.
+                                Pour devenir opérationnelle, elle doit comprendre votre contexte, détecter les événements utiles,
+                                exécuter des processus maîtrisés et rendre ses résultats lisibles.
                             </p>
                             <p class="wow fadeInLeft prgrph-2" data-wow-duration="2s" data-wow-delay="0.5s">
-                                Au-delà d’un simple chatbot, ELChat agit comme un véritable système d’engagement automatisé :
-                                il répond, qualifie, assiste et accompagne vos prospects et clients 24/7, en s’appuyant sur
-                                votre propre connaissance métier.
+                                La plateforme réunit donc une base de connaissances RAG, des canaux d’engagement, des connecteurs métier,
+                                des workflows et des agents spécialisés. Les permissions, validations humaines et journaux d’audit
+                                permettent d’adapter l’autonomie au niveau de risque de chaque action.
                             </p>
                             <ul class="list-unstyled p-0 wow fadeInRight" data-wow-duration="2s"
                                 data-wow-delay="0.6s">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Connectez vos sources (site web, documents, FAQ, produits) et transformez-les en une base de connaissance intelligente.
+                                    Connaître et comprendre : exploiter les contenus, les données et les signaux propres à l’entreprise.
                                 </li>
                                 <li class="position-relative mb-0"><i class="fa-solid fa-check"></i>
-                                    Automatisez vos conversations sur votre site web, réseaux sociaux et canaux clients avec une IA qui comprend réellement votre activité.
+                                    Décider, agir, mesurer et apprendre : transformer ce contexte en processus contrôlés et en améliorations continues.
                                 </li>
                             </ul>
                             <a href="" class="text-decoration-none primary_btn d-inline-block wow
-                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.7s">Commencer</a>
+                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.7s">Découvrir nos capacités</a>
                             <!-- heading title con -->
                         </div>
                         <!-- about us content con -->
@@ -153,20 +151,19 @@
                     <div class="statistics-content-con">
                         <div class="heading-title-con mb-0">
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                                  data-wow-delay="0.4s">Performance & Impact</span>
+                                  data-wow-delay="0.4s">Notre approche</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                                Conçu pour les équipes,<br>
-                                pensé pour la scalabilité
+                                Une boucle opérationnelle,<br>
+                                du savoir au résultat
                             </h2>
                             <p class="wow fadeInLeft p-0" data-wow-duration="2s" data-wow-delay="0.6s">
-                                ELChat est utilisé pour gérer des volumes élevés d’interactions sur les réseaux sociaux,
-                                les sites web et les canaux de support client. Grâce à son moteur de connaissance et
-                                son système d’automatisation, les entreprises peuvent répondre instantanément,
-                                qualifier leurs prospects et améliorer l’expérience client à grande échelle.
+                                ELChat organise l’usage de l’IA autour d’une boucle continue : connaître, comprendre,
+                                décider, agir, mesurer et apprendre. Cette logique évite les automatisations déconnectées
+                                du terrain et permet de faire évoluer progressivement les connaissances, règles et agents.
                             </p>
 
                             <a href="about.html" class="text-decoration-none primary_btn d-inline-block wow
-                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Commencer</a>
+                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Échanger sur votre contexte</a>
                             <!-- heading title con -->
                         </div>
                         <!-- statistics content con -->
@@ -180,9 +177,9 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon1.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <span class="d-inline-block black-text counter">95 </span><sup
-                                        class="d-inline-block black-text">%</sup>
-                                    <span class="span-text d-block">Réduction du temps de réponse</span>
+                                    <span class="d-inline-block black-text counter">1 </span><sup
+                                        class="d-inline-block black-text"></sup>
+                                    <span class="span-text d-block">Plateforme opérationnelle unifiée</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -191,9 +188,9 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon2.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <span class="d-inline-block black-text">24/7 </span>
+                                    <span class="d-inline-block black-text">3 </span>
                                     <!-- <span class="d-inline-block alphabet black-text">k</span> -->
-                                    <span class="span-text d-block">Disponibilité continue</span>
+                                    <span class="span-text d-block">Familles de modules optionnels</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -202,10 +199,10 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon3.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <sup class="d-inline-block black-text">+</sup><span
-                                        class="d-inline-block black-text counter">40 </span><sup
-                                        class="d-inline-block black-text">%</sup>
-                                    <span class="span-text d-block">Augmentation de l’engagement</span>
+                                    <sup class="d-inline-block black-text"></sup><span
+                                        class="d-inline-block black-text counter">6 </span><sup
+                                        class="d-inline-block black-text"></sup>
+                                    <span class="span-text d-block">Étapes de la boucle opérationnelle</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -214,9 +211,9 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon4.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <span class="d-inline-block black-text counter">10000 </span><sup
-                                        class="d-inline-block black-text">+</sup>
-                                    <span class="span-text d-block">Conversations gérées quotidiennement</span>
+                                    <span class="d-inline-block black-text counter">29 </span><sup
+                                        class="d-inline-block black-text">€</sup>
+                                    <span class="span-text d-block">Socle Core par mois</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->

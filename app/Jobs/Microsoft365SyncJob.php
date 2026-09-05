@@ -12,6 +12,7 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class Microsoft365SyncJob implements ShouldQueue
 {
@@ -40,6 +41,14 @@ class Microsoft365SyncJob implements ShouldQueue
         if (!$credentials) return;
         $fresh = $connector->authenticate($credentials);
         if ($fresh !== $credentials) $vault->refresh($this->site, 'microsoft_365', $fresh);
-        $sync->sync($this->site, $fresh, $this->driveId, $this->providerSiteId);
+        $result = $sync->sync($this->site, $fresh, $this->driveId, $this->providerSiteId);
+        if (!empty($result['last_error'])) {
+            Log::warning('Synchronisation Microsoft 365 interrompue', [
+                'site_id' => $this->site->id,
+                'drive_id' => $this->driveId,
+                'provider_site_id' => $this->providerSiteId,
+                'error' => $result['last_error'],
+            ]);
+        }
     }
 }

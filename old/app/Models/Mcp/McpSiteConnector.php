@@ -7,13 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 
 class McpSiteConnector extends Model
 {
-    protected $fillable = ['site_id', 'mcp_connector_id', 'credentials_encrypted', 'status', 'connected_at', 'last_used_at', 'last_error_at', 'last_error_message', 'settings'];
+    protected $fillable = ['site_id', 'mcp_connector_id', 'credentials_encrypted', 'status', 'connected_at', 'last_used_at', 'last_error_at', 'last_error_message', 'settings', 'provider_tenant_id', 'provider_principal_id', 'provider_principal_upn', 'granted_scopes'];
 
     protected $casts = [
         'settings' => 'array',
         'connected_at' => 'datetime',
         'last_used_at' => 'datetime',
         'last_error_at' => 'datetime',
+        'granted_scopes' => 'array',
     ];
 
     // credentials_encrypted n'est JAMAIS castée en array ni exposée : accès

@@ -46,7 +46,7 @@ abstract class AbstractConnector implements MCPConnectorInterface
                 // Ne retry que sur erreurs transitoires (réseau, 5xx, 429), jamais sur 4xx métier
                 return $e instanceof ConnectionException
                     || ($e instanceof RequestException
-                        && $e->response?->status() >= 500);
+                        && in_array($e->response?->status(), [429, 500, 502, 503, 504], true));
             })
             ->throw(function ($response, $e) {
                 $this->recordFailure();

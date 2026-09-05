@@ -3,6 +3,7 @@
 namespace App\Services\hops;
 
 use App\Contracts\ConversationEngineInterface;
+use App\Domain\MCP\Security\ActorContext;
 use App\Models\Conversation;
 use App\Models\Site;
 use App\Models\UnansweredQuestion;
@@ -104,6 +105,7 @@ class SingleHopPipelineService
         Conversation $conversation = null,
         array $history = [],
         ?ConversationDirective $directive = null,   // 🆕
+        ?ActorContext $actor = null,
     ): HopResponse
     {
 
@@ -187,7 +189,7 @@ class SingleHopPipelineService
         // ─────────────────────────────
         // 5️⃣ Hydratation
         // ─────────────────────────────
-        $hydrated = $this->chunkHydrationService->hydrate($resultsHybridSearch);
+        $hydrated = $this->chunkHydrationService->hydrate($resultsHybridSearch, $actor);
         //Log::info("Hydrated Chunks :", $hydrated);
         $historyMessagesResults = [];
         $hydratedMessages = $this->chunkHydrationService->hydrateMessages($historyMessagesResults);

@@ -11,7 +11,7 @@
          ]);
 
         // Poste le message au parent
-        window.opener.postMessage(data, 'https://elchat-widget.promogifts.ma/sign-up');
+        window.opener.postMessage(data, 'https://elchat.io/sign-up');
         window.close();
     </script>
 </head>

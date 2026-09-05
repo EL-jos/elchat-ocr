@@ -4,11 +4,13 @@ namespace App\Services\rag;
 
 use App\Models\Conversation;
 use App\Models\Site;
+use App\Services\hops\LLMService;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
 
 class ContextCompressor
 {
+    public function __construct(private readonly LLMService $llm) {}
+
     /**
      * Compresse un ensemble de chunks en un résumé plus court.
      * @param array $chunks
@@ -44,26 +46,13 @@ class ContextCompressor
         PROMPT;
 
         try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-                'Content-Type' => 'application/json',
-            ])->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => 'meta-llama/llama-3.1-8b-instruct',
-                'messages' => [
+            return trim($this->llm->chat([
                     ['role' => 'system', 'content' => $prompt]
-                ],
+                ], [
+                'task' => 'rag_context_compression',
                 'temperature' => 0.3,
                 'max_tokens' => 250, // mini LLM → résumé court
-            ]);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                if (isset($data['choices'][0]['message']['content'])) {
-                    return trim($data['choices'][0]['message']['content']);
-                }
-            }
-
-            Log::warning("ContextCompressor: échec de compression", ['response' => $response->body()]);
+            ]));
         } catch (\Exception $e) {
             Log::error("ContextCompressor exception: " . $e->getMessage());
         }

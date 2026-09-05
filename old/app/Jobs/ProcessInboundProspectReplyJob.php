@@ -1,11 +1,12 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
-use App\Domain\MCP\Orchestration\MCPActionGateService;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Sales\ProspectMessage;
+use App\Services\mcp\MCPActionGateService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,6 +23,7 @@ use Illuminate\Support\Str;
  */
 class ProcessInboundProspectReplyJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     private const UNSUBSCRIBE_MARKERS = [

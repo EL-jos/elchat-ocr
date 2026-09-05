@@ -36,12 +36,12 @@ class DocumentCanonicalService
             ]
         };
     }*/
-    public function buildCanonicalDocument(string $path, string $extension, string $fullPath): array
+    public function buildCanonicalDocument(string $path, string $extension, string $fullPath, ?string $title = null): array
     {
         return [
             'type' => 'document',
             'format' => $extension,
-            'title' => basename($fullPath),
+            'title' => trim((string) $title) ?: basename($fullPath),
             'blocks' => $this->extractBlocks($fullPath, $extension),
             'raw_text' => '',
         ];

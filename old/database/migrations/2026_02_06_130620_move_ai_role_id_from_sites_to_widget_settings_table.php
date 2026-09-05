@@ -20,7 +20,7 @@ return new class extends Migration
                 ->nullOnDelete();
         });
         Schema::table('sites', function (Blueprint $table) {
-            $table->dropForeign('sites_ai_role_id_foreign');
+            $table->dropForeign(['ai_role_id']);
             $table->dropColumn('ai_role_id');
         });
     }
@@ -39,7 +39,7 @@ return new class extends Migration
                 ->nullOnDelete();
         });
         Schema::table('widget_settings', function (Blueprint $table) {
-            $table->dropForeign('widget_settings_ai_role_id_foreign');
+            $table->dropForeign(['ai_role_id']);
             $table->dropColumn('ai_role_id');
         });
     }

@@ -51,7 +51,7 @@ class ProactiveDecisionService
                 'context' => $context,
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)],
         ], array_filter([
-            'model' => config('proactive.decision_model'),
+            'task' => 'proactive_decision',
             'temperature' => 0.15,
             'max_tokens' => 500,
             'response_format' => ['type' => 'json_object'],

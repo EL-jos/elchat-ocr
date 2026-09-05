@@ -34,7 +34,9 @@ class MCPServiceProvider extends ServiceProvider
         $this->app->singleton(OpenRouterToolClient::class, function ($app) {
             return new OpenRouterToolClient(
                 apiKey: config('mcp.llm.api_key'),
-                model: config('mcp.llm.model'),
+                model: config('llm.tasks.mcp.model'),
+                fallbackModel: config('llm.tasks.mcp.fallback_model'),
+                maxRetries: (int) config('llm.provider.max_retries', 3),
             );
         });
 

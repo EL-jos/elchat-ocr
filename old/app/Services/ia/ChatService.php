@@ -1,12 +1,15 @@
 <?php
 namespace App\Services\ia;
 
+use App\Enums\AnalyticsEventType;
+
 use App\Contracts\ConversationEngineInterface;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Site;
 use App\Models\WidgetSetting;
 use App\Services\analytics\ResourceEventLogger;
+use App\Services\analytics\AnalyticsEventService;
 use App\Services\cta\ChatResponse;
 use App\Services\hops\HopResponse;
 use App\Services\hops\MultiHopPipelineService;
@@ -88,6 +91,7 @@ class ChatService
         // 🆕 MCP
         protected MCPActionGateService $mcpActionGateService,
         private readonly ResourceEventLogger $resourceEventLogger, // 🆕
+        private readonly AnalyticsEventService $analytics,
     )
     {}
 
@@ -137,6 +141,8 @@ class ChatService
             conversation: $conversation,
             rawQuestion: $question,   // 🆕 texte brut, avant réécriture
         );
+
+        $this->trackIntent($site, $conversation, $baseQueryPlan->intent);
 
         // ─────────────────────────────
         // 3️⃣ Retrieval Expansion
@@ -423,6 +429,21 @@ class ChatService
         // 🔟 FINAL DECISION
         // ─────────────────────────────
         if ($bestScore >= $site->settings->min_similarity_score) {
+            $bestGrounding = (float) ($bestValidation['grounding'] ?? 0);
+            $bestHallucinationRisk = (float) ($bestValidation['hallucination_risk'] ?? 1);
+            if ($bestGrounding < 0.4 || $bestHallucinationRisk >= 0.3) {
+                $this->trackLowConfidenceAnswer(
+                    $site,
+                    $conversation,
+                    $question,
+                    $bestValidation,
+                    'validator_threshold',
+                );
+            }
+
+            // Use the response attached to the best-scoring candidate, not the
+            // last attempted candidate when retrieval expansion ran.
+            $validatedResponse = $bestValidatedResponse;
 
             if ($validatedResponse === "Cette information n’est pas disponible dans nos documents internes.") {
                 // Ajoute un texte introductif pour contextualiser les entities
@@ -448,10 +469,58 @@ class ChatService
         }
 
         // 🔥 fallback intelligent
+        $this->trackLowConfidenceAnswer(
+            $site,
+            $conversation,
+            $question,
+            $bestValidation,
+            'no_reliable_answer',
+        );
+
         return new ChatResponse(
             message: "Je n’ai pas trouvé une réponse suffisamment fiable. Pouvez-vous préciser votre demande ?",
             ctas: [],
             entities: []
+        );
+    }
+
+    private function trackLowConfidenceAnswer(
+        Site $site,
+        Conversation $conversation,
+        string $question,
+        ?array $validation,
+        string $reason,
+    ): void {
+        $messageId = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('role', 'user')
+            ->latest('created_at')
+            ->value('id');
+
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::LOW_CONFIDENCE_ANSWER,
+            [
+                'conversation_id' => $conversation->id,
+                'message_id' => $messageId,
+                'session_id' => $conversation->metadata['session_id'] ?? null,
+                'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                'source' => 'answer_validator',
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+            ],
+            metadata: [
+                'reason' => $reason,
+                'final_score' => isset($validation['final_score']) ? (float) $validation['final_score'] : null,
+                'grounding' => isset($validation['grounding']) ? (float) $validation['grounding'] : null,
+                'hallucination_risk' => isset($validation['hallucination_risk']) ? (float) $validation['hallucination_risk'] : null,
+                'relevance' => isset($validation['relevance']) ? (float) $validation['relevance'] : null,
+            ],
+            idempotencyKey: $this->analytics->deterministicKey(
+                'low_confidence_answer',
+                $site->id,
+                $conversation->id,
+                $messageId ?: hash('sha256', $question),
+            ),
         );
     }
     /**
@@ -1034,6 +1103,55 @@ class ChatService
         // ✨ Markdown propre
         return "Nous n’avons pas cette information exacte.\n\n---\n\n **Voici {$list} qui pourraient vous être utiles :**";
     }
+
+    private function trackIntent(Site $site, Conversation $conversation, string $intent): void
+    {
+        $messageId = Message::where('conversation_id', $conversation->id)
+            ->where('role', 'user')
+            ->latest('created_at')
+            ->value('id');
+
+        if (!$messageId) {
+            return;
+        }
+
+        $eventTypes = [AnalyticsEventType::INTENT_DETECTED];
+
+        if (in_array($intent, ['lead', 'pricing', 'booking', 'transactional', 'comparison'], true)) {
+            $eventTypes[] = AnalyticsEventType::COMMERCIAL_INTENT_DETECTED;
+        }
+
+        $specific = match ($intent) {
+            'support' => AnalyticsEventType::SUPPORT_INTENT_DETECTED,
+            'transactional' => AnalyticsEventType::PURCHASE_INTENT_DETECTED,
+            'booking' => AnalyticsEventType::BOOKING_INTENT_DETECTED,
+            'pricing' => AnalyticsEventType::PRICING_INTENT_DETECTED,
+            default => null,
+        };
+
+        if ($specific) {
+            $eventTypes[] = $specific;
+        }
+
+        foreach ($eventTypes as $eventType) {
+            $this->analytics->capture(
+                $site,
+                $eventType,
+                [
+                    'visitor_id' => $conversation->visitor_id,
+                    'conversation_id' => $conversation->id,
+                    'message_id' => $messageId,
+                    'session_id' => $conversation->metadata['session_id'] ?? null,
+                    'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                    'source' => 'query_analyzer',
+                    'channel' => $conversation->metadata['channel'] ?? 'widget',
+                ],
+                metadata: ['intent' => $intent],
+                idempotencyKey: $this->analytics->deterministicKey($eventType->value, $messageId),
+            );
+        }
+    }
+
     private function notifyThinking(Site $site, Conversation $conversation, string $label): void
     {
         $this->mercureService->post(

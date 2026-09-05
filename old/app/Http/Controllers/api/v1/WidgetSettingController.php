@@ -4,6 +4,8 @@ namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Controller;
 use App\Models\AIRole;
+use App\Models\Mcp\McpAgent;
+use App\Models\Mcp\McpWorkflow;
 use App\Models\Site;
 use App\Models\WidgetSetting;
 use Illuminate\Http\Request;
@@ -168,10 +170,21 @@ class WidgetSettingController extends Controller
             // Widget / AI
             'widget_enabled' => 'boolean',
             'ai_enabled' => 'boolean',
+            'auto_open_enabled' => 'nullable|boolean',
+            'auto_open_delay' => 'nullable|integer|min:1|max:86400',
             'bot_name' => 'nullable|string|max:50',
             'bot_language' => 'nullable|string|max:5',
             'welcome_message' => 'nullable|string|max:255',
             'input_placeholder' => 'nullable|string|max:100',
+            'content_translations' => 'nullable|array',
+            'content_translations.fr' => 'nullable|array',
+            'content_translations.fr.welcome_message' => 'nullable|string|max:255',
+            'content_translations.fr.input_placeholder' => 'nullable|string|max:100',
+            'content_translations.fr.fallback_message' => 'nullable|string|max:255',
+            'content_translations.en' => 'nullable|array',
+            'content_translations.en.welcome_message' => 'nullable|string|max:255',
+            'content_translations.en.input_placeholder' => 'nullable|string|max:100',
+            'content_translations.en.fallback_message' => 'nullable|string|max:255',
 
             'ai_temperature' => 'nullable|numeric|min:0|max:1',
             'ai_max_tokens' => 'nullable|integer|min:50|max:4000',
@@ -179,7 +192,31 @@ class WidgetSettingController extends Controller
             'fallback_message' => 'nullable|string|max:255',
             'ai_role_id' => 'nullable|string|exists:ai_roles,id',
             'require_authentication' => 'nullable|boolean',
+
+            // AI Engagement
+            'ai_engagement_enabled' => 'nullable|boolean',
+            'ai_engagement_widget_behavior' => 'nullable|in:notification_only,auto_open',
+            'ai_engagement_agent_id' => 'nullable|uuid',
+            'ai_engagement_workflow_id' => 'nullable|uuid',
+            'ai_engagement_max_per_session' => 'nullable|integer|min:1|max:10',
+            'ai_engagement_max_per_visitor' => 'nullable|integer|min:1|max:20',
+            'ai_engagement_visitor_window_seconds' => 'nullable|integer|min:3600|max:2592000',
+            'ai_engagement_cooldown_seconds' => 'nullable|integer|min:0|max:2592000',
+            'ai_engagement_close_cooldown_seconds' => 'nullable|integer|min:0|max:2592000',
+            'ai_engagement_refusal_cooldown_seconds' => 'nullable|integer|min:0|max:31536000',
+            'ai_engagement_min_session_seconds' => 'nullable|integer|min:5|max:3600',
+            'ai_engagement_min_pages' => 'nullable|integer|min:1|max:20',
+            'ai_engagement_min_score' => 'nullable|integer|min:1|max:100',
+            'ai_engagement_strategies' => 'nullable|array',
+            'ai_engagement_strategies.*' => 'in:assistance,targeted_question,navigation,sales,lead_generation,booking,cta,support',
         ]);
+
+        if (!empty($validated['ai_engagement_agent_id'])) {
+            abort_unless(McpAgent::query()->where('site_id', $widgetSetting->site_id)->whereKey($validated['ai_engagement_agent_id'])->exists(), 422, 'L’agent AI Engagement doit appartenir à ce site.');
+        }
+        if (!empty($validated['ai_engagement_workflow_id'])) {
+            abort_unless(McpWorkflow::query()->where('site_id', $widgetSetting->site_id)->whereKey($validated['ai_engagement_workflow_id'])->exists(), 422, 'Le workflow AI Engagement doit appartenir à ce site.');
+        }
 
         $widgetSetting->update($validated);
 

@@ -5,17 +5,23 @@ use App\Enums\AnalyticsEventType;
 
 use App\Contracts\ConversationEngineInterface;
 use App\Models\Conversation;
+use App\Models\ConversationMemory;
+use App\Domain\MCP\Security\ActorContext;
 use App\Models\Message;
+use App\Models\Mcp\McpPendingAction;
 use App\Models\Site;
 use App\Models\WidgetSetting;
 use App\Services\analytics\ResourceEventLogger;
 use App\Services\analytics\AnalyticsEventService;
 use App\Services\cta\ChatResponse;
 use App\Services\hops\HopResponse;
+use App\Services\hops\LLMService;
 use App\Services\hops\MultiHopPipelineService;
 use App\Services\hops\MultiHopPipelineServiceV2;
 use App\Services\hops\SingleHopPipelineService;
 use App\Services\mcp\MCPActionGateService;
+use App\Services\mcp\UnifiedToolCallResult;
+use App\Services\mcp\UnifiedToolCallService;
 use App\Services\MercureService;
 use App\Services\queryAnalyzer\IntentRouter;
 use App\Services\queryAnalyzer\LeadService;
@@ -34,6 +40,14 @@ class ChatService
 {
 
     use TextNormalizer;
+
+    private const COMMERCIAL_INTENTS = [
+        'lead',
+        'pricing',
+        'booking',
+        'transactional',
+        'comparison',
+    ];
 
     protected array $handlers = [
 
@@ -84,12 +98,14 @@ class ChatService
 
         protected FollowUpDetector $followUpDetector,
         protected RetrievalQueryExpander $retrievalQueryExpander,
+        protected LLMService $llm,
 
         protected MercureService $mercureService, // 🔹 ajouté
 
         protected ConversationEngineInterface $conversationEngine,
         // 🆕 MCP
         protected MCPActionGateService $mcpActionGateService,
+        protected UnifiedToolCallService $unifiedToolCallService,
         private readonly ResourceEventLogger $resourceEventLogger, // 🆕
         private readonly AnalyticsEventService $analytics,
     )
@@ -142,19 +158,10 @@ class ChatService
             rawQuestion: $question,   // 🆕 texte brut, avant réécriture
         );
 
-        $this->trackIntent($site, $conversation, $baseQueryPlan->intent);
+        $memoryRefreshRequested = $this->trackIntent($site, $conversation, $baseQueryPlan->intent);
 
         // ─────────────────────────────
-        // 3️⃣ Retrieval Expansion
-        // ONLY used if previous attempt hallucinated
-        // ─────────────────────────────
-        $queries = array_values(array_unique([
-            $resolvedQuestion,
-            ...$this->retrievalQueryExpander->expand(query: $resolvedQuestion)
-        ]));
-
-        // ─────────────────────────────
-        // 4️⃣ Short History
+        // 3️⃣ Short History
         // ─────────────────────────────
         $history = Message::where('conversation_id', $conversation->id)
             ->orderBy('created_at', 'desc')
@@ -192,43 +199,52 @@ class ChatService
             ->toArray();
 
         // ─────────────────────────────
-        // 🆕 4️⃣bis Passerelle MCP (actions : commande, rendez-vous...)
+        // 4️⃣bis MCP : décision unifiée, y compris multi-agent
         // ─────────────────────────────
-        // S'exécute AVANT le pipeline RAG. Si le site n'a aucun connecteur MCP
-        // actif, retourne immédiatement sans coût LLM. Si la demande n'est pas une
-        // action (cas normal, question de connaissance), retourne 'not_applicable'
-        // et la suite de cette méthode s'exécute EXACTEMENT comme aujourd'hui.
-        $mcpResult = $this->mcpActionGateService->tryHandle(
-            site: $site,
-            conversation: $conversation,
-            question: $question,
-            history: $history,
-            intent: $baseQueryPlan->intent, // 🆕 déjà calculé à l'étape 2️⃣, aucun coût supplémentaire
-        );
+        // Le mode multi-agent unifié supprime le pré-appel du superviseur :
+        // la génération finale reçoit directement le catalogue des outils
+        // autorisés et peut répondre, appeler un outil ou en appeler plusieurs.
+        // Le kill switch permet de restaurer l'ancien routage multi-agent sans
+        // modifier le flux unifié pour zéro ou un agent.
+        $mcpEnabled = (bool) config('mcp.enabled', true);
+        $unifiedMcpEnabled = $mcpEnabled && (bool) config('mcp.unified_tool_calling', true);
+        $unifiedMultiAgentEnabled = $unifiedMcpEnabled
+            && (bool) config('mcp.unified_multi_agent_tool_calling', true);
+        $multipleActiveAgents = $mcpEnabled
+            && $this->mcpActionGateService->hasMultipleActiveAgents($site);
+        $useUnifiedMcpFlow = $unifiedMcpEnabled
+            && (! $multipleActiveAgents || $unifiedMultiAgentEnabled);
+        $useLegacyMcpGate = $mcpEnabled && ! $useUnifiedMcpFlow;
 
-        if ($mcpResult->status === 'finished') {
-            return $mcpResult->response;
-        }
+        Log::info('MCP routing mode', [
+            'multiple_active_agents' => $multipleActiveAgents,
+            'unified_enabled' => $unifiedMcpEnabled,
+            'unified_multi_agent_enabled' => $unifiedMultiAgentEnabled,
+            'mode' => $useUnifiedMcpFlow ? 'unified' : ($useLegacyMcpGate ? 'legacy' : 'disabled'),
+        ]);
 
-        if ($mcpResult->status === 'awaiting_confirmation') {
-            $pending = $mcpResult->pendingAction;
-
-            return new ChatResponse(
-                message: $pending->confirm_actor === 'visitor'
-                    ? "Avant de continuer, pouvez-vous confirmer cette action ?"
-                    : "Votre demande a été transmise à un conseiller, qui va la valider sous peu.",
-                ctas: [],
-                entities: [],
-                pendingConfirmation: $pending->confirm_actor === 'visitor' ? [
-                    'id' => $pending->id,
-                    'connector' => $pending->connector_slug,
-                    'tool' => $pending->tool_name,
-                    'params' => $pending->params,
-                ] : null, // 🔒 rien exposé au visiteur si c'est un admin qui doit valider
+        if ($useLegacyMcpGate) {
+            $mcpResult = $this->mcpActionGateService->tryHandle(
+                site: $site,
+                conversation: $conversation,
+                question: $question,
+                history: $history,
+                intent: $baseQueryPlan->intent,
             );
-        }
 
-        // $mcpResult->status === 'not_applicable' => on continue le flux existant, rien ne change ci-dessous.
+            if ($mcpResult->status === 'finished') {
+                $mcpResult->response->memoryRefreshRequested = $memoryRefreshRequested;
+
+                return $mcpResult->response;
+            }
+
+            if ($mcpResult->status === 'awaiting_confirmation') {
+                return $this->chatResponseForPendingMcpAction(
+                    $mcpResult->pendingAction,
+                    $memoryRefreshRequested,
+                );
+            }
+        }
 
         $directive = $this->conversationEngine->decide(
             plan: $baseQueryPlan,
@@ -254,6 +270,12 @@ class ChatService
         $bestValidatedResponse = null;
 
         $previousHallucination = true;
+        $multiHopNoticeSent = false;
+        $unifiedActionFallbackAttempted = false;
+        // La première tentative utilise uniquement la requête d'origine.
+        // Les variantes sont ajoutées à la demande, après un échec de
+        // validation de cette première tentative.
+        $queries = [$resolvedQuestion];
 
         Log::info('Resolved Question', [
             'original' => $question,
@@ -268,7 +290,8 @@ class ChatService
         // 5️⃣ Retrieval Attempts
         // ─────────────────────────────
 
-        foreach ($queries as $attemptIndex => $currentQuestion) {
+        for ($attemptIndex = 0; $attemptIndex < count($queries); $attemptIndex++) {
+            $currentQuestion = $queries[$attemptIndex];
 
             // IMPORTANT:
             // only continue attempts if previous failed
@@ -298,14 +321,22 @@ class ChatService
             // 6️⃣ Retrieval
             // ─────────────────────────────
 
-            $results = $this->multiHopPipelineService->shouldUseMultiHop(queryPlan: $queryPlan)
+            $useMultiHop = $this->multiHopPipelineService->shouldUseMultiHop(queryPlan: $queryPlan);
+
+            if ($useMultiHop && !$multiHopNoticeSent) {
+                $this->notifyMultiHopStarted($site, $conversation);
+                $multiHopNoticeSent = true;
+            }
+
+            $results = $useMultiHop
                 ? $this->multiHopPipelineServiceV2->handle(
                     question: $currentQuestion,
                     plan: $queryPlan,
                     site: $site,
                     conversation: $conversation,
                     history: $history,
-                    directive: $directive
+                    directive: $directive,
+                    actor: ActorContext::fromConversation($conversation)
                 )
                 : $this->singleHopPipelineService->handle(
                     question: $currentQuestion,
@@ -313,10 +344,71 @@ class ChatService
                     site: $site,
                     conversation: $conversation,
                     history: $history,
-                    directive: $directive
+                    directive: $directive,
+                    actor: ActorContext::fromConversation($conversation)
                 );
 
             if (is_null($results->prompt) || (!is_null($results->message))) {
+                // Certains pipelines retournent directement un message quand
+                // aucun contexte RAG n'a été trouvé. On laisse malgré tout un
+                // unique passage unifié vérifier une action MCP explicite,
+                // sans transformer les tentatives de recherche en appels
+                // supplémentaires.
+                if ($useUnifiedMcpFlow && $attemptIndex === 0 && ! $unifiedActionFallbackAttempted) {
+                    $unifiedActionFallbackAttempted = true;
+                    $unifiedResult = $this->unifiedToolCallService->respond(
+                        site: $site,
+                        conversation: $conversation,
+                        prompt: null,
+                        question: $question,
+                        history: $history,
+                        intent: $baseQueryPlan->intent,
+                    );
+                    $actionResponse = $this->chatResponseForUnifiedResult(
+                        $unifiedResult,
+                        $memoryRefreshRequested,
+                    );
+
+                    if (
+                        $unifiedResult?->status === UnifiedToolCallResult::FAILED
+                        && $multipleActiveAgents
+                        && (bool) config('mcp.unified_multi_agent_legacy_fallback', true)
+                    ) {
+                        Log::warning('MCP unified multi-agent: repli legacy avant exécution d’outil', [
+                            'site_id' => $site->id,
+                            'conversation_id' => $conversation->id,
+                        ]);
+
+                        $legacyResult = $this->mcpActionGateService->tryHandle(
+                            site: $site,
+                            conversation: $conversation,
+                            question: $question,
+                            history: $history,
+                            intent: $baseQueryPlan->intent,
+                        );
+
+                        if ($legacyResult->status === 'finished') {
+                            $legacyResult->response->memoryRefreshRequested = $memoryRefreshRequested;
+
+                            return $legacyResult->response;
+                        }
+
+                        if ($legacyResult->status === 'awaiting_confirmation') {
+                            return $this->chatResponseForPendingMcpAction(
+                                $legacyResult->pendingAction,
+                                $memoryRefreshRequested,
+                            );
+                        }
+                    }
+
+                    if (
+                        $actionResponse !== null
+                        && $unifiedResult?->status !== UnifiedToolCallResult::TEXT
+                    ) {
+                        return $actionResponse;
+                    }
+                }
+
                 continue;
             }
 
@@ -327,11 +419,74 @@ class ChatService
             // ─────────────────────────────
             // 7️⃣ Generation
             // ─────────────────────────────
-            $response = $this->callLLM(
-                site: $site,
-                prompt: $results->prompt,
-                question: $resolvedQuestion
+            $unifiedResult = $useUnifiedMcpFlow
+                ? $this->unifiedToolCallService->respond(
+                    site: $site,
+                    conversation: $conversation,
+                    prompt: $results->prompt,
+                    question: $currentQuestion,
+                    history: $history,
+                    intent: $queryPlan->intent,
+                )
+                : null;
+            $unifiedActionResponse = $this->chatResponseForUnifiedResult(
+                $unifiedResult,
+                $memoryRefreshRequested,
             );
+
+            if (
+                $unifiedResult?->status === UnifiedToolCallResult::FAILED
+                && $multipleActiveAgents
+                && (bool) config('mcp.unified_multi_agent_legacy_fallback', true)
+            ) {
+                // Le repli historique est réservé aux erreurs survenues avant
+                // toute exécution. FAILED_AFTER_TOOL est volontairement exclu
+                // pour ne jamais rejouer une action déjà effectuée.
+                Log::warning('MCP unified multi-agent: repli legacy avant exécution d’outil', [
+                    'site_id' => $site->id,
+                    'conversation_id' => $conversation->id,
+                ]);
+
+                $legacyResult = $this->mcpActionGateService->tryHandle(
+                    site: $site,
+                    conversation: $conversation,
+                    question: $question,
+                    history: $history,
+                    intent: $queryPlan->intent,
+                );
+
+                if ($legacyResult->status === 'finished') {
+                    $legacyResult->response->memoryRefreshRequested = $memoryRefreshRequested;
+
+                    return $legacyResult->response;
+                }
+
+                if ($legacyResult->status === 'awaiting_confirmation') {
+                    return $this->chatResponseForPendingMcpAction(
+                        $legacyResult->pendingAction,
+                        $memoryRefreshRequested,
+                    );
+                }
+            }
+
+            if ($unifiedActionResponse !== null) {
+                // Une réponse texte sans tool_call continue dans le validateur
+                // RAG. Une clarification, confirmation ou action exécutée est
+                // déjà une réponse finale et quitte ce pipeline.
+                if ($unifiedResult?->status !== UnifiedToolCallResult::TEXT) {
+                    return $unifiedActionResponse;
+                }
+
+                $response = $unifiedActionResponse->message;
+            } else {
+                // Kill switch, absence d'outil autorisé, multi-agent ou
+                // erreur avant exécution : retour au générateur texte existant.
+                $response = $this->callLLM(
+                    site: $site,
+                    prompt: $results->prompt,
+                    question: $resolvedQuestion
+                );
+            }
 
             // ─────────────────────────────
             // 8️⃣ Response Guard
@@ -424,6 +579,20 @@ class ChatService
                 break;
             }
 
+            // Ne calculer les variantes qu'après l'échec de la première
+            // validation. Le scoring et les critères ci-dessus restent
+            // inchangés.
+            if ($attemptIndex === 0 && $previousHallucination) {
+                $queries = array_values(array_unique([
+                    ...$queries,
+                    ...$this->retrievalQueryExpander->expand(query: $resolvedQuestion),
+                ]));
+
+                Log::info('Retrieval query expansion triggered after first validation failure', [
+                    'variants_count' => count($queries) - 1,
+                ]);
+            }
+
         }
         // ─────────────────────────────
         // 🔟 FINAL DECISION
@@ -464,7 +633,8 @@ class ChatService
             return new ChatResponse(
                 message: $validatedResponse,
                 ctas: $bestResults->ctas,
-                entities: $bestResults->entities
+                entities: $bestResults->entities,
+                memoryRefreshRequested: $memoryRefreshRequested,
             );
         }
 
@@ -480,7 +650,8 @@ class ChatService
         return new ChatResponse(
             message: "Je n’ai pas trouvé une réponse suffisamment fiable. Pouvez-vous préciser votre demande ?",
             ctas: [],
-            entities: []
+            entities: [],
+            memoryRefreshRequested: $memoryRefreshRequested,
         );
     }
 
@@ -523,6 +694,64 @@ class ChatService
             ),
         );
     }
+
+    private function chatResponseForUnifiedResult(
+        ?UnifiedToolCallResult $result,
+        bool $memoryRefreshRequested,
+    ): ?ChatResponse {
+        if ($result === null || $result->status === UnifiedToolCallResult::FAILED) {
+            return null;
+        }
+
+        if ($result->status === UnifiedToolCallResult::AWAITING_CONFIRMATION) {
+            return $this->chatResponseForPendingMcpAction(
+                $result->pendingAction,
+                $memoryRefreshRequested,
+            );
+        }
+
+        if ($result->message === null || trim($result->message) === '') {
+            return null;
+        }
+
+        return new ChatResponse(
+            message: $result->message,
+            ctas: [],
+            entities: [],
+            suggestedActions: $result->suggestedActions !== [] ? $result->suggestedActions : null,
+            memoryRefreshRequested: $memoryRefreshRequested,
+        );
+    }
+
+    private function chatResponseForPendingMcpAction(
+        ?McpPendingAction $pending,
+        bool $memoryRefreshRequested,
+    ): ChatResponse {
+        if ($pending === null) {
+            return new ChatResponse(
+                message: "Je n’ai pas pu préparer cette action. Pouvez-vous préciser votre demande ?",
+                ctas: [],
+                entities: [],
+                memoryRefreshRequested: $memoryRefreshRequested,
+            );
+        }
+
+        return new ChatResponse(
+            message: $pending->confirm_actor === 'visitor'
+                ? "Avant de continuer, pouvez-vous confirmer cette action ?"
+                : "Votre demande a été transmise à un conseiller, qui va la valider sous peu.",
+            ctas: [],
+            entities: [],
+            pendingConfirmation: $pending->confirm_actor === 'visitor' ? [
+                'id' => $pending->id,
+                'connector' => $pending->connector_slug,
+                'tool' => $pending->tool_name,
+                'params' => $pending->params,
+            ] : null,
+            memoryRefreshRequested: $memoryRefreshRequested,
+        );
+    }
+
     /**
      * Appel LLM avec PERSONA EMPLOYÉ INTERNE
      */
@@ -539,6 +768,24 @@ class ChatService
             ...$prompt['messages'],
         ];
 
+        // Tous les appels de réponse du widget passent par le client commun :
+        // sélection centralisée du modèle et basculement vers son secours.
+        try {
+            return $this->llm->chat($messages, [
+                'task' => 'chat',
+                'temperature' => (float) $settings->ai_temperature,
+                'max_tokens' => $prompt['max_tokens'] ?? $settings->ai_max_tokens ?? 350,
+            ]);
+        } catch (\Throwable $exception) {
+            Log::error('Échec des modèles LLM de conversation', [
+                'site_id' => $site->id,
+                'question' => substr($question, 0, 100),
+                'error' => $exception->getMessage(),
+            ]);
+
+            return "Notre équipe chez {$companyName} reste disponible pour vous accompagner.";
+        }
+
         // --- DÉBUT DE LA LOGIQUE DE RETRY ---
         $maxRetries = 5;
         $delaySeconds = 1; // Délai de base pour le backoff exponentiel
@@ -551,7 +798,7 @@ class ChatService
                     'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
                     'Content-Type' => 'application/json', // Bonne pratique
                 ])->post('https://openrouter.ai/api/v1/chat/completions', [
-                    'model' => 'openai/gpt-4.1-mini',
+                    'model' => config('llm.tasks.chat.model'),
                     'messages' => $messages,
                     'temperature' => floatval($settings->ai_temperature),
                     'max_tokens' => $prompt['max_tokens'] ?? $settings->ai_max_tokens ?? 350,//$settings->ai_max_tokens,
@@ -724,12 +971,25 @@ class ChatService
         $memory = $this->extractStructuredMemory($conversation);
 
         if (!empty($memory)) {
-            DB::table('conversation_memories')->updateOrInsert(
+            ConversationMemory::updateOrCreate(
                 ['conversation_id' => $conversation->id],
-                ['memory' => json_encode($memory), 'updated_at' => now()]
+                ['memory' => $memory]
             );
         }
     }
+
+    public function updateConversationMemoryFromMessage(Message $message): void
+    {
+        $memory = $this->extractStructuredMemoryFromMessage($message);
+
+        if (!empty($memory)) {
+            ConversationMemory::updateOrCreate(
+                ['conversation_id' => $message->conversation_id],
+                ['memory' => $memory]
+            );
+        }
+    }
+
     private function callLLMForSummary(string $prompt, ?Conversation $conversation, bool $return_json = true): string
     {
         $maxRetries = 5;
@@ -739,6 +999,33 @@ class ChatService
         $fallback = $return_json
             ? json_encode(['preferences'=>[],'objectives'=>[],'constraints'=>[],'decisions'=>[],'user_info'=>[]])
             : ($conversation?->summary ?? 'Résumé indisponible');
+
+        try {
+            $content = $this->llm->chat([
+                ['role' => 'system', 'content' => $prompt],
+            ], [
+                'task' => 'chat_summary',
+                'temperature' => 0.3,
+                'max_tokens' => 300,
+            ]);
+
+            if (! $return_json) {
+                return trim(preg_replace('/^```[a-z]*|```$/mi', '', $content));
+            }
+
+            if (json_decode($content, true) !== null && json_last_error() === JSON_ERROR_NONE) {
+                return $content;
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('Résumé LLM indisponible, utilisation du résumé de secours', [
+                'conversation_id' => $conversationId,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        // Le client central a déjà épuisé le principal et son secours.
+        // Ne pas relancer ici un ancien appel qui contournerait le registre.
+        return $fallback;
 
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
 
@@ -751,7 +1038,7 @@ class ChatService
                     'Content-Type' => 'application/json',
                 ])->timeout(30)
                     ->post('https://openrouter.ai/api/v1/chat/completions', [
-                        'model' => 'meta-llama/llama-3.1-8b-instruct',
+                        'model' => config('llm.tasks.chat_summary.model'),
                         'messages' => [
                             ['role' => 'system', 'content' => $prompt]
                         ],
@@ -1104,7 +1391,7 @@ class ChatService
         return "Nous n’avons pas cette information exacte.\n\n---\n\n **Voici {$list} qui pourraient vous être utiles :**";
     }
 
-    private function trackIntent(Site $site, Conversation $conversation, string $intent): void
+    private function trackIntent(Site $site, Conversation $conversation, string $intent): bool
     {
         $messageId = Message::where('conversation_id', $conversation->id)
             ->where('role', 'user')
@@ -1112,12 +1399,36 @@ class ChatService
             ->value('id');
 
         if (!$messageId) {
-            return;
+            return false;
         }
+
+        // La mémoire ne doit pas être recalculée à chaque changement d'intention :
+        // on ne déclenche qu'à l'entrée dans le bucket commercial, avec un
+        // debounce de trois messages pour éviter les bascules rapprochées.
+        $metadata = $conversation->metadata ?? [];
+        $previousIntent = $metadata['query_analyzer_last_intent'] ?? null;
+        $isCommercial = in_array($intent, self::COMMERCIAL_INTENTS, true);
+        $wasCommercial = in_array($previousIntent, self::COMMERCIAL_INTENTS, true);
+        $messageCount = $conversation->messages()->count();
+        $lastMemoryTriggerCount = (int) ($metadata['memory_last_intent_trigger_count'] ?? 0);
+
+        $memoryRefreshRequested = $isCommercial
+            && !$wasCommercial
+            && ($lastMemoryTriggerCount === 0 || ($messageCount - $lastMemoryTriggerCount) >= 3);
+
+        $metadata['query_analyzer_last_intent'] = $intent;
+
+        if ($memoryRefreshRequested) {
+            // Marqué avant l'envoi du job pour éviter les doublons si plusieurs
+            // messages arrivent avant que le worker ait traité le premier job.
+            $metadata['memory_last_intent_trigger_count'] = $messageCount;
+        }
+
+        $conversation->update(['metadata' => $metadata]);
 
         $eventTypes = [AnalyticsEventType::INTENT_DETECTED];
 
-        if (in_array($intent, ['lead', 'pricing', 'booking', 'transactional', 'comparison'], true)) {
+        if ($isCommercial) {
             $eventTypes[] = AnalyticsEventType::COMMERCIAL_INTENT_DETECTED;
         }
 
@@ -1150,6 +1461,8 @@ class ChatService
                 idempotencyKey: $this->analytics->deterministicKey($eventType->value, $messageId),
             );
         }
+
+        return $memoryRefreshRequested;
     }
 
     private function notifyThinking(Site $site, Conversation $conversation, string $label): void
@@ -1160,6 +1473,18 @@ class ChatService
                 'type' => 'thinking_step',
                 'conversation_id' => $conversation->id,
                 'label' => $label,
+                'created_at' => now()->toISOString(),
+            ]
+        );
+    }
+
+    private function notifyMultiHopStarted(Site $site, Conversation $conversation): void
+    {
+        $this->mercureService->post(
+            "/sites/{$site->id}/conversations/{$conversation->id}",
+            [
+                'type' => 'multi_hop_started',
+                'conversation_id' => $conversation->id,
                 'created_at' => now()->toISOString(),
             ]
         );

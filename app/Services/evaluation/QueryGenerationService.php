@@ -179,6 +179,7 @@ class QueryGenerationService
                 ]))
             ]
         ], [
+            'task' => 'rag_query_generation',
             'max_tokens' => $maxTokens,
             'max_tokens_cap' => $maxTokensCap,
             'temperature' => 0.7,

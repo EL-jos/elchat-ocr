@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\api\v1;
 
+use App\Enums\AnalyticsAttributionType;
+use App\Enums\AnalyticsEventType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateConversationStatusRequest;
 use App\Http\Resources\ConversationDetailResource;
@@ -11,6 +13,7 @@ use App\Models\Message;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\conversation\VisitorConversionService;
+use App\Services\analytics\AnalyticsEventService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Http\Resources\MessageResource;
@@ -18,7 +21,8 @@ use App\Http\Resources\MessageResource;
 class ConversationController extends Controller
 {
     public function __construct(
-        private readonly VisitorConversionService $conversionService
+        private readonly VisitorConversionService $conversionService,
+        private readonly AnalyticsEventService $analytics,
     ) {
     }
 
@@ -29,6 +33,9 @@ class ConversationController extends Controller
      */
     public function index(Request $request, string $siteId): JsonResponse
     {
+        $site = Site::findOrFail($siteId);
+        $this->authorizeSite($site);
+
         $perPage = (int) $request->integer('per_page', 20);
 
         $query = Conversation::query()
@@ -81,6 +88,7 @@ class ConversationController extends Controller
     public function show(string $siteId, Conversation $conversation): JsonResponse
     {
         abort_unless($conversation->site_id === $siteId, 404);
+        $this->authorizeSite($conversation->site);
 
         $conversation->load([
             'visitor',
@@ -97,8 +105,44 @@ class ConversationController extends Controller
     public function updateStatus(UpdateConversationStatusRequest $request, string $siteId, Conversation $conversation): JsonResponse
     {
         abort_unless($conversation->site_id === $siteId, 404);
+        $this->authorizeSite($conversation->site);
 
         $conversation->update(['status' => $request->validated('status')]);
+
+        if ($conversation->status === 'open') {
+            $site = Site::findOrFail($siteId);
+            $this->analytics->capture(
+                $site,
+                AnalyticsEventType::HUMAN_HANDOFF,
+                [
+                    'visitor_id' => $conversation->visitor_id,
+                    'conversation_id' => $conversation->id,
+                    'session_id' => $conversation->metadata['session_id'] ?? null,
+                    'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                    'source' => 'admin',
+                    'channel' => $conversation->metadata['channel'] ?? 'widget',
+                ],
+                idempotencyKey: $this->analytics->deterministicKey('human_handoff', $conversation->id),
+            );
+        }
+
+        if ($conversation->status === 'resolved') {
+            $site = Site::findOrFail($siteId);
+            $this->analytics->capture(
+                $site,
+                AnalyticsEventType::CONVERSATION_RESOLVED,
+                [
+                    'visitor_id' => $conversation->visitor_id,
+                    'conversation_id' => $conversation->id,
+                    'session_id' => $conversation->metadata['session_id'] ?? null,
+                    'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                    'source' => 'admin',
+                    'channel' => $conversation->metadata['channel'] ?? 'widget',
+                ],
+                metadata: ['resolution_mode' => 'human'],
+                idempotencyKey: $this->analytics->deterministicKey('conversation_resolved', $conversation->id),
+            );
+        }
 
         return response()->json(['success' => true, 'status' => $conversation->status]);
     }
@@ -109,6 +153,7 @@ class ConversationController extends Controller
     public function convertToUser(string $siteId, Conversation $conversation): JsonResponse
     {
         abort_unless($conversation->site_id === $siteId, 404);
+        $this->authorizeSite($conversation->site);
 
         $result = $this->conversionService->convert($conversation);
 
@@ -118,6 +163,24 @@ class ConversationController extends Controller
                 'message' => $result['message'],
             ], 422);
         }
+
+        $site = Site::findOrFail($siteId);
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::LEAD_UPDATED,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'session_id' => $conversation->metadata['session_id'] ?? null,
+                'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+                'resource_type' => 'lead',
+                'resource_id' => (string) ($result['user']['id'] ?? $conversation->user_id),
+                'source' => 'admin_conversion',
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+                'attribution_type' => AnalyticsAttributionType::ASSISTED->value,
+            ],
+            idempotencyKey: $this->analytics->deterministicKey('lead_updated', $conversation->id),
+        );
 
         return response()->json($result);
     }
@@ -204,35 +267,12 @@ class ConversationController extends Controller
         ]);
     }
 
-    private function authorizeSite(Site $site)
+    private function authorizeSite(Site $site): void
     {
         $user = auth()->user();
-
-        if (!$user) {
-            return $this->errorResponse(
-                'Authentication required.',
-                'AUTH_REQUIRED',
-                401
-            );
-        }
-
-        if (!$user->isAdmin()) {
-            return $this->errorResponse(
-                'Only administrators can access this resource.',
-                'ADMIN_ONLY',
-                403
-            );
-        }
-
-        if ($site->account->owner_user_id !== $user->id) {
-            return $this->errorResponse(
-                'You are not the owner of this site.',
-                'SITE_FORBIDDEN',
-                403
-            );
-        }
-
-        return null; // OK
+        abort_unless($user, 401, 'Authentication required.');
+        abort_unless($user->isAdmin(), 403, 'Only administrators can access this resource.');
+        abort_unless($site->account->owner_user_id === $user->id, 403, 'You are not the owner of this site.');
     }
 
     protected function errorResponse(
@@ -298,6 +338,7 @@ class ConversationController extends Controller
     public function adminMessages(Request $request, string $siteId, Conversation $conversation): JsonResponse
     {
         abort_unless($conversation->site_id === $siteId, 404);
+        $this->authorizeSite($conversation->site);
 
         $perPage = (int) $request->integer('per_page', 30);
 

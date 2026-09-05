@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\product;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Document;
 use App\Models\Product;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 
 class IndexProductBatchJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 18000;

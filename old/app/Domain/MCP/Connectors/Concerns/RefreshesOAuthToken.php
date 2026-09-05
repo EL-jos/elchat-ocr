@@ -20,12 +20,12 @@ trait RefreshesOAuthToken
         try {
             $response = Http::asForm()->post($tokenUrl, $params);
         } catch (RequestException $e) {
-            Log::error("MCP {$this->slug()}: échec du refresh token", ['body' => $e->response?->body()]);
+            Log::error("MCP {$this->slug()}: échec du refresh token", ['status' => $e->response?->status()]);
             throw new AuthExpiredException('Impossible de rafraîchir le token, reconnexion requise.');
         }
 
         if ($response->failed()) {
-            Log::error("MCP {$this->slug()}: refresh token refusé", ['status' => $response->status(), 'body' => $response->body()]);
+            Log::error("MCP {$this->slug()}: refresh token refusé", ['status' => $response->status()]);
             throw new AuthExpiredException('Token invalide ou révoqué, reconnexion requise.');
         }
 

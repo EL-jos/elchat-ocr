@@ -5,6 +5,8 @@ namespace App\Services\vision;
 
 use App\Models\Vision\ImageAnalysisCache;
 use App\Models\Vision\PageImage;
+use App\Services\hops\LLMModelResolver;
+use App\Services\hops\LLMService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -16,18 +18,14 @@ class ImageVisionService
     protected int $minWidth;
     protected int $minHeight;
     protected int $downloadTimeout;
-    protected int $callTimeout;
-    protected int $maxRetries;
 
-    public function __construct()
+    public function __construct(private readonly LLMService $llm)
     {
-        $this->model = config('vision.model');
+        $this->model = LLMModelResolver::modelForTask('vision') ?: (string) config('vision.model');
         $this->maxBytes = config('vision.max_image_bytes');
         $this->minWidth = config('vision.min_width');
         $this->minHeight = config('vision.min_height');
         $this->downloadTimeout = config('vision.download_timeout');
-        $this->callTimeout = config('vision.call_timeout');
-        $this->maxRetries = config('vision.max_retries');
     }
 
     /**
@@ -274,95 +272,35 @@ EOT;
             ],
         ];
 
-        $delay = 1;
+        try {
+            $parsed = $this->llm->chatJson($messages, [
+                'task' => 'vision',
+                'temperature' => 0.1,
+                'max_tokens' => 1000,
+                'headers' => [
+                    'HTTP-Referer' => config('app.url'),
+                    'X-Title' => 'RAG SaaS Engine - Vision',
+                ],
+            ]);
 
-        for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
-            try {
-                Log::info("Vision call attempt {$attempt}", [
-                    'model' => $this->model,
-                    'ref' => $logRef,
-                ]);
+            if (is_array($parsed) && $parsed !== []) {
+                $this->model = $this->llm->lastUsedModel() ?? $this->model;
 
-                $response = Http::timeout($this->callTimeout)
-                    ->connectTimeout(10)
-                    ->withHeaders([
-                        'Authorization' => 'Bearer ' . config('vision.openrouter_api_key'),
-                        'Content-Type' => 'application/json',
-                        'HTTP-Referer' => config('app.url'),
-                        'X-Title' => 'RAG SaaS Engine - Vision',
-                    ])
-                    ->post('https://openrouter.ai/api/v1/chat/completions', [
-                        'model' => $this->model,
-                        'messages' => $messages,
-                        'temperature' => 0.1,
-                        'max_tokens' => 1000,
-                    ]);
-
-                if (!$response->successful()) {
-                    Log::warning('Vision HTTP error', [
-                        'attempt' => $attempt,
-                        'status' => $response->status(),
-                        'body' => substr($response->body(), 0, 500),
-                    ]);
-
-                    if ($attempt < $this->maxRetries) {
-                        sleep($delay);
-                        $delay *= 2;
-                        continue;
-                    }
-                    break;
-                }
-
-                $data = $response->json();
-                $content = trim($data['choices'][0]['message']['content'] ?? '');
-
-                if ($content === '') {
-                    Log::warning('Vision empty response', ['attempt' => $attempt]);
-                    if ($attempt < $this->maxRetries) {
-                        sleep($delay);
-                        $delay *= 2;
-                        continue;
-                    }
-                    break;
-                }
-
-                $content = preg_replace('/^```json|```$/i', '', $content);
-                $content = trim($content);
-
-                $parsed = json_decode($content, true);
-
-                if (!is_array($parsed)) {
-                    Log::warning('Vision invalid JSON', [
-                        'attempt' => $attempt,
-                        'raw' => substr($content, 0, 500),
-                    ]);
-                    if ($attempt < $this->maxRetries) {
-                        sleep($delay);
-                        $delay *= 2;
-                        continue;
-                    }
-                    break;
-                }
-
-                Log::info('Vision success', ['attempt' => $attempt, 'ref' => $logRef]);
+                Log::info('Vision LLM success', ['model' => $this->model, 'ref' => $logRef]);
 
                 return [
                     'description' => trim((string) ($parsed['description'] ?? '')),
                     'ocr_text' => trim((string) ($parsed['ocr_text'] ?? '')),
                     'is_decorative' => (bool) ($parsed['is_decorative'] ?? false),
                 ];
-
-            } catch (Throwable $e) {
-                Log::warning('Vision call exception', [
-                    'attempt' => $attempt,
-                    'error' => $e->getMessage(),
-                ]);
             }
 
-            if ($attempt < $this->maxRetries) {
-                sleep($delay);
-                $delay *= 2;
-            }
+            Log::warning('Vision LLM returned an invalid JSON object', ['ref' => $logRef]);
+        } catch (Throwable $exception) {
+            Log::warning('Vision LLM call failed after central retries and fallback', [
+                'ref' => $logRef,
+                'error' => $exception->getMessage(),
+            ]);
         }
 
         Log::error('Vision failed after max retries', [
@@ -376,4 +314,5 @@ EOT;
             'is_decorative' => true,
         ];
     }
+
 }

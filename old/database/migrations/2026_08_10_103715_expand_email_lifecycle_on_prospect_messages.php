@@ -26,18 +26,23 @@ return new class extends Migration
         });
 
         // MySQL : élargir un enum nécessite de le redéfinir explicitement.
-        DB::statement("ALTER TABLE sales_prospect_messages MODIFY COLUMN status ENUM(
-            'draft', 'pending_approval', 'approved',
-            'accepted', 'delivered', 'bounced', 'complained', 'rejected',
-            'received', 'failed'
-        ) NOT NULL DEFAULT 'draft'");
+        // SQLite représente déjà les enums comme du texte pendant les tests.
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE sales_prospect_messages MODIFY COLUMN status ENUM(
+                'draft', 'pending_approval', 'approved',
+                'accepted', 'delivered', 'bounced', 'complained', 'rejected',
+                'received', 'failed'
+            ) NOT NULL DEFAULT 'draft'");
+        }
     }
 
     public function down(): void
     {
-        DB::statement("ALTER TABLE sales_prospect_messages MODIFY COLUMN status ENUM(
-            'draft', 'pending_approval', 'approved', 'sent', 'received', 'failed'
-        ) NOT NULL DEFAULT 'draft'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE sales_prospect_messages MODIFY COLUMN status ENUM(
+                'draft', 'pending_approval', 'approved', 'sent', 'received', 'failed'
+            ) NOT NULL DEFAULT 'draft'");
+        }
 
         Schema::table('sales_prospect_messages', function (Blueprint $table) {
             $table->dropColumn(['provider_message_id', 'provider_key']);

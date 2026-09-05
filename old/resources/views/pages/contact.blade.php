@@ -2,15 +2,15 @@
 
 @section('seo')
     <!-- Primary Meta Tags -->
-    <title>Contact ELChat | Demander une démo de la plateforme d'IA conversationnelle</title>
+    <title>Contact ELChat | Demander une démo de la plateforme IA</title>
 
-    <meta name="title" content="Contact ELChat | Demander une démo de la plateforme d'IA conversationnelle">
+    <meta name="title" content="Contact ELChat | Demander une démo de la plateforme IA">
 
     <meta name="description"
-          content="Contactez ELChat pour une démonstration de la plateforme d'IA conversationnelle. Découvrez comment automatiser vos conversations, votre support client et l'engagement de vos prospects grâce à vos propres données.">
+          content="Demandez une démonstration d'ELChat et échangez sur vos cas d'usage : connaissance RAG, workflows, connecteurs métier, agents IA et pilotage des résultats.">
 
     <meta name="keywords"
-          content="contact ELChat, démo ELChat, plateforme IA conversationnelle, devis IA entreprise, support client IA, automatisation conversations, intelligence artificielle entreprise, prise de contact SaaS IA">
+          content="contact ELChat, démo ELChat, plateforme IA entreprise, devis automatisation métier, agents IA, workflows IA, RAG entreprise, cadrage IA">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -26,7 +26,7 @@
           content="Contact ELChat | Demander une démonstration">
 
     <meta property="og:description"
-          content="Prenez contact avec l'équipe ELChat et découvrez comment transformer vos connaissances en conversations intelligentes automatisées grâce à l'IA.">
+          content="Présentez votre contexte à l'équipe ELChat et identifiez les connaissances, processus et outils que l'IA peut relier utilement.">
 
     <meta property="og:url"
           content="https://elchat.io/contact">
@@ -41,7 +41,7 @@
           content="Contact ELChat">
 
     <meta name="twitter:description"
-          content="Demandez une démonstration d'ELChat et découvrez la puissance de l'IA conversationnelle pour votre entreprise.">
+          content="Demandez une démonstration d'ELChat adaptée aux priorités opérationnelles de votre entreprise.">
 
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
@@ -56,10 +56,10 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Contact ELChat</h1>
+                        <h1>Demandez une démo d’ELChat</h1>
                         <p>
-                            Une question, un projet ou une démonstration ?<br>
-                            Notre équipe est à votre disposition pour vous accompagner et vous aider à connecter ELChat à votre entreprise.
+                            Expliquez-nous votre objectif, vos sources de connaissance et les outils concernés.<br>
+                            Nous vous aiderons à identifier un premier périmètre utile, mesurable et maîtrisé.
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
@@ -95,8 +95,8 @@
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
                       data-wow-delay="0.2s">Contact ELChat</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Parlons de votre projet<br>
-                    et de votre automatisation conversationnelle
+                     Partons de vos priorités<br>
+                     et de vos processus réels
                 </h2>
                 <!-- heading title con -->
             </div>
@@ -162,10 +162,10 @@
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                  data-wow-delay="0.2s">Contactez-nous</span>
+                  data-wow-delay="0.2s">Votre contexte</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Une question ?<br>
-                    Envoyez-nous un message
+                     Quel résultat souhaitez-vous<br>
+                     obtenir avec l’IA ?
                 </h2>
             </div>
             <div class="row wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.4s">
@@ -174,7 +174,7 @@
                         @csrf
                         <ul class="list-unstyled p-0 float-left w-100 mb-0">
                             <li>
-                                <input type="text" placeholder="Nom" name="fname" id="fname">
+                                <input type="text" placeholder="Nom et entreprise" name="fname" id="fname">
                             </li>
                             <li>
                                 <input type="tel" placeholder="Téléphone" name="phone" id="phone">
@@ -183,12 +183,12 @@
                                 <input type="email" placeholder="Email" name="email" id="email">
                             </li>
                             <li>
-                                <textarea placeholder="Message" rows="6" name="msg" id="msg"></textarea>
+                                <textarea placeholder="Décrivez votre objectif, les outils concernés et le processus à améliorer" rows="6" name="msg" id="msg"></textarea>
                             </li>
                         </ul>
                         <div id="form_result" style="display:none;margin-bottom:20px;"></div>
                         <div class="d-inline-block">
-                            <button type="submit" id="submitBtn" class="primary_btn">Envoyer <i
+                            <button type="submit" id="submitBtn" class="primary_btn">Envoyer ma demande <i
                                         class="fas fa-arrow-right ml-2"></i></button>
                         </div>
                     </form>

@@ -28,6 +28,7 @@ class MultiHopPipelineService
 {
     protected int $maxRetries = 3;
     protected QueryPlan $queryPlan;
+    protected int $maxHops;
     public function __construct(
         protected EmbeddingService $embeddingService,
         protected HybridSearchService $hybridSearchService,
@@ -43,16 +44,16 @@ class MultiHopPipelineService
         protected CTAEngine $CTAEngine,
         protected CTARelevanceService $CTARelevanceService,
         protected PromptBuilder $promptBuilder,
-    ){}
+    ) {
+        $this->maxHops = max(1, (int) config('llm.multi_hop.max_hops', 2));
+    }
     public function handle(string $question, QueryPlan $plan, Site $site, Conversation $conversation = null, array $history = [], ?ActorContext $actor = null): HopResponse
     {
         $state = $this->initState($plan);
 
         $this->ensureObjectiveEmbeddings($state);
 
-        $maxHops = 4;
-
-        for ($i = 0; $i < $maxHops; $i++) {
+        for ($i = 0; $i < $this->maxHops; $i++) {
 
             $state = $this->computeCoverage($state);
 
@@ -520,23 +521,72 @@ class MultiHopPipelineService
             return true;
         }
 
+        // Un signal de comparaison explicite prime sur une intention
+        // secondaire comme pricing/support : une question peut demander à la
+        // fois un choix entre plusieurs options et une information de coût ou
+        // de compatibilité. Les flux dédiés navigation/lead/booking/download
+        // restent volontairement en dehors du pipeline multi-hop.
+        if (
+            $this->hasExplicitComparisonSignal()
+            && !in_array($intent, ['navigation', 'lead', 'booking', 'download'], true)
+        ) {
+            return true;
+        }
+
         // 🔥 sûr → pas multi-hop
         if (in_array($intent, ['pricing', 'navigation', 'lead', 'booking', 'download'])) {
             return false;
         }
 
-        // 🔥 complexité évidente
-        /*if (!empty($this->queryPlan->subQueries) && count($this->queryPlan->subQueries) > 1) {
+        // 🔥 complexité structurelle déjà identifiée par QueryAnalyzer
+        if (!empty($this->queryPlan->subQueries) && count($this->queryPlan->subQueries) > 1) {
             return true;
         }
 
-        // 🔥 stratégie déjà détectée
+        // 🔥 stratégie explicitement décomposée
         if ($this->queryPlan->searchStrategy === 'decomposition') {
             return true;
-        }*/
+        }
 
         // ❓ incertain → laisser LLM décider
         return false;
+    }
+
+    private function hasExplicitComparisonSignal(): bool
+    {
+        $query = mb_strtolower(trim($this->queryPlan->cleanQuery ?? ''), 'UTF-8');
+
+        if ($query === '') {
+            return false;
+        }
+
+        $comparisonSignals = [
+            'parmi',
+            'lequel',
+            'laquelle',
+            'lesquels',
+            'lesquelles',
+            'meilleur',
+            'meilleure',
+            'meilleurs',
+            'meilleures',
+            'plus adapté',
+            'plus adaptée',
+            'plus approprié',
+            'plus appropriée',
+            'différence entre',
+            'comparer',
+            'comparatif',
+            'versus',
+        ];
+
+        foreach ($comparisonSignals as $signal) {
+            if (str_contains($query, $signal)) {
+                return true;
+            }
+        }
+
+        return (bool) preg_match('/(?:^|\s)vs(?:\.?|\s|$)/u', $query);
     }
     protected function llmDecision(): bool
     {
@@ -559,10 +609,25 @@ YES ou NO
         ];
 
         try {
+            $answer = app(LLMService::class)->chat($prompt, [
+                'task' => 'multi_hop_decision',
+                'temperature' => 0,
+                'max_tokens' => 5,
+            ]);
+
+            return str_contains(strtoupper(trim($answer)), 'YES');
+        } catch (\Exception $e) {
+            Log::warning("LLM decision failed", ['error' => $e->getMessage()]);
+        }
+
+        // Le client central a déjà essayé le principal et le secours.
+        return false;
+
+        try {
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
             ])->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => 'openai/gpt-4o-mini',
+                'model' => config('llm.tasks.multi_hop_decision.model'),
                 'messages' => $prompt,
                 'temperature' => 0,
                 'max_tokens' => 5,

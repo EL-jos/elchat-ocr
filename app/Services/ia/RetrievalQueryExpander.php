@@ -2,8 +2,7 @@
 
 namespace App\Services\ia;
 
-use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Facades\Http;
+use App\Services\hops\LLMService;
 use Illuminate\Support\Facades\Log;
 
 class RetrievalQueryExpander
@@ -11,7 +10,8 @@ class RetrievalQueryExpander
     private const MAX_RETRIES = 5;
     private const MAX_VARIANTS = 5;
     private const HTTP_TIMEOUT = 20;
-    private const MODEL = 'deepseek/deepseek-chat';
+
+    public function __construct(private readonly LLMService $llm) {}
 
     /**
      * Generate semantic retrieval variants.
@@ -53,58 +53,11 @@ class RetrievalQueryExpander
                     'query' => $query,
                 ]);
 
-                $response = Http::timeout(self::HTTP_TIMEOUT)
-                    ->retry(
-                        2,
-                        400,
-                        function ($exception) {
-
-                            if ($exception instanceof RequestException) {
-
-                                $status = optional($exception->response)->status();
-
-                                return in_array($status, [
-                                    408,
-                                    429,
-                                    500,
-                                    502,
-                                    503,
-                                    504
-                                ]);
-                            }
-
-                            return true;
-                        }
-                    )
-                    ->withHeaders([
-                        'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->post(
-                        'https://openrouter.ai/api/v1/chat/completions',
-                        [
-                            'model' => self::MODEL,
-
-                            'messages' => $messages,
-
-                            'temperature' => $temperature,
-
-                            'max_tokens' => 250,
-                        ]
-                    );
-
-                if (!$response->successful()) {
-
-                    Log::warning('RetrievalQueryExpander HTTP error', [
-                        'attempt' => $attempt,
-                        'status' => $response->status(),
-                        'body' => $response->body(),
-                    ]);
-
-                    continue;
-                }
-
-                $content = $response->json()['choices'][0]['message']['content'] ?? '';
+                $content = $this->llm->chat($messages, [
+                    'task' => 'retrieval_query_expansion',
+                    'temperature' => $temperature,
+                    'max_tokens' => 250,
+                ]);
 
                 $variants = $this->extractVariants($content, $query);
 

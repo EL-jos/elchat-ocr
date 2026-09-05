@@ -18,7 +18,7 @@ return new class extends Migration
         });
         Schema::table('users', function (Blueprint $table) {
 
-            $table->dropForeign('users_account_id_foreign');
+            $table->dropForeign(['account_id']);
             $table->dropColumn('account_id');
 
             $table->uuid('role_id')->nullable()->after('id');
@@ -50,11 +50,11 @@ return new class extends Migration
     {
         Schema::dropIfExists('site_user');
         Schema::table('accounts', function (Blueprint $table) {
-            $table->dropForeign('accounts_owner_user_id_foreign');
+            $table->dropForeign(['owner_user_id']);
             $table->dropColumn('owner_user_id');
         });
         Schema::table('users', function (Blueprint $table) {
-            $table->dropForeign('users_role_id_foreign');
+            $table->dropForeign(['role_id']);
             $table->dropColumn('role_id');
 
             $table->uuid('account_id')->nullable()->after('id');

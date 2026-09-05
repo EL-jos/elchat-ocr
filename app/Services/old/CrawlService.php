@@ -15,6 +15,7 @@ use Symfony\Component\HttpClient\HttpClient;
 use Throwable;
 use App\Jobs\vision\ProcessImageOcrJob;
 use App\Models\PageImage;
+use App\Services\hops\LLMService;
 
 class CrawlService {
     public function prepareQueue(Site $site): array
@@ -923,6 +924,31 @@ EOT,
             ...($prompt['messages'] ?? []),
         ];
 
+        try {
+            return app(LLMService::class)->chat($messages, [
+                'task' => 'crawl',
+                'temperature' => (float) ($settings->ai_temperature ?? 0.2),
+                'max_tokens' => (int) ($settings->ai_max_tokens ?? 800),
+            ]);
+        } catch (Throwable $exception) {
+            Log::warning('Ancien CrawlService : appel LLM centralisé indisponible', [
+                'site_id' => $site->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        return json_encode([
+            'type' => 'fallback',
+            'intents' => ['information'],
+            'entities' => [],
+            'sections' => [[
+                'title' => 'Information',
+                'content' => $context ?: 'Information non disponible',
+                'intent' => 'information',
+            ]],
+            'rag_text' => $context ?: "Informations fournies par {$companyName}",
+        ], JSON_UNESCAPED_UNICODE);
+
         $maxRetries = 5;
         $delaySeconds = 1;
 
@@ -943,7 +969,7 @@ EOT,
                         'X-Title' => 'RAG SaaS Engine',
                     ])
                     ->post('https://openrouter.ai/api/v1/chat/completions', [
-                        'model' => 'meta-llama/llama-3.1-8b-instruct',
+                        'model' => config('llm.tasks.crawl.model'),
                         'messages' => $messages,
                         'temperature' => floatval($settings->ai_temperature ?? 0.2),
                         'max_tokens' => intval($settings->ai_max_tokens ?? 800),

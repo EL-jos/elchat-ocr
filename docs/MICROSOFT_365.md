@@ -64,12 +64,6 @@ Le callback utilise un état opaque à usage unique, conservé dix minutes côt�
 
 La connexion utilise `openid offline_access https://graph.microsoft.com/.default`. Microsoft Entra prend ainsi directement toutes les permissions Microsoft Graph déclarées et consenties sur l’inscription de l’application ELChat ; aucun profil de permissions n’est choisi dans le dashboard. Le bouton explicite « Actualiser les autorisations » ajoute `prompt=consent` afin de reprendre en compte une permission statique ajoutée depuis le dernier consentement. Les credentials, refresh tokens et réponses OAuth restent chiffrés dans `mcp_site_connectors.credentials_encrypted`.
 
-### Export HubSpot vers Excel
-
-L’outil `hubspot__export_contacts_to_excel` exporte tous les contacts accessibles par le token HubSpot vers un nouveau fichier `.xlsx` dans le OneDrive de l’utilisateur Microsoft 365 connecté. Il est réservé à l’administrateur et demande une confirmation avant création du fichier. Le dossier de destination peut être la racine OneDrive ou un dossier Graph précisé par son identifiant.
-
-Pour cet export, l’inscription Microsoft Entra doit contenir `Files.ReadWrite` et le consentement du tenant doit être accordé. Après un changement de permissions, reconnecter Microsoft 365 dans ELChat afin d’obtenir un nouveau token basé sur `/.default`. L’export concerne les contacts auxquels le token HubSpot a accès, et non les fiches que HubSpot masque à cette application.
-
 La synchronisation OneDrive utilise `/me/drive/root/delta`. Un `403` sur cette route indique généralement un consentement obsolète/incomplet, l’absence de `Files.Read` dans le token, un OneDrive Entreprise non provisionné ou une règle du tenant. Les permissions `Sites.Read.*` ne remplacent pas les permissions `Files.*` pour le OneDrive personnel de l’utilisateur. Vérifier la licence et le provisionnement OneDrive, puis reconnecter Microsoft 365.
 
 Pour les outils Teams, ajouter aussi dans Azure les permissions déléguées `Team.ReadBasic.All`, `Channel.ReadBasic.All` et `ChannelMessage.Read.All`; `ChannelMessage.Send` est nécessaire pour publier un message. Ces permissions sont indépendantes de l’export Excel.

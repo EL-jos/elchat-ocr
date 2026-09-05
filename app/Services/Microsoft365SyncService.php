@@ -61,6 +61,24 @@ final class Microsoft365SyncService
                     return $this->sync($site, $credentials, $driveId, $providerSiteId, false);
                 }
 
+                // A 403 on /me/drive/root/delta is generally a missing Files
+                // scope, a stale consent, an unprovisioned OneDrive for
+                // Business account, or a tenant policy. Retrying the same
+                // token five times cannot fix any of those conditions.
+                if ($exception->status === 403) {
+                    $cursor->last_error = 'graph_forbidden_drive_access';
+                    $cursor->save();
+
+                    return [
+                        'seen' => $seen,
+                        'indexed' => $indexed,
+                        'deleted' => $deleted,
+                        'pages' => $pages,
+                        'cursor_id' => $cursor->id,
+                        'last_error' => 'graph_forbidden_drive_access',
+                    ];
+                }
+
                 throw $exception;
             }
             $pages++;

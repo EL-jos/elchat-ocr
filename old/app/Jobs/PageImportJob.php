@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Chunk;
 use App\Models\Document;
@@ -21,6 +22,7 @@ use Throwable;
 
 class PageImportJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected Document $document;
@@ -37,6 +39,8 @@ class PageImportJob implements ShouldQueue
 
     public function handle(CrawlService $crawlService, IndexService $indexService, VectorIndexService $vectorIndexService, MercureService $mercureService)
     {
+        $this->document->update(['indexing_status' => 'processing', 'indexing_error' => null]);
+
         $mercureService->post(
             "site/{$this->site->id}/pages/indexing",
             [
@@ -58,6 +62,10 @@ class PageImportJob implements ShouldQueue
             if ($totalPages === 0) {
 
                 $this->site->update(['status' => 'ready']);
+                $this->document->update([
+                    'indexing_status' => 'failed',
+                    'indexing_error' => 'Aucune page exploitable trouvée dans le fichier.',
+                ]);
 
                 $mercureService->post(
                     "site/{$this->site->id}/pages/indexing",
@@ -241,6 +249,11 @@ class PageImportJob implements ShouldQueue
             }
 
             $this->site->update(['status' => 'ready']);
+            $this->document->update([
+                'indexing_status' => 'indexed',
+                'last_indexed_at' => now(),
+                'indexing_error' => null,
+            ]);
             $mercureService->post(
                 "site/{$this->site->id}/pages/indexing",
                 [
@@ -256,6 +269,10 @@ class PageImportJob implements ShouldQueue
 
         } catch (\Throwable $e) {
             $this->site->update(['status' => 'error']);
+            $this->document->update([
+                'indexing_status' => 'failed',
+                'indexing_error' => mb_substr($e->getMessage(), 0, 2000),
+            ]);
             $mercureService->post(
                 "site/{$this->site->id}/pages/indexing",
                 [

@@ -33,7 +33,7 @@ class AutonomousWebSearchSource implements ProspectSourceInterface
             ['role' => 'system', 'content' => 'Tu es un moteur de prospection B2B fiable, factuel et strict sur les preuves publiques.'],
             ['role' => 'user', 'content' => $prompt],
         ], [
-            'model' => config('prospecting.web_search.model'),
+            'task' => 'prospecting_web_search',
             'max_tokens' => min(5000, max(1800, $limit * 420)),
             'max_tokens_cap' => 8000,
             'detect_truncation' => true,

@@ -2,6 +2,7 @@
 // app/Jobs/CrawlSiteJob.php
 
 namespace App\Jobs\crawl;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Chunk;
 use App\Models\CrawlJob;
@@ -26,6 +27,7 @@ use Throwable;
 
 class CrawlSiteJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Site;
 use App\Services\ia\KnowledgeQualityService;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class ComputeKnowledgeQualityJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public ?string $siteId;

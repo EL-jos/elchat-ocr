@@ -3,6 +3,7 @@
 namespace App\Services\queryAnalyzer;
 
 use App\Models\Conversation;
+use App\Services\hops\LLMService;
 use Exception;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -79,14 +80,6 @@ class QueryAnalyzer
 
             /*
             |--------------------------------------------------------------------------
-            | Normalize response
-            |--------------------------------------------------------------------------
-            */
-
-            $data = $this->normalizeResponse($data);
-
-            /*
-            |--------------------------------------------------------------------------
             | Structure validation
             |--------------------------------------------------------------------------
             */
@@ -100,6 +93,17 @@ class QueryAnalyzer
 
                 continue;
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Normalize response
+            |--------------------------------------------------------------------------
+            | La normalisation suppose que les champs obligatoires existent et
+            | ont déjà le bon type. Une réponse incomplète doit être rejetée
+            | proprement afin de passer par la tentative de réparation.
+            */
+
+            $data = $this->normalizeResponse($data);
 
             /*
             |--------------------------------------------------------------------------
@@ -485,6 +489,30 @@ class QueryAnalyzer
     }
     private function callLLMForQueryPlan(string $prompt, string $question): string
     {
+        try {
+            return app(LLMService::class)->chat([
+                [
+                    'role' => 'system',
+                    'content' => 'You are a query planning engine for a semantic search system. Return one JSON object matching the requested query plan.',
+                ],
+                ['role' => 'user', 'content' => $prompt],
+            ], [
+                'task' => 'query_analysis',
+                'temperature' => 0.2,
+                'max_tokens' => 800,
+                'response_format' => ['type' => 'json_object'],
+            ]);
+        } catch (Exception $exception) {
+            Log::warning('QueryAnalyzer central LLM call failed, using query-plan defaults', [
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        // Le client central a déjà géré les retries et le modèle de secours.
+        // Une chaîne vide permet à analyze() d'appliquer son plan par défaut
+        // sans contourner la configuration centralisée.
+        return '';
+
         $maxRetries = 4;
         $delaySeconds = 1;
 
@@ -501,7 +529,7 @@ class QueryAnalyzer
                     'Content-Type' => 'application/json',
                 ])->post('https://openrouter.ai/api/v1/chat/completions', [
 
-                    "model" => "openai/gpt-4.1-mini",
+                    "model" => config('llm.tasks.query_analysis.model'),
 
                     "messages" => [
                         [
@@ -680,7 +708,7 @@ class QueryAnalyzer
                         ]
                     ],
                     "temperature" => 0.2,
-                    "max_tokens" => 800
+                    "max_tokens" => 1500
                 ]);
 
                 if (!$response->successful()) {
@@ -824,6 +852,18 @@ class QueryAnalyzer
         }
 
         if (!is_array($data['constraints'])) {
+            return false;
+        }
+
+        if (!is_string($data['intent'])) {
+            return false;
+        }
+
+        if (!is_string($data['query_type'])) {
+            return false;
+        }
+
+        if (!is_string($data['search_strategy'])) {
             return false;
         }
 

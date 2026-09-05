@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
 
 class MultiHopPipelineServiceV2
 {
-    protected int $maxHops = 4;
+    protected int $maxHops;
     protected float $similarityThreshold = 0.88;
     public function __construct(
         protected EmbeddingService $embeddingService,
@@ -42,7 +42,9 @@ class MultiHopPipelineServiceV2
         protected CTARelevanceService $CTARelevanceService,
         protected ConversationEngineInterface $conversationEngine,
 
-    ) {}
+    ) {
+        $this->maxHops = max(1, (int) config('llm.multi_hop.max_hops', 2));
+    }
     public function handle(
         string $question,
         QueryPlan $plan,
@@ -112,19 +114,19 @@ class MultiHopPipelineServiceV2
             if ($thought['done'] ?? false) {
                 break;
             }
-            Log::info("RESULTAT DE THOUGHT", $thought);
+            //Log::info("RESULTAT DE THOUGHT", $thought);
 
             // 🔍 3. QUERY GENERATION
             $query = $this->generateQuery($thought, $state, $plan);
-            Log::info("RESULTAT DE GENERATE QUERY", [
+            /*Log::info("RESULTAT DE GENERATE QUERY", [
                 "query" => $query,
-            ]);
+            ]);*/
 
             // 📡 4. RETRIEVE
             $results = $this->retrieve($query, $site, $state, $actor);
 
             if (empty($results)) continue;
-            Log::info("RESULTAT DE RETRIVE", $results);
+            //Log::info("RESULTAT DE RETRIVE", $results);
 
             // 🧹 5. RERANK
             $results = $this->reranker->rerank(
@@ -132,7 +134,7 @@ class MultiHopPipelineServiceV2
                 chunks: $results,
                 topK: 12
             );
-            Log::info("RESULTAT DE RERANK", $results);
+            //Log::info("RESULTAT DE RERANK", $results);
 
             // 🧠 6. SELECT CONTEXT
             $results = $this->contextSelectionService->select(
@@ -141,26 +143,26 @@ class MultiHopPipelineServiceV2
                 limit: 6,
                 maxTokens: 800
             );
-            Log::info("RESULTAT DE CONTEXT SELECTION", $results);
+            //Log::info("RESULTAT DE CONTEXT SELECTION", $results);
 
             // 🚫 7. ANTI-REDUNDANCY
             $results = $this->filterRedundant($results, $state);
 
             if (empty($results)) continue;
-            Log::info("RESULTAT DE FILTER REDUNDANT", $results);
+            //Log::info("RESULTAT DE FILTER REDUNDANT", $results);
 
             // 🧠 8. INGEST
             $state = $this->ingest($state, $results, $thought);
-            Log::info("RESULTAT DE INGEST", $state);
+            //Log::info("RESULTAT DE INGEST", $state);
 
             // 🧾 9. SYNTHÈSE INTERMÉDIAIRE
             $summary = $this->summarizeStep($results, $thought);
             $state['summary'][] = $summary;
-            Log::info("RESULTAT DE SUMMARIZE STEP", $summary);
+            //Log::info("RESULTAT DE SUMMARIZE STEP", $summary);
 
             // 📊 10. UPDATE STATE
             $state = $this->updateState($state);
-            Log::info("RESULTAT DE UPDATE STATE", $state);
+            //Log::info("RESULTAT DE UPDATE STATE", $state);
 
             if ($this->shouldStop($state)) break;
         }
@@ -169,7 +171,7 @@ class MultiHopPipelineServiceV2
 
         // 🧾 FINAL CONTEXT
         $finalChunks = $this->deduplicateEvidence($finalChunks);
-        Log::info("RESULTAT DE DEDUPLICATE EVIDENCE", $finalChunks);
+        //Log::info("RESULTAT DE DEDUPLICATE EVIDENCE", $finalChunks);
 
         /*// 🔥 recompute lightweight relevance
         $finalChunks = $this->reranker->rerank(
@@ -216,9 +218,9 @@ class MultiHopPipelineServiceV2
                 entities: []
             );
         }
-        Log::info("RESULTAT DE CONTEXT BUILDER", [
+        /*Log::info("RESULTAT DE CONTEXT BUILDER", [
             "context" => $context,
-        ]);
+        ]);*/
 
         // 🧠 FINAL PROMPT (avec résumé structuré 🔥)
         $prompt = $this->promptBuilder->build(
@@ -234,7 +236,7 @@ class MultiHopPipelineServiceV2
                 'structured_summary' => $state['summary']
             ],
         );
-        Log::info("RESULTAT DE PROMPT BUILDER", $prompt);
+        //Log::info("RESULTAT DE PROMPT BUILDER", $prompt);
 
         return new HopResponse(
             prompt: $prompt,
@@ -271,7 +273,9 @@ Retourne STRICTEMENT JSON:
             ]
         ];
 
-        $data = $this->llm->chatJson($prompt);
+        $data = $this->llm->chatJson($prompt, [
+            'task' => 'multi_hop_objective_extraction',
+        ]);
 
         if (empty($data['objectives']) || !is_array($data['objectives'])) {
             // 🔥 fallback intelligent
@@ -324,7 +328,9 @@ CONTENT;
             ]
         ];
 
-        $thought = $this->llm->chatJson($prompt);
+        $thought = $this->llm->chatJson($prompt, [
+            'task' => 'multi_hop_thought',
+        ]);
 
         // 🔥 sécurité critique
         if (empty($thought)) {
@@ -370,7 +376,9 @@ CONTENT;
             ]
         ];
 
-        $query = trim($this->llm->chat($prompt));
+        $query = trim($this->llm->chat($prompt, [
+            'task' => 'multi_hop_query',
+        ]));
 
         // 🔥 fallback si vide
         if ($query === '') {
@@ -466,7 +474,9 @@ CONTENT;
 
         return [
             'objective' => $thought['objective'] ?? null,
-            'summary' => $this->llm->chat($prompt)
+            'summary' => $this->llm->chat($prompt, [
+                'task' => 'multi_hop_summary',
+            ])
         ];
     }
     // =====================================================

@@ -3,7 +3,8 @@
 return [
 
     // Modèle multimodal OpenRouter utilisé pour l'OCR / la compréhension d'image
-    'model' => env('OPENROUTER_VISION_MODEL', 'qwen/qwen3.6-plus'),
+    // Compatibilité legacy : la source de vérité est config/llm.php.
+    'model' => env('OPENROUTER_VISION_MODEL'),
 
     'openrouter_api_key' => env('OPENROUTER_API_KEY'),
 
@@ -39,7 +40,8 @@ return [
     // Timeout HTTP (secondes) pour le téléchargement d'une image
     'download_timeout' => (int) env('VISION_DOWNLOAD_TIMEOUT', 20),
 
-    // Timeout HTTP (secondes) pour l'appel au vision model
+    // Compatibilité legacy : le délai LLM est désormais centralisé dans
+    // config/llm.php (llm.tasks.vision.request_timeout).
     'call_timeout' => (int) env('VISION_CALL_TIMEOUT', 45),
 
     'max_retries' => (int) env('VISION_MAX_RETRIES', 4),

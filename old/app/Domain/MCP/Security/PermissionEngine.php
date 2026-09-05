@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class PermissionEngine
 {
-    public function authorize(Site $site, ActorContext $actor, string $connectorSlug, string $toolName): McpPermission
+    public function authorize(Site $site, ActorContext $actor, string $connectorSlug, string $toolName, bool $skipConfirmation = false, bool $consumeDailyLimit = true): McpPermission
     {
         $permission = McpPermission::where('site_id', $site->id)
             ->where('connector_slug', $connectorSlug)
@@ -33,9 +33,11 @@ class PermissionEngine
             throw new PermissionDeniedException("L'action {$connectorSlug}.{$toolName} est réservée à un administrateur.");
         }
 
-        $this->enforceDailyLimit($site, $permission);
+        if ($consumeDailyLimit) {
+            $this->enforceDailyLimit($site, $permission);
+        }
 
-        if ($permission->mode === 'confirm') {
+        if ($permission->mode === 'confirm' && !$skipConfirmation) {
             throw new ConfirmationRequiredException(
                 $connectorSlug,
                 $toolName,

@@ -7,7 +7,7 @@
             type: 'GOOGLE_AUTH_SUCCESS',
             token: @json($token),
             message: @json($message)
-        }, '{{ env('WIDGET_ORIGIN') }}'); // Ex: https://elchat-widget.promogifts.ma
+        }, '{{ env('WIDGET_ORIGIN') }}'); // Ex: https://elchat.io
         window.close();
     </script>
 </head>

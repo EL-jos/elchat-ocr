@@ -11,7 +11,7 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Privacy Policy</h1>
+                        <h1>Politique de confidentialité</h1>
                         <p>
                             Nous accordons une grande importance à la protection de votre vie privée et à la sécurité de vos données.
                             La présente Politique de confidentialité explique comment ELChat collecte, utilise, stocke,
@@ -34,7 +34,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="ELChat AI Assistant">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration ELChat">
                         </figure>
                     </div>
                 </div>

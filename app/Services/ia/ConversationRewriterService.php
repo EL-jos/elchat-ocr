@@ -5,8 +5,7 @@ namespace App\Services\ia;
 
 use App\Models\Conversation;
 use App\Models\Message;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Http\Client\RequestException;
+use App\Services\hops\LLMService;
 use Illuminate\Support\Facades\Log;
 
 /*class ConversationRewriterService
@@ -59,7 +58,7 @@ use Illuminate\Support\Facades\Log;
                     'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
                 ])
                 ->post('https://openrouter.ai/api/v1/chat/completions', [
-                    'model' => 'meta-llama/llama-3.1-8b-instruct',
+                    'model' => config('llm.tasks.conversation_rewrite.model'),
                     'messages' => [
                         ['role' => 'system', 'content' => $systemPrompt],
                         ['role' => 'user', 'content' => $userPrompt],
@@ -84,6 +83,8 @@ use Illuminate\Support\Facades\Log;
 
 class ConversationRewriterService
 {
+    public function __construct(private readonly LLMService $llm) {}
+
     public function rewrite(string $question, Conversation $conversation): string
     {
         $history = $this->getHistory($conversation);
@@ -98,26 +99,14 @@ class ConversationRewriterService
             $userPrompt = $this->buildUserPrompt($history, $question, $lastError);
 
             try {
-                $response = Http::timeout(15)
-                    ->withHeaders([
-                        'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-                    ])
-                    ->post('https://openrouter.ai/api/v1/chat/completions', [
-                        'model' => 'deepseek/deepseek-chat',
-                        'messages' => [
-                            ['role' => 'system', 'content' => $systemPrompt],
-                            ['role' => 'user', 'content' => $userPrompt],
-                        ],
-                        'temperature' => 0.1,
-                        'max_tokens' => 150,
-                    ]);
-
-                if (!$response->ok()) {
-                    $lastError = "HTTP {$response->status()}";
-                    continue;
-                }
-
-                $content = data_get($response->json(), 'choices.0.message.content');
+                $content = $this->llm->chat([
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => $userPrompt],
+                ], [
+                    'task' => 'conversation_rewrite',
+                    'temperature' => 0.1,
+                    'max_tokens' => 150,
+                ]);
 
                 if ($this->isValid($content)) {
                     return $this->sanitize($content);

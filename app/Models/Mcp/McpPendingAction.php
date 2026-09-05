@@ -16,12 +16,14 @@ class McpPendingAction extends Model
         'site_id', 'conversation_id', 'connector_slug', 'tool_name', 'params',
         'confirm_actor', 'tool_call_id', 'messages_snapshot', 'status',
         'agent_id',
+        'orchestration_mode', 'agent_scope_snapshot',
         'resolved_by_user_id', 'resolved_at', 'expires_at',
     ];
 
     protected $casts = [
         'params' => 'array',
         'messages_snapshot' => 'array',
+        'agent_scope_snapshot' => 'array',
         'resolved_at' => 'datetime',
         'expires_at' => 'datetime',
     ];

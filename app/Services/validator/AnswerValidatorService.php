@@ -35,7 +35,9 @@ class AnswerValidatorService
             ]
         ];
 
-        $result = $this->llm->chatJson($prompt);
+        $result = $this->llm->chatJson($prompt, [
+            'task' => 'answer_validation',
+        ]);
 
         return [
             'relevance' => $this->normalizeScore($result['relevance'] ?? 0),

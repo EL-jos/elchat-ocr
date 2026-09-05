@@ -2,12 +2,12 @@
 
 @section('seo')
     <!-- Primary Meta Tags -->
-    <title>Tarifs ELChat | Plans et Abonnements de l'IA Conversationnelle</title>
-    <meta name="title" content="Tarifs ELChat | Plans et Abonnements de l'IA Conversationnelle">
+    <title>Tarifs ELChat | Core et modules d'IA opérationnelle</title>
+    <meta name="title" content="Tarifs ELChat | Core et modules d'IA opérationnelle">
     <meta name="description"
-          content="Découvrez les tarifs d'ELChat. Choisissez le plan adapté à votre activité et transformez les connaissances de votre entreprise en conversations intelligentes grâce à une plateforme d'IA conversationnelle connectée à vos données et vos canaux d'engagement.">
+          content="Core à 29 € par mois, puis Community, Business Automation et Agentics en Basic ou Pro. Découvrez la tarification modulaire d'ELChat.">
     <meta name="keywords"
-          content="tarifs ELChat, prix IA conversationnelle, abonnement IA entreprise, plateforme IA entreprise, coût chatbot entreprise, automatisation support client, engagement client IA, assistant IA professionnel">
+          content="tarifs ELChat, prix plateforme IA entreprise, abonnement agents IA, tarifs automatisation métier, Core ELChat, Community ELChat, Agentics, offre Agency">
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://elchat.io/tarifs">
@@ -15,14 +15,14 @@
     <meta property="og:type" content="website">
     <meta property="og:locale" content="fr_FR">
     <meta property="og:site_name" content="ELChat">
-    <meta property="og:title" content="Tarifs ELChat | Choisissez le plan adapté à votre croissance">
-    <meta property="og:description" content="Des abonnements flexibles pour automatiser l'engagement client, le support et les conversations grâce à l'intelligence artificielle.">
+    <meta property="og:title" content="Tarifs ELChat | Un socle Core, des capacités à la carte">
+    <meta property="og:description" content="Commencez avec Core, puis ajoutez l'omnicanal, les workflows métier ou les agents IA selon les priorités de votre entreprise.">
     <meta property="og:url" content="https://elchat.io/tarifs">
     <meta property="og:image" content="https://elchat.io/assets/images/sub-banner-img.png">
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Tarifs ELChat">
-    <meta name="twitter:description" content="Découvrez les abonnements ELChat pour automatiser les conversations de votre entreprise grâce à l'IA.">
+    <meta name="twitter:description" content="Une tarification modulaire pour activer les capacités ELChat utiles à votre organisation.">
     <meta name="twitter:image" content="https://elchat.io/assets/images/sub-banner-img.png">
 @endsection
 
@@ -343,9 +343,7 @@
                     <div class="sub-banner-content-con">
                         <h1>Tarifs</h1>
                         <p>
-                            Investissez dans une plateforme d'IA conversationnelle qui s'appuie sur les connaissances réelles de votre entreprise.
-                            ELChat connecte votre site web, vos documents, vos FAQ,
-                            vos produits et vos canaux d'engagement pour automatiser des conversations pertinentes avec vos prospects et clients.
+                            Commencez avec le socle Core, puis ajoutez les capacités omnicanales, les workflows métier ou les agents spécialisés au rythme de vos besoins.
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
@@ -376,9 +374,9 @@
             <div class="heading-title-con text-center">
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">Tarification</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                    Une tarification simple, flexible et alignée<br> avec votre usage réel de l'IA
+                    Un socle commun, des modules<br> adaptés à vos priorités
                 </h2>
-                <p>Payez selon votre utilisation réelle : volume de messages, tokens IA, canaux connectés et niveau d'automatisation. ELChat s'adapte à la taille et à la croissance de votre entreprise.</p>
+                <p>Core est la fondation de chaque abonnement. Community, Business Automation et Agentics s’ajoutent au niveau Basic ou Pro ; Agency répond aux besoins multi-clients et marque blanche sur devis.</p>
             </div>
 
             {{-- ════════════════════════════════════════════════════════
@@ -389,7 +387,7 @@
                     <button class="elc-toggle-btn" id="elc-btn-monthly" onclick="elcSetBilling('monthly')">Mensuel</button>
                     <button class="elc-toggle-btn active" id="elc-btn-annual"  onclick="elcSetBilling('annual')">Annuel</button>
                 </div>
-                <span class="elc-save-badge" id="elc-save-badge">🎉 Économisez jusqu'à 2 mois</span>
+                <span class="elc-save-badge" id="elc-save-badge">Facturation annuelle disponible</span>
             </div>
 
             {{-- ════════════════════════════════════════════════════════
@@ -451,9 +449,9 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3>Starter</h3>
-                            <p>Pour les petites entreprises qui souhaitent lancer leur premier assistant IA.</p>
-                            <div class="generic-price d-inline-block">
+                             <h3>Core</h3>
+                             <p>Le socle obligatoire pour connecter vos connaissances et déployer l’assistant ELChat.</p>
+                             <div class="generic-price d-inline-block">
                                 <span class="d-block starting-at">À partir de :</span>
                                 {{-- Prix dynamique --}}
                                 <div class="elc-price-val" id="elc-price-starter">
@@ -462,23 +460,23 @@
                                             id="elc-val-starter">29</span><span
                                             class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
                                 </div>
-                                <span class="elc-price-note" id="elc-note-starter">Économisez 60 € / an</span>
+                                 <span class="elc-price-note" id="elc-note-starter">Socle de la plateforme</span>
                                 <span class="elc-price-suffix" id="elc-suffix-starter">Abonnement annuel</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> 1 site web</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> 1 réseau social connecté</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Assistant IA basé sur votre site et vos documents</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Import de documents</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Indexation automatique du site web</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Réponses avec sources</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Historique des conversations</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Widget personnalisable</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 50 messages / mois</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Base de connaissances et RAG</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Indexation de sites et sitemaps</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Import de documents et contenus</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Réponses contextualisées avec sources</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Widget conversationnel personnalisable</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Historique et analytique des interactions</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Gestion de la qualité des connaissances</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Modules optionnels activables</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> 29 € / mois</li>
                             </ul>
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Démarrer avec Core</a>
                         </div>
                     </div>
                 </div>
@@ -489,31 +487,31 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="el-default-pricing pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3>Business</h3>
-                            <p>Pour les entreprises qui souhaitent automatiser leur relation client sur plusieurs canaux.</p>
+                             <h3>Community</h3>
+                             <p>Pour centraliser et automatiser l’engagement sur vos canaux clients.</p>
                             <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">À partir de :</span>
+                                <span class="d-block starting-at">En complément de Core :</span>
                                 <div class="elc-price-val" id="elc-price-business">
                                     <sup class="d-inline-block font-weight-normal" id="elc-sym-business">€</sup><span
                                             class="d-inline-block price-text font-weight-600"
-                                            id="elc-val-business">79</span><span
+                                             id="elc-val-business">19</span><span
                                             class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
                                 </div>
-                                <span class="elc-price-note" id="elc-note-business">Économisez 120 € / an</span>
+                                 <span class="elc-price-note" id="elc-note-business">Basic +19 € · Pro +49 €</span>
                                 <span class="elc-price-suffix" id="elc-suffix-business">Abonnement annuel</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Tout Starter</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> 2 réseaux sociaux connectés</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Boîte e-mail professionnelle connectée</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Catalogue produits</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Suggestions automatiques d'amélioration de la base de connaissances</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 150 messages / mois</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> En complément de Core</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Canaux sociaux connectés</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Messageries et e-mail</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Interactions centralisées</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Basic à +19 € / mois</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Pro à +49 € / mois</li>
                             </ul>
 
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Activer l’omnicanal</a>
                         </div>
                     </div>
                 </div>
@@ -524,31 +522,31 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3>Pro</h3>
-                            <p>Pour les entreprises en croissance qui automatisent plusieurs sites et canaux à grande échelle.</p>
+                             <h3>Business Automation</h3>
+                             <p>Pour connecter vos outils et orchestrer des workflows métier contrôlés.</p>
                             <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">À partir de :</span>
+                                <span class="d-block starting-at">En complément de Core :</span>
                                 <div class="elc-price-val" id="elc-price-pro">
                                     <sup class="d-inline-block font-weight-normal" id="elc-sym-pro">€</sup><span
                                             class="d-inline-block price-text font-weight-600"
-                                            id="elc-val-pro">199</span><span
+                                             id="elc-val-pro">39</span><span
                                             class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
                                 </div>
-                                <span class="elc-price-note" id="elc-note-pro">Économisez 300 € / an</span>
+                                 <span class="elc-price-note" id="elc-note-pro">Basic +39 € · Pro +99 €</span>
                                 <span class="elc-price-suffix" id="elc-suffix-pro">Abonnement annuel</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Tout Business</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 3 sites</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 3 réseaux sociaux par site</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> 1 boîte e-mail professionnelle connectée par site</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Gestion multi-sites</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 300 messages / mois (GLOBAL)</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> En complément de Core</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Workflows et connecteurs métier</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> CRM, e-commerce et agendas</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Productivité, stockage et marketing</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Basic à +39 € / mois</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Pro à +99 € / mois</li>
                             </ul>
 
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Automatiser vos processus</a>
                         </div>
                     </div>
                 </div>
@@ -559,32 +557,30 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                            <h3>Enterprise</h3>
+                             <h3>Agentics</h3>
                             <p>
-                                Une offre sur mesure entièrement personnalisable,
-                                pensée pour les entreprises et agences qui souhaitent adapter ELChat à leurs besoins spécifiques,
-                                leurs outils et leurs objectifs.
+                                 Pour déployer des agents IA spécialisés, configurés autour de vos objectifs et de vos règles d’autonomie.
                             </p>
                             <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">À partir de :</span>
+                                <span class="d-block starting-at">En complément de Core :</span>
                                 <sup class="d-inline-block font-weight-normal">€</sup>
-                                <span class="d-inline-block price-text font-weight-600">499</span>
+                                 <span class="d-inline-block price-text font-weight-600">59</span>
                                 <span class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Tout Pro</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> 3+ sites web</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 5 réseaux sociaux par site</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> SLA premium</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Customer Success Manager dédié</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Support prioritaire</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> Jusqu'à 900 messages / mois (GLOBAL)</li>
-                                <li class="position-relative"><i class="fa-solid fa-check"></i> White-label option</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> En complément de Core</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Banque d’agents spécialisés</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Agent Studio et workflows associés</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> AI Sales Hunter</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Basic à +59 € / mois</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Pro à +149 € / mois</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Agency multi-clients sur devis</li>
+                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Marque blanche disponible avec Agency</li>
                             </ul>
 
-                            <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Commencer</a>
+                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Évaluer Agentics ou Agency</a>
                         </div>
                     </div>
                 </div>
@@ -610,7 +606,7 @@
 
             {{-- Note trial --}}
             <p class="text-center mt-3" style="font-size:13px; color:#94a3b8;">
-                <strong style="color:#475569;">{{ $trialDays ?? 7 }} jours d'essai gratuit</strong> inclus sur le plan Starter — sans carte bancaire requis. Aucun engagement.
+                 <strong style="color:#475569;">{{ $trialDays ?? 7 }} jours d'essai gratuit</strong> sur Core et les modules inclus dans l’essai — sans carte bancaire requise. Aucun engagement.
             </p>
 
         </div>{{-- /container --}}
@@ -629,9 +625,9 @@
             currency: '{{ $currency ?? "EUR" }}',
             // Prix en centimes EUR — ordre : [mensuel, annuel]
             plans: {
-                starter:  { monthly: 3400, annual: 2900, savings: 600  },
-                business: { monthly: 8900, annual: 7900, savings: 1200 },
-                pro:      { monthly: 22400, annual: 19900, savings: 3000 },
+                starter:  { monthly: 2900, annual: 2900, savings: 0 },
+                business: { monthly: 1900, annual: 1900, savings: 0 },
+                pro:      { monthly: 3900, annual: 3900, savings: 0 },
             },
             // Taux de change courant (mis à jour via API)
             rate: 1.0,
@@ -731,7 +727,7 @@
                     const price = isAnnual ? raw.annual / 100 : raw.monthly / 100;
                     valEl.textContent    = Math.round(price);
                     if (symEl)    symEl.textContent    = '€';
-                    if (noteEl)   noteEl.textContent   = isAnnual ? `Économisez ${raw.savings / 100} € / an` : '';
+                    if (noteEl)   noteEl.textContent   = isAnnual && raw.savings ? `Économisez ${raw.savings / 100} € / an` : '';
                     if (suffixEl) suffixEl.textContent  = isAnnual ? 'Abonnement annuel' : 'Abonnement mensuel';
                 }
             });

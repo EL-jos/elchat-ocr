@@ -2,6 +2,7 @@
 
 namespace App\Services\vector;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -47,54 +48,10 @@ class VectorSearchService
         try {
             $response = $this->http()->post(
                 "{$this->baseUrl}/collections/{$this->collection}/points/search",
-                [
-                    'vector' => $embedding,
-                    'limit'  => $limit,
-                    'with_payload' => true,
-                    'score_threshold' => $scoreThreshold,
-                    'search_params' => [
-                        'hnsw_ef' => 128
-                    ],
-                    'with_vector' => true, // 🔥 IMPORTANT
-                    /*'filter' => [
-                        'must' => [
-                            [
-                                'key' => $collection === 'chunks' ? 'site_id' : 'conversation_id',
-                                'match' => [
-                                    'value' => $siteId
-                                ]
-                            ]
-                        ]
-                    ]*/
-                ]
+                $this->buildSearchPayload($embedding, $limit, $scoreThreshold)
             );
 
-            //dd($response->json(), $siteId, $embedding);
-            if ($response->failed()) {
-                Log::error('Qdrant search failed', [
-                    'collection' => $collection,
-                    'status'  => $response->status(),
-                    'body'    => $response->body(),
-                ]);
-                return [];
-            }
-
-            //return $response->json('result') ?? [];
-            //$result = array_filter($response->json('result') ?? [], fn($item) => $item['payload']['site_id'] === $siteId);
-            /*$filterKey = $collection === 'chunks' ? 'site_id' : 'conversation_id';
-            $result = array_filter(
-                $response->json('result') ?? [],
-                fn($item) => isset($item['payload'][$filterKey]) && $item['payload'][$filterKey] === $siteId
-            );
-
-            Log::info("resultat de recherche", [
-                "site_id" => $siteId,
-                "collection" => $collection,
-                "results" => $result,
-                'response' => $response->json()
-            ]);
-            return $result;*/
-            return $response->json('result') ?? [];
+            return $this->parseSearchResponse($response, $collection);
 
         } catch (\Throwable $e) {
             Log::error('Qdrant search exception', [
@@ -104,6 +61,52 @@ class VectorSearchService
 
             return [];
         }
+    }
+
+    /**
+     * Payload commun aux recherches Qdrant séquentielles et parallèles.
+     *
+     * Le filtre site_id reste volontairement absent, comme dans le payload
+     * historique de search().
+     */
+    public function buildSearchPayload(array $embedding, int $limit, float $scoreThreshold): array
+    {
+        return [
+            'vector' => $embedding,
+            'limit' => $limit,
+            'with_payload' => true,
+            'score_threshold' => $scoreThreshold,
+            'search_params' => [
+                'hnsw_ef' => 128,
+            ],
+            'with_vector' => true,
+        ];
+    }
+
+    /**
+     * Parse une réponse Qdrant ou une exception issue d'une requête poolée.
+     */
+    public function parseSearchResponse(mixed $response, ?string $collection = null): array
+    {
+        if (
+            $response instanceof \Throwable
+            || ! ($response instanceof Response)
+            || $response->failed()
+        ) {
+            Log::error('Qdrant search failed', [
+                'collection' => $collection,
+                'status' => $response instanceof Response ? $response->status() : null,
+                'error' => $response instanceof \Throwable
+                    ? $response->getMessage()
+                    : ($response instanceof Response ? $response->body() : 'Invalid response'),
+            ]);
+
+            return [];
+        }
+
+        $results = $response->json('result') ?? [];
+
+        return is_array($results) ? $results : [];
     }
 
     public function searchMessages(

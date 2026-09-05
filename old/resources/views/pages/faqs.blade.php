@@ -2,15 +2,15 @@
 
 @section('seo')
     <!-- Primary Meta Tags -->
-    <title>FAQ ELChat | Questions fréquentes sur la plateforme d'IA conversationnelle</title>
+    <title>FAQ ELChat | Engagement proactif, RAG, workflows et agents IA</title>
 
-    <meta name="title" content="FAQ ELChat | Questions fréquentes sur la plateforme d'IA conversationnelle">
+    <meta name="title" content="FAQ ELChat | Engagement proactif, RAG, workflows et agents IA">
 
     <meta name="description"
-          content="Trouvez les réponses aux questions fréquentes sur ELChat : fonctionnement, intégrations, IA conversationnelle, automatisation des conversations, connexion aux réseaux sociaux et utilisation de la plateforme.">
+          content="Réponses sur ELChat : engagement proactif, RAG, connecteurs, workflows, agents spécialisés, contrôle humain, tarification modulaire et déploiement.">
 
     <meta name="keywords"
-          content="FAQ ELChat, questions ELChat, IA conversationnelle, chatbot entreprise, automatisation conversations, support client IA, intégration Instagram IA, YouTube automation, plateforme IA entreprise, knowledge base AI">
+          content="FAQ ELChat, engagement proactif, relance contextuelle, RAG entreprise, workflows IA, agents IA, connecteurs métier, tarification modulaire, automatisation entreprise, plateforme IA opérationnelle">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -23,10 +23,10 @@
     <meta property="og:site_name" content="ELChat">
 
     <meta property="og:title"
-          content="FAQ ELChat | Tout savoir sur la plateforme d'IA conversationnelle">
+          content="FAQ ELChat | Tout savoir sur la plateforme d'IA opérationnelle">
 
     <meta property="og:description"
-          content="Découvrez comment ELChat fonctionne, comment connecter vos données et comment automatiser vos conversations grâce à une IA alimentée par votre entreprise.">
+          content="Découvrez comment ELChat connecte les connaissances et les outils, encadre les actions de l'IA et s'adapte aux besoins de l'entreprise.">
 
     <meta property="og:url"
           content="https://elchat.io/faqs">
@@ -41,7 +41,7 @@
           content="FAQ ELChat">
 
     <meta name="twitter:description"
-          content="Réponses aux questions fréquentes sur ELChat et son fonctionnement basé sur l'IA conversationnelle.">
+          content="Réponses aux questions fréquentes sur les connaissances, workflows, engagement proactif, connecteurs, agents et tarifs ELChat.">
 
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
@@ -58,14 +58,12 @@
                     <div class="sub-banner-content-con">
                         <h1>Questions fréquentes</h1>
                         <p>
-                            Tout ce que vous devez savoir sur ELChat et sur la façon dont notre plateforme
-                            transforme vos connaissances d’entreprise en conversations intelligentes automatisées.
-                            Découvrez comment connecter vos données, vos réseaux sociaux et vos clients dans un seul écosystème conversationnel.
+                            Positionnement, données, intégrations, automatisations et tarifs : les réponses utiles pour évaluer ELChat dans le contexte de votre entreprise.
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
                                 <li class="breadcrumb-item"><a href="{{ route('home.page') }}">Accueil</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">FAQ's</li>
+                                <li class="breadcrumb-item active" aria-current="page">FAQ</li>
                             </ol>
                         </div>
                         <!-- sub banner content con -->
@@ -96,10 +94,9 @@
                 <div class="col-xl-7 col-lg-10 col-12 mx-auto">
                     <div class="faq_content text-center">
                         <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                              data-wow-delay="0.2s">Faq's</span>
-                        <h2 class=" wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Answers to Your
-                            Most
-                            Frequently Asked <span>Questions</span></h2>
+                              data-wow-delay="0.2s">FAQ</span>
+                        <h2 class=" wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Comprendre ELChat<br>
+                            avant de le <span>déployer</span></h2>
                     </div>
                 </div>
             </div>
@@ -116,7 +113,7 @@
                                                data-target="#collapseOne" aria-expanded="false"
                                                aria-controls="collapseOne">
                                                 <h5>
-                                                    Qu’est-ce qu’ELChat exactement ?
+                                                    ELChat est-il un chatbot ou une plateforme d’IA ?
                                                 </h5>
                                             </a>
                                         </div>
@@ -124,7 +121,7 @@
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    ELChat est une plateforme d’IA conversationnelle qui transforme les connaissances de votre entreprise (site web, documents, FAQ, produits) en conversations automatisées sur vos canaux sociaux et digitaux.
+                                                    ELChat est une plateforme d’IA opérationnelle. Elle comprend un assistant conversationnel, mais aussi une base de connaissances RAG, des événements, des connecteurs métier, des workflows, des analyses et des agents spécialisés.
                                                 </p>
                                             </div>
                                         </div>
@@ -135,7 +132,7 @@
                                                data-target="#collapseTwo" aria-expanded="false"
                                                aria-controls="collapseTwo">
                                                 <h5>
-                                                    Comment ELChat génère ses réponses ?
+                                                    Comment fonctionne la base de connaissances RAG ?
                                                 </h5>
                                             </a>
                                         </div>
@@ -143,9 +140,7 @@
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    ELChat combine plusieurs couches d’intelligence : vos connaissances (chunks issus de vos données),
-                                                    l’historique des conversations, et un modèle d’IA avancé.
-                                                    Chaque réponse est générée en tenant compte du contexte réel de votre entreprise.
+                                                    Les contenus de vos sites, documents, FAQ et produits sont indexés en fragments recherchables. Lors d’une demande, ELChat sélectionne le contexte pertinent pour répondre ou analyser à partir de vos propres informations, avec les sources disponibles.
                                                 </p>
                                             </div>
                                         </div>
@@ -155,17 +150,17 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseThree" aria-expanded="false"
                                                aria-controls="collapseThree">
-                                                <h5>Quelle est la différence entre messages, tokens et chunks ?</h5>
+                                                <h5>Comment se compose l’abonnement ELChat ?</h5>
                                             </a>
                                         </div>
                                         <div id="collapseThree" class="collapse" aria-labelledby="headingThree"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    <strong>Messages :</strong> chaque interaction utilisateur (commentaire, DM, réponse).<br><br>
-                                                    <strong>Tokens :</strong> unité de calcul utilisée par l’IA pour générer et comprendre les réponses.<br><br>
-                                                    <strong>Chunks :</strong> morceaux de vos données (site web, documents, FAQ) transformés en base de connaissances exploitable par l’IA.<br><br>
-                                                    ELChat relie ces trois éléments pour produire des réponses précises et contextualisées.
+                                                    <strong>Core :</strong> le socle obligatoire à 29 € par mois.<br><br>
+                                                    <strong>Community :</strong> Basic +19 € ou Pro +49 € par mois.<br><br>
+                                                    <strong>Business Automation :</strong> Basic +39 € ou Pro +99 € par mois.<br><br>
+                                                    <strong>Agentics :</strong> Basic +59 € ou Pro +149 € par mois. Agency est proposé sur devis.
                                                 </p>
                                             </div>
                                         </div>
@@ -175,15 +170,31 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseFour" aria-expanded="false"
                                                aria-controls="collapseFour">
-                                                <h5>Quels canaux sont supportés par ELChat ?</h5>
+                                                <h5>Quels canaux d’engagement sont disponibles ?</h5>
                                             </a>
                                         </div>
                                         <div id="collapseFour" class="collapse" aria-labelledby="headingFour"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    ELChat s’intègre avec les principaux canaux d’engagement : Instagram, YouTube, Facebook, et bientôt TikTok, LinkedIn et WhatsApp.
-                                                    Toutes les interactions sont centralisées dans une seule plateforme.
+                                                    ELChat dispose d’intégrations pour le widget web, Facebook, Instagram, YouTube, Telegram, Slack et l’e-mail. Les canaux réellement activables dépendent du module choisi et de la configuration de votre compte.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="accordion-card">
+                                        <div class="card-header" id="headingProactive">
+                                            <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
+                                               data-target="#collapseProactive" aria-expanded="false"
+                                               aria-controls="collapseProactive">
+                                                <h5>ELChat peut-il reprendre une conversation avec un visiteur ?</h5>
+                                            </a>
+                                        </div>
+                                        <div id="collapseProactive" class="collapse" aria-labelledby="headingProactive"
+                                             data-parent="#faq_accordion1">
+                                            <div class="card-body">
+                                                <p class="text-size-16 text-left mb-0">
+                                                    Oui. L’Engagement Proactif détecte un signal pertinent, comme une demande de devis inachevée ou une intention commerciale forte, puis peut proposer une reprise dans la conversation existante. Le message est contextualisé par les données disponibles et reste soumis aux quotas, horaires, permissions, règles d’arrêt et choix du visiteur. ELChat ne crée pas de relances illimitées et ne promet pas de résultat absent des données observées.
                                                 </p>
                                             </div>
                                         </div>
@@ -197,7 +208,7 @@
                                                data-target="#collapse5" aria-expanded="false"
                                                aria-controls="collapse5">
                                                 <h5>
-                                                    Est-ce que je peux connecter mes propres données ?
+                                                    Quelles sources et quels outils peut-on connecter ?
                                                 </h5>
                                             </a>
                                         </div>
@@ -205,8 +216,7 @@
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    Oui. Vous pouvez connecter votre site web, importer des documents (PDF, DOCX, CSV), ajouter des FAQ et synchroniser vos produits.
-                                                    ELChat construit automatiquement votre base de connaissances.
+                                                    Vous pouvez indexer un site ou un sitemap, importer des documents et contenus, et synchroniser des données produit. Le catalogue métier couvre notamment CRM, e-commerce, agendas, stockage, collaboration, marketing et analytique.
                                                 </p>
                                             </div>
                                         </div>
@@ -217,7 +227,7 @@
                                                data-target="#collapse6" aria-expanded="false"
                                                aria-controls="collapse6">
                                                 <h5>
-                                                    ELChat répond-il automatiquement aux clients ?
+                                                    ELChat peut-il exécuter des actions automatiquement ?
                                                 </h5>
                                             </a>
                                         </div>
@@ -225,8 +235,7 @@
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    Oui. ELChat peut répondre automatiquement aux commentaires et messages,
-                                                    tout en respectant vos règles métier, votre ton de marque et vos instructions personnalisées.
+                                                    Oui, lorsqu’un workflow, un connecteur et les permissions nécessaires sont configurés. Selon le risque, l’action peut être autorisée, bloquée ou placée en attente d’une confirmation humaine avant exécution.
                                                 </p>
                                             </div>
                                         </div>
@@ -236,14 +245,14 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapse7" aria-expanded="false"
                                                aria-controls="collapse7">
-                                                <h5>Est-ce que ELChat apprend avec le temps ?</h5>
+                                                <h5>ELChat apprend-il automatiquement avec le temps ?</h5>
                                             </a>
                                         </div>
                                         <div id="collapse7" class="collapse" aria-labelledby="heading7"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    Non. ELChat améliore ses réponses en analysant les contenus de votre entreprise ajoutés à sa base de connaissance.
+                                                    ELChat ne réentraîne pas seul un modèle sur vos échanges. La qualité progresse lorsque vous mettez à jour les sources, réindexez les contenus et utilisez les indicateurs de qualité pour combler les lacunes de connaissance.
                                                 </p>
                                             </div>
                                         </div>
@@ -253,15 +262,14 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapse8" aria-expanded="false"
                                                aria-controls="collapse8">
-                                                <h5>Mes données sont-elles sécurisées ?</h5>
+                                                <h5>Comment ELChat encadre-t-il les accès et les actions ?</h5>
                                             </a>
                                         </div>
                                         <div id="collapse8" class="collapse" aria-labelledby="heading8"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    Oui. Vos données sont isolées, chiffrées et utilisées uniquement pour alimenter votre propre instance ELChat.
-                                                    Elles ne sont jamais partagées avec d’autres clients.
+                                                    Les données et connecteurs sont rattachés au compte et au site concernés. Les permissions, confirmations et journaux d’audit limitent l’accès aux outils et rendent les actions traçables. Les exigences propres à votre organisation doivent être validées lors du cadrage.
                                                 </p>
                                             </div>
                                         </div>
@@ -271,14 +279,14 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapse9" aria-expanded="false"
                                                aria-controls="collapse9">
-                                                <h5>ELChat est-il difficile à configurer ?</h5>
+                                                <h5>Comment démarrer sans tout automatiser immédiatement ?</h5>
                                             </a>
                                         </div>
                                         <div id="collapse9" class="collapse" aria-labelledby="heading9"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
                                                 <p class="text-size-16 text-left mb-0">
-                                                    Non. La configuration est simple : connectez vos sources, choisissez vos canaux, et ELChat commence à répondre automatiquement en quelques minutes.
+                                                    Commencez par Core et un périmètre de connaissance précis. Ajoutez ensuite un canal, un workflow ou un agent, testez les résultats, puis élargissez l’autonomie une fois les règles et validations établies.
                                                 </p>
                                             </div>
                                         </div>
@@ -300,20 +308,19 @@
                     <div class="statistics-content-con">
                         <div class="heading-title-con mb-0">
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                                  data-wow-delay="0.4s">Performance & Impact</span>
+                                  data-wow-delay="0.4s">Déploiement progressif</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                                Conçu pour les équipes,<br>
-                                pensé pour la scalabilité
+                                Commencez par un besoin,<br>
+                                étendez selon les résultats
                             </h2>
                             <p class="wow fadeInLeft p-0" data-wow-duration="2s" data-wow-delay="0.6s">
-                                ELChat est utilisé pour gérer des volumes élevés d’interactions sur les réseaux sociaux,
-                                les sites web et les canaux de support client. Grâce à son moteur de connaissance et
-                                son système d’automatisation, les entreprises peuvent répondre instantanément,
-                                qualifier leurs prospects et améliorer l’expérience client à grande échelle.
+                                Cadrez d’abord les sources, les utilisateurs et les actions autorisées. Déployez ensuite
+                                les capacités par étapes, mesurez les événements utiles et enrichissez la connaissance
+                                avant d’augmenter le niveau d’autonomie.
                             </p>
 
                             <a href="about.html" class="text-decoration-none primary_btn d-inline-block wow
-                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Commencer</a>
+                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Préparer votre cadrage</a>
                             <!-- heading title con -->
                         </div>
                         <!-- statistics content con -->
@@ -327,9 +334,9 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon1.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <span class="d-inline-block black-text counter">95 </span><sup
-                                        class="d-inline-block black-text">%</sup>
-                                    <span class="span-text d-block">Réduction du temps de réponse</span>
+                                    <span class="d-inline-block black-text counter">1 </span><sup
+                                        class="d-inline-block black-text"></sup>
+                                    <span class="span-text d-block">Socle Core commun</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -338,9 +345,9 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon2.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <span class="d-inline-block black-text">24/7 </span>
+                                    <span class="d-inline-block black-text">2 </span>
                                     <!-- <span class="d-inline-block alphabet black-text">k</span> -->
-                                    <span class="span-text d-block">Disponibilité continue</span>
+                                    <span class="span-text d-block">Niveaux Basic et Pro</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -349,10 +356,10 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon3.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <sup class="d-inline-block black-text">+</sup><span
-                                        class="d-inline-block black-text counter">40 </span><sup
-                                        class="d-inline-block black-text">%</sup>
-                                    <span class="span-text d-block">Augmentation de l’engagement</span>
+                                    <sup class="d-inline-block black-text"></sup><span
+                                        class="d-inline-block black-text counter">3 </span><sup
+                                        class="d-inline-block black-text"></sup>
+                                    <span class="span-text d-block">Familles de modules optionnels</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -361,9 +368,9 @@
                                 <div class="statistics-box w-100">
                                     <figure><img src="{{ asset('assets/images/statistics-icon4.png')}}" alt="icon" class="img-fluid">
                                     </figure>
-                                    <span class="d-inline-block black-text counter">10000 </span><sup
-                                        class="d-inline-block black-text">+</sup>
-                                    <span class="span-text d-block">Conversations gérées quotidiennement</span>
+                                    <span class="d-inline-block black-text counter">6 </span><sup
+                                        class="d-inline-block black-text"></sup>
+                                    <span class="span-text d-block">Étapes de la boucle opérationnelle</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->

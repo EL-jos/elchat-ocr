@@ -5,9 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
-class ConversationMemory extends BaseModel
+class ConversationMemory extends Model
 {
     use HasUuids;
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $guarded = [];
 
     protected $table = 'conversation_memories';
     protected $casts = [

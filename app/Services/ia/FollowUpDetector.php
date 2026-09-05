@@ -4,11 +4,13 @@ namespace App\Services\ia;
 
 use App\Models\Conversation;
 use App\Models\Message;
-use Illuminate\Support\Facades\Http;
+use App\Services\hops\LLMService;
 
 class FollowUpDetector
 {
     private const MAX_RETRIES = 5;
+
+    public function __construct(private readonly LLMService $llm) {}
 
     public function isFollowUp(string $question, Conversation $conversation): bool
     {
@@ -31,33 +33,11 @@ class FollowUpDetector
 
             try {
 
-                $response = Http::timeout(15)
-                    ->retry(2, 300, throw: false)
-                    ->withHeaders([
-                        'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-                    ])
-                    ->post(
-                        'https://openrouter.ai/api/v1/chat/completions',
-                        [
-                            'model' => 'openai/gpt-4.1-mini',
-                            'messages' => $baseMessages,
-                            'temperature' => $temperature,
-                            'max_tokens' => 16,
-                        ]
-                    );
-
-                if (!$response->successful()) {
-
-                    logger()->warning('FollowUpDetector HTTP failure', [
-                        'attempt' => $attempt,
-                        'status' => $response->status(),
-                        'body' => $response->body(),
-                    ]);
-
-                    continue;
-                }
-
-                $content = $response->json()['choices'][0]['message']['content'] ?? '';
+                $content = $this->llm->chat($baseMessages, [
+                    'task' => 'follow_up_detection',
+                    'temperature' => $temperature,
+                    'max_tokens' => 16,
+                ]);
 
                 $normalized = $this->normalizeAnswer($content);
 

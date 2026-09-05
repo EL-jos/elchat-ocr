@@ -231,6 +231,7 @@ USER;
                 ['role' => 'system', 'content' => $systemPrompt],
                 ['role' => 'user',   'content' => $userPrompt],
             ], [
+                'task' => 'social_lead_rewrite',
                 'max_tokens'  => 80,
                 'temperature' => 0.4,
             ]);

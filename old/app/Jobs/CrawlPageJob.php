@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Site;
 use App\Services\CrawlService;
@@ -15,6 +16,7 @@ use Throwable;
 
 class CrawlPageJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 120;

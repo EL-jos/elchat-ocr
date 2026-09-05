@@ -3,6 +3,7 @@
 namespace App\Services\lexical;
 
 use Exception;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 use Meilisearch\Client;
 use Throwable;
@@ -266,6 +267,62 @@ class LexicalIndexService
             })
             ->toArray();
     }
+
+    /**
+     * URL de recherche REST utilisée uniquement par la recherche hybride
+     * parallèle. Le SDK reste utilisé par search() et les opérations d'index.
+     */
+    public function buildSearchUrl(string $siteId): string
+    {
+        return rtrim((string) config('meilisearch.url'), '/') . "/indexes/chunks_{$siteId}/search";
+    }
+
+    public function buildSearchPayload(string $query, int $limit): array
+    {
+        return [
+            'q' => $query,
+            'limit' => $limit,
+            'showRankingScore' => true,
+        ];
+    }
+
+    /**
+     * Parse une réponse Meilisearch ou une exception issue d'une requête
+     * poolée, en conservant le format de sortie de search().
+     */
+    public function parseSearchResponse(mixed $response): array
+    {
+        if (
+            $response instanceof Throwable
+            || ! ($response instanceof Response)
+            || $response->failed()
+        ) {
+            Log::error('Meilisearch raw search failed', [
+                'status' => $response instanceof Response ? $response->status() : null,
+                'error' => $response instanceof Throwable
+                    ? $response->getMessage()
+                    : ($response instanceof Response ? $response->body() : 'Invalid response'),
+            ]);
+
+            return [];
+        }
+
+        $hits = $response->json('hits') ?? [];
+
+        if (! is_array($hits)) {
+            return [];
+        }
+
+        return collect($hits)
+            ->map(fn (array $hit) => [
+                'id' => $hit['id'],
+                'score' => $hit['_rankingScore'] ?? 0,
+                'source' => 'keyword',
+                'payload' => $hit,
+            ])
+            ->toArray();
+    }
+
     private function log(string $level, string $message, array $context = []): void
     {
         Log::$level($message, array_merge([

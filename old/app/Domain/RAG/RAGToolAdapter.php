@@ -5,6 +5,7 @@ namespace App\Domain\RAG;
 use App\Domain\MCP\Contracts\ToolResult;
 use App\Domain\MCP\Contracts\ToolSchema;
 use App\Models\Site;
+use App\Domain\MCP\Security\ActorContext;
 use App\Services\chunks\ChunkHydrationService;
 use App\Services\hybrid\HybridSearchService;
 use App\Services\ia\EmbeddingService;
@@ -50,7 +51,7 @@ class RAGToolAdapter
         );
     }
 
-    public function search(Site $site, string $query, int $limit = 8): ToolResult
+    public function search(Site $site, string $query, int $limit = 8, ?ActorContext $actor = null): ToolResult
     {
         try {
             $embedding = $this->embeddingService->getEmbedding($query);
@@ -63,7 +64,7 @@ class RAGToolAdapter
                 scoreThreshold: floatval($site->settings->min_similarity_score ?? 0),
             );
 
-            $hydrated = $this->chunkHydrationService->hydrate($results);
+            $hydrated = $this->chunkHydrationService->hydrate($results, $actor);
         } catch (\Throwable $e) {
             return ToolResult::fail('rag_unavailable', 'Recherche documentaire indisponible: ' . $e->getMessage());
         }

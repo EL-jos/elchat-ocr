@@ -6,11 +6,16 @@ use App\Enums\AnalyticsEventType;
 use App\Models\Sales\ProspectingReport;
 use App\Models\Sales\ProspectingRun;
 use App\Services\analytics\AnalyticsEventService;
+use App\Services\Sales\SalesHunterRealtimeService;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 class ProspectingRunCompletionService
 {
-    public function __construct(private readonly AnalyticsEventService $analytics) {}
+    public function __construct(
+        private readonly AnalyticsEventService $analytics,
+        private readonly SalesHunterRealtimeService $realtime,
+    ) {}
 
     public function finishIfReady(ProspectingRun $run): void
     {
@@ -52,7 +57,19 @@ class ProspectingRunCompletionService
             $this->analytics->capture($campaign->site, AnalyticsEventType::PROSPECTING_CAMPAIGN_COMPLETED, [
                 'resource_type' => 'sales_prospecting_campaign', 'resource_id' => $campaign->id,
             ], $stats, async: true);
+            $this->realtime->publish($campaign->site_id, 'campaign_completed', [
+                'campaign' => $this->campaignPayload($campaign->fresh()),
+                'run_id' => $run->id,
+                'stats' => $stats,
+            ]);
         }
+    }
+
+    private function campaignPayload($campaign): array
+    {
+        return Arr::only($campaign->toArray(), [
+            'id', 'site_id', 'name', 'status', 'next_run_at', 'started_at', 'completed_at', 'stats',
+        ]);
     }
 
     private function insights($prospects, array $stats): array

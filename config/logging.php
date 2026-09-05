@@ -5,6 +5,8 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
+$applicationLogLevel = env('APP_DEBUG', false) ? 'debug' : 'error';
+
 return [
 
     /*
@@ -61,14 +63,16 @@ return [
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            // En production, seules les erreurs sont persistées. En mode
+            // debug, les logs informatifs et détaillés restent disponibles.
+            'level' => $applicationLogLevel,
             'replace_placeholders' => true,
         ],
 
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => $applicationLogLevel,
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -78,13 +82,13 @@ return [
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
             'username' => env('LOG_SLACK_USERNAME', 'Laravel Log'),
             'emoji' => env('LOG_SLACK_EMOJI', ':boom:'),
-            'level' => env('LOG_LEVEL', 'critical'),
+            'level' => env('APP_DEBUG', false) ? env('LOG_LEVEL', 'critical') : 'error',
             'replace_placeholders' => true,
         ],
 
         'papertrail' => [
             'driver' => 'monolog',
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => $applicationLogLevel,
             'handler' => env('LOG_PAPERTRAIL_HANDLER', SyslogUdpHandler::class),
             'handler_with' => [
                 'host' => env('PAPERTRAIL_URL'),
@@ -96,7 +100,7 @@ return [
 
         'stderr' => [
             'driver' => 'monolog',
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => $applicationLogLevel,
             'handler' => StreamHandler::class,
             'handler_with' => [
                 'stream' => 'php://stderr',
@@ -107,14 +111,14 @@ return [
 
         'syslog' => [
             'driver' => 'syslog',
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => $applicationLogLevel,
             'facility' => env('LOG_SYSLOG_FACILITY', LOG_USER),
             'replace_placeholders' => true,
         ],
 
         'errorlog' => [
             'driver' => 'errorlog',
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => $applicationLogLevel,
             'replace_placeholders' => true,
         ],
 

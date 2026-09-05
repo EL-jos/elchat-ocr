@@ -56,7 +56,8 @@ return [
     ],
     'web_search' => [
         'enabled' => (bool) env('PROSPECTING_WEB_SEARCH_ENABLED', true),
-        'model' => env('PROSPECTING_WEB_SEARCH_MODEL', env('MCP_LLM_MODEL', 'deepseek/deepseek-chat-v3.1')),
+        // Compatibilité legacy : la source de vérité est config/llm.php.
+        'model' => env('PROSPECTING_WEB_SEARCH_MODEL'),
         'engine' => env('PROSPECTING_WEB_SEARCH_ENGINE', 'auto'),
         'max_results' => (int) env('PROSPECTING_WEB_SEARCH_MAX_RESULTS', 5),
         'max_total_results' => (int) env('PROSPECTING_WEB_SEARCH_MAX_TOTAL_RESULTS', 15),

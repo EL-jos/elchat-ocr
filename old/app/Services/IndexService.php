@@ -32,6 +32,7 @@ class IndexService
         protected MercureService $mercureService,
         protected ImageVisionService $imageVisionService,
         protected DocumentImageExtractionService $documentImageExtractionService,
+        protected DocumentPathResolver $documentPathResolver,
     ) {}
     public function indexPage(Page $page, array $context = []): void
     {
@@ -857,14 +858,18 @@ class IndexService
         );
 
         // 1️⃣ Canonical + Chunking (PURE CPU, PAS DB)
-        $path = public_path($document->path);
+        $path = $this->documentPathResolver->resolve($document);
+        if (!$path || !is_file($path)) {
+            throw new \RuntimeException('Fichier documentaire introuvable pour l’indexation.');
+        }
         /*Log::info("PATH OF FILE", [
             "path" => $path
         ]);*/
         $canonical = $this->documentCanonicalService->buildCanonicalDocument(
             path: $path,
             extension: $document->extension,
-            fullPath: $path
+            fullPath: $path,
+            title: $document->title,
         );
 
         //Log::info("CANONICAL", $canonical);
@@ -948,7 +953,18 @@ class IndexService
             $indexedChunks[] = [
                 'text' => $textChunk,
                 'priority' => $chunkData['priority'],
-                'metadata' => $chunkData['metadata'],
+                'metadata' => array_merge(
+                    $chunkData['metadata'] ?? [],
+                    array_filter([
+                        'source_system' => $document->origin === 'microsoft_365' ? 'microsoft_365' : null,
+                        'provider_tenant_id' => $document->access_tenant_id,
+                        'provider_principal_id' => $document->access_principal_id,
+                        'external_id' => $document->external_id,
+                        'external_drive_id' => $document->external_drive_id,
+                        'external_site_id' => $document->external_site_id,
+                        'external_web_url' => $document->external_web_url,
+                    ], static fn ($value) => $value !== null),
+                ),
                 'embedding' => $embedding,
                 'hash' => hash('sha256', $textChunk),
                 'lexical_text' => $chunkData['lexical_text'] ?? $this->normalizeForLexicalSearch($textChunk),

@@ -1,7 +1,7 @@
 <?php
 namespace App\Services\ia;
 
-use Illuminate\Support\Facades\Http;
+use App\Services\hops\LLMService;
 use RuntimeException;
 use Yethee\Tiktoken\EncoderProvider;
 
@@ -10,8 +10,6 @@ class EmbeddingService
     /**
      * Modèle embedding
      */
-    private const MODEL = 'openai/text-embedding-3-small';
-
     /**
      * Taille sécurisée par chunk
      * (bien en dessous des 8192 tokens)
@@ -31,7 +29,7 @@ class EmbeddingService
 
     private $encoder;
 
-    public function __construct()
+    public function __construct(private readonly LLMService $llm)
     {
         $provider = new EncoderProvider();
 
@@ -113,49 +111,13 @@ class EmbeddingService
      */
     private function requestEmbedding(string $text): array
     {
-        $response = Http::timeout(60)
-            ->retry(
-                3,
-                2000,
-                function ($exception) {
+        $embeddings = $this->requestEmbeddings([$text]);
 
-                    /**
-                     * Retry uniquement erreurs serveur
-                     */
-                    return optional(
-                            $exception->response
-                        )->status() >= 500;
-                }
-            )
-            ->withHeaders([
-                'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-                'Content-Type'  => 'application/json',
-            ])
-            ->post(
-                'https://openrouter.ai/api/v1/embeddings',
-                [
-                    'model' => self::MODEL,
-                    'input' => $text,
-                ]
-            );
-
-        if (!$response->successful()) {
-
-            throw new RuntimeException(
-                'Embedding API Error: ' . $response->body()
-            );
+        if (! isset($embeddings[0])) {
+            throw new RuntimeException('Invalid embedding response');
         }
 
-        $json = $response->json();
-
-        if (!isset($json['data'][0]['embedding'])) {
-
-            throw new RuntimeException(
-                'Invalid embedding response'
-            );
-        }
-
-        return $json['data'][0]['embedding'];
+        return $embeddings[0];
     }
 
     /**
@@ -163,48 +125,13 @@ class EmbeddingService
      */
     private function requestEmbeddings(array $chunks): array
     {
-        $response = Http::timeout(60)
-            ->retry(
-                3,
-                2000,
-                function ($exception) {
-
-                    return optional(
-                            $exception->response
-                        )->status() >= 500;
-                }
-            )
-            ->withHeaders([
-                'Authorization' => 'Bearer ' . env('OPENROUTER_API_KEY'),
-                'Content-Type'  => 'application/json',
-            ])
-            ->post(
-                'https://openrouter.ai/api/v1/embeddings',
-                [
-                    'model' => self::MODEL,
-                    'input' => $chunks,
-                ]
-            );
-
-        if (!$response->successful()) {
-
-            throw new RuntimeException(
-                'Embedding API Error: ' . $response->body()
-            );
+        try {
+            return $this->llm->embeddings($chunks, [
+                'task' => 'embedding',
+            ]);
+        } catch (\Throwable $exception) {
+            throw new RuntimeException('Embedding API Error: '.$exception->getMessage(), previous: $exception);
         }
-
-        $json = $response->json();
-
-        if (!isset($json['data'])) {
-
-            throw new RuntimeException(
-                'Invalid embeddings response'
-            );
-        }
-
-        return collect($json['data'])
-            ->pluck('embedding')
-            ->toArray();
     }
 
     /**

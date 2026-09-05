@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\sitemap;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Chunk;
 use App\Models\CrawlJob;
@@ -14,11 +15,13 @@ use App\Services\vector\VectorIndexService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 
 class SitemapPageBatchJob implements ShouldQueue
 {
-    use Dispatchable, Queueable;
+    use IsMonitored;
+    use Dispatchable, InteractsWithQueue, Queueable;
 
     public function __construct(
         public string $siteId,

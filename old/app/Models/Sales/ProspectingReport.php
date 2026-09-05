@@ -13,7 +13,11 @@ class ProspectingReport extends Model
     protected $table = 'sales_prospecting_reports';
 
     protected $fillable = ['campaign_id', 'generated_at', 'stats', 'insights'];
+
     protected $casts = ['generated_at' => 'datetime', 'stats' => 'array', 'insights' => 'array'];
 
-    public function campaign(): BelongsTo { return $this->belongsTo(ProspectingCampaign::class, 'campaign_id'); }
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(ProspectingCampaign::class, 'campaign_id');
+    }
 }

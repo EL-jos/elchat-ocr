@@ -95,6 +95,8 @@ FORMAT DE SORTIE (OBLIGATOIRE)
   \"hallucination\": float
 }"
             ]
+        ], [
+            'task' => 'rag_evaluation_judge',
         ]);
 
         return [

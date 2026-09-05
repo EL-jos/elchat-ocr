@@ -4,6 +4,7 @@ namespace App\Services\Social;
 
 use App\Enums\Social\MessageDirection;
 use App\Enums\Social\ReplyStatus;
+use App\Jobs\UpdateConversationContextJob;
 use App\Models\Message;
 use App\Models\MessageCTA;
 use App\Models\Social\SocialAccount;
@@ -13,7 +14,6 @@ use App\Services\cta\ChatResponse;
 use App\Services\ia\ChatService;
 use App\Services\MercureService;
 use BackedEnum;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -60,23 +60,9 @@ class SocialReplyEngine
             'content'         => $incoming->content,
         ]);
 
-        // Mémoire structurée
-        $messageCount = $conversation->messages()->count();
-
-        if ($messageCount === 1) {
-            $memory = $this->chatService->extractStructuredMemoryFromMessage($userMessage);
-            if (!empty($memory)) {
-                DB::table('conversation_memories')->updateOrInsert(
-                    ['conversation_id' => $conversation->id],
-                    [
-                        'id'         => (string) Str::uuid(),
-                        'memory'     => json_encode($memory),
-                        'updated_at' => now(),
-                        'created_at' => now(),
-                    ]
-                );
-            }
-        }
+        // On conserve le déclenchement du premier message, mais l'extraction
+        // est désormais exécutée par le job après la réponse.
+        $isFirstConversationMessage = $conversation->messages()->count() === 1;
 
         // Appel RAG
         $chatResponse = $this->chatService->answer(
@@ -111,12 +97,20 @@ class SocialReplyEngine
 
         $messageCount = $conversation->messages()->count();
 
-        if ($messageCount % 5 === 0) {
-            $this->chatService->updateConversationMemory($conversation);
-        }
+        $updateMemory = $isFirstConversationMessage
+            || ($messageCount % 5 === 0)
+            || $chatResponse->memoryRefreshRequested;
+        $updateSummary = $messageCount % 8 === 0;
 
-        if ($messageCount % 8 === 0) {
-            $this->chatService->updateConversationSummary($conversation);
+        if ($updateMemory || $updateSummary) {
+            // Le traitement social est déjà asynchrone ; on ajoute un job
+            // distinct pour ne pas refaire les appels LLM dans ce traitement.
+            UpdateConversationContextJob::dispatch(
+                conversationId: (string) $conversation->id,
+                updateMemory: $updateMemory,
+                updateSummary: $updateSummary,
+                memoryMessageId: $isFirstConversationMessage ? (string) $userMessage->id : null,
+            );
         }
 
         // Message social sortant

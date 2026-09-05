@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Enums\Social\ReplyStatus;
 use App\Models\Social\SocialEvent;
@@ -16,6 +17,7 @@ use Throwable;
 
 class YouTubeReplyJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;

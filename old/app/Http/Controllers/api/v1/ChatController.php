@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api\v1;
 
+use App\Enums\AnalyticsEventType;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Document;
@@ -10,6 +11,7 @@ use App\Models\MessageAttachment;
 use App\Models\MessageCTA;
 use App\Models\Site;
 use App\Services\analytics\ResourceEventLogger;
+use App\Services\analytics\AnalyticsEventService;
 use App\Services\ia\ChatService;
 use App\Services\ia\EmbeddingService;
 use App\Services\mcp\MCPActionGateService;
@@ -35,6 +37,7 @@ class ChatController extends Controller
         private ImageVisionService $imageVisionService,
         private MCPActionGateService $mcpActionGateService, // 🆕
         private ResourceEventLogger $resourceEventLogger, // 🆕
+        private AnalyticsEventService $analytics,
     ){}
     public function ask(Request $request)
     {
@@ -46,6 +49,7 @@ class ChatController extends Controller
             'question' => 'nullable|string|max:1000',
             'conversation_id' => 'nullable|exists:conversations,id',
             'visitor_id' => 'nullable|exists:visitors,id',
+            'session_id' => 'nullable|string|max:100',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192', // 8 Mo, cohérent avec vision.max_image_bytes
         ]);
 
@@ -68,7 +72,9 @@ class ChatController extends Controller
             ->firstOrFail();
 
         // 🔑 Continuité OU nouvelle conversation
-        if (!empty($data['conversation_id'])) {
+        $isNewConversation = empty($data['conversation_id']);
+
+        if (!$isNewConversation) {
             $conversation = Conversation::where('id', $data['conversation_id'])
                 ->where('site_id', $site->id) // ✅ sécurité supplémentaire
                 ->when($userId, fn ($q) => $q->where('user_id', $userId))
@@ -79,8 +85,37 @@ class ChatController extends Controller
                 'site_id' => $site->id,
                 'user_id' => $userId,
                 'visitor_id' => $visitorId,
+                'metadata' => array_filter([
+                    'channel' => $visitorId ? 'widget' : 'admin',
+                    'session_id' => $data['session_id'] ?? null,
+                ]),
             ]);
 
+        }
+
+        $channel = $conversation->metadata['channel'] ?? ($visitorId ? 'widget' : 'admin');
+        $sessionId = $data['session_id'] ?? $conversation->metadata['session_id'] ?? null;
+
+        if ($sessionId && empty($conversation->metadata['session_id'])) {
+            $conversation->update([
+                'metadata' => [...($conversation->metadata ?? []), 'channel' => $channel, 'session_id' => $sessionId],
+            ]);
+        }
+
+        if ($isNewConversation) {
+            $this->analytics->capture(
+                $site,
+                AnalyticsEventType::CONVERSATION_STARTED,
+                [
+                    'visitor_id' => $conversation->visitor_id,
+                    'conversation_id' => $conversation->id,
+                    'session_id' => $sessionId,
+                    'correlation_id' => $sessionId ?? $conversation->id,
+                    'source' => 'chat',
+                    'channel' => $channel,
+                ],
+                idempotencyKey: $this->analytics->deterministicKey('conversation_started', $conversation->id),
+            );
         }
 
 
@@ -155,6 +190,22 @@ class ChatController extends Controller
             // doit pas s'encombrer du texte extrait de l'image.
             'content' => $rawQuestion !== '' ? $rawQuestion : '📷 Image envoyée',
         ]);
+
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::MESSAGE_SENT,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'message_id' => $userMessage->id,
+                'session_id' => $sessionId,
+                'correlation_id' => $sessionId ?? $conversation->id,
+                'source' => 'chat',
+                'channel' => $channel,
+            ],
+            metadata: ['has_image' => $request->hasFile('image')],
+            idempotencyKey: $this->analytics->deterministicKey('message_sent', $userMessage->id),
+        );
 
 
         if ($request->hasFile('image')) {
@@ -244,6 +295,21 @@ class ChatController extends Controller
             'entities' => $chatResponse->entities,
         ]);
 
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::MESSAGE_RECEIVED,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'message_id' => $botMessage->id,
+                'session_id' => $sessionId,
+                'correlation_id' => $sessionId ?? $conversation->id,
+                'source' => 'chat',
+                'channel' => $channel,
+            ],
+            idempotencyKey: $this->analytics->deterministicKey('message_received', $botMessage->id),
+        );
+
         Log::info("LES CTA'S", [
             "ctas" => $chatResponse->ctas
         ]);
@@ -269,13 +335,20 @@ class ChatController extends Controller
 
         }
 
-        $this->resourceEventLogger->logCtaImpressions($site, $conversation, $botMessage, $chatResponse->ctas);
+        // Les impressions CTA sont enregistrées par le widget lorsqu'elles sont
+        // réellement affichées. Les recommandations d'entités sont, elles,
+        // observables dès leur inclusion dans la réponse.
         $this->resourceEventLogger->logEntityImpressions($site, $conversation, $botMessage, $chatResponse->entities);
 
 
         $this->mercureService->post($topic, [
             'type' => 'bot_message',
             'conversation_id' => $conversation->id,
+            // Le widget utilise cet identifiant pour rattacher les impressions
+            // et les clics CTA au message réellement enregistré. Sans lui, le
+            // widget génère un UUID local qui est rejeté par l'endpoint public
+            // de tracking (le message n'existe pas en base).
+            'message_id' => $botMessage->id,
             'content' => $chatResponse->message,
             'ctas' => $chatResponse->ctas, // ajout CTA
             'entities' => $chatResponse->entities,
@@ -300,6 +373,9 @@ class ChatController extends Controller
             'ctas' => $chatResponse->ctas, // front-end peut directement afficher
             'entities' => $chatResponse->entities,
             'conversation_id' => $conversation->id,
+            // Même identifiant que dans Mercure afin que le fallback HTTP et
+            // le flux temps réel produisent des événements cohérents.
+            'message_id' => $botMessage->id,
             // 🖼️ même format que l'event Mercure, pour un traitement unifié côté front
             'attachment' => $attachmentUrl ? [
                 'url' => $attachmentUrl,

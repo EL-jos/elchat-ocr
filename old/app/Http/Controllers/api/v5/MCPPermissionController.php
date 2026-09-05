@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\api\v5;
 
 use App\Domain\MCP\Registry\ConnectorRegistry;
+use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
+use App\Domain\MCP\Security\CredentialVault;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Concerns\AuthorizesSiteAccess;
 use App\Models\Mcp\McpPermission;
 use App\Models\Site;
 use Illuminate\Http\Request;
@@ -14,7 +17,8 @@ use Illuminate\Http\Request;
  */
 class MCPPermissionController extends Controller
 {
-    public function __construct(private readonly ConnectorRegistry $registry)
+    use AuthorizesSiteAccess;
+    public function __construct(private readonly ConnectorRegistry $registry, private readonly CredentialVault $vault)
     {
     }
 
@@ -24,6 +28,7 @@ class MCPPermissionController extends Controller
      */
     public function index(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $activeSlugs = $site->mcpSiteConnectors()
             ->where('status', 'connected')
             ->with('mcpConnector')
@@ -39,7 +44,11 @@ class MCPPermissionController extends Controller
             if (!$this->registry->has($slug)) {
                 continue;
             }
-            foreach ($this->registry->get($slug)->listTools() as $tool) {
+            $connector = $this->registry->get($slug);
+            $tools = $connector instanceof ProvidesSiteScopedTools
+                ? $connector->toolsAvailableFor($this->vault->retrieve($site, $slug) ?? [])
+                : $connector->listTools();
+            foreach ($tools as $tool) {
                 $key = "{$slug}.{$tool->name}";
                 $existing = $existingRules->get($key);
 
@@ -61,6 +70,7 @@ class MCPPermissionController extends Controller
 
     public function update(Request $request, Site $site)
     {
+        $this->authorizeSiteAccess($request, $site);
         $validated = $request->validate([
             'connector' => ['required', 'string'],
             'tool' => ['required', 'string'],
@@ -69,6 +79,11 @@ class MCPPermissionController extends Controller
             'confirm_actor' => ['nullable', 'in:visitor,admin'],         // 🆕
             'daily_call_limit' => ['nullable', 'integer', 'min:1'],
         ]);
+
+        abort_unless($this->registry->has($validated['connector']), 422, 'Connecteur MCP inconnu.');
+        $activeTools = $this->registry->toolsAvailableFor($site);
+        $qualified = $validated['connector'] . '__' . $validated['tool'];
+        abort_unless(collect($activeTools)->contains(fn ($tool) => ($tool['function']['name'] ?? null) === $qualified), 422, 'Outil MCP indisponible pour ce site ou ses scopes.');
 
         McpPermission::updateOrCreate(
             [

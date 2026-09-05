@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\social;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Social\SocialEvent;
 use App\Services\Social\Telegram\TelegramEventParser;
@@ -13,6 +14,7 @@ use Throwable;
 
 class TelegramWebhookJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;

@@ -63,7 +63,6 @@ class HubSpotConnector extends AbstractConnector
             'update_contact' => $this->updateContact($params, $credentials, $context),
             'search_contacts' => $this->searchContacts($params, $credentials),
             'get_contact' => $this->getContact($params, $credentials),
-
             'create_deal' => $this->createDeal($params, $credentials),
             'update_deal' => $this->updateDeal($params, $credentials),
             'get_deal' => $this->getDeal($params, $credentials),
@@ -123,7 +122,7 @@ class HubSpotConnector extends AbstractConnector
                     'firstname' => ['type' => 'string'], 'lastname' => ['type' => 'string'],
                     'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company' => ['type' => 'string'],
                     'address' => ['type' => 'string'], 'website' => ['type' => 'string'],
-                ], 'anyOf' => [['required' => ['email']], ['required' => ['phone']]],
+                ],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_or_update_contact'),
 
             new ToolSchema('hubspot', 'find_contact',
@@ -148,11 +147,16 @@ class HubSpotConnector extends AbstractConnector
                 "Récupère les informations complètes d'un contact HubSpot identifié de manière unique. Utiliser lorsque l'identifiant du contact est connu ou après une recherche ayant permis d'identifier un seul contact. Ne jamais inventer ou déduire un identifiant HubSpot.", [
                 'type' => 'object', 'properties' => ['contact_id' => ['type' => 'string']], 'required' => ['contact_id'],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
+
         ];
     }
 
     private function createContact(array $p, array $c, array $ctx): ToolResult
     {
+        if (trim((string) ($p['email'] ?? '')) === '' && trim((string) ($p['phone'] ?? '')) === '') {
+            return ToolResult::fail('missing_contact_identifier', 'Un email ou un numéro de téléphone est requis pour créer un contact.');
+        }
+
         try {
             $contact = $this->client($c)->post('/crm/v3/objects/contacts', [
                 'properties' => array_filter([

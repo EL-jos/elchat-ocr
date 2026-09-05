@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\sitemap;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\Document;
 use App\Models\Site;
@@ -18,6 +19,7 @@ use Symfony\Component\HttpClient\HttpClient;
 
 class GenerateSitemapJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected string $siteId;
@@ -190,6 +192,14 @@ class GenerateSitemapJob implements ShouldQueue
             'id' => (string) Str::uuid(),
             'path' => $documentPath,
             'type' => 'sitemap',
+            'purpose' => 'sitemap',
+            'title' => 'Sitemap généré',
+            'original_name' => basename($documentPath),
+            'extension' => 'xml',
+            'mime_type' => 'application/xml',
+            'file_size' => file_exists(public_path($documentPath)) ? filesize(public_path($documentPath)) : null,
+            'indexing_status' => 'indexed',
+            'last_indexed_at' => now(),
         ]);
 
         return $site->documents()->save($document);

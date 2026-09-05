@@ -8,6 +8,7 @@ use App\Domain\Sales\ProspectCrmSyncService;
 use App\Domain\Sales\SalesHunterConversationCleanupService;
 use App\Models\Conversation;
 use App\Models\Sales\Prospect;
+use App\Services\Sales\SalesHunterRealtimeService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,6 +42,7 @@ class SyncProspectToCrmJob implements ShouldQueue, ShouldBeUnique
         ProspectCrmSyncService $sync,
         ProspectInformationCompletionService $informationCompletion,
         SalesHunterConversationCleanupService $conversationCleanup,
+        SalesHunterRealtimeService $realtime,
     ): void
     {
         $prospect = Prospect::with('campaign.config', 'site')->findOrFail($this->prospectId);
@@ -85,6 +87,7 @@ class SyncProspectToCrmJob implements ShouldQueue, ShouldBeUnique
 
         $sync->sync($prospect->fresh(), $settings['crm_connector_slug'] ?? null, $conversation);
         $prospect->refresh();
+        $this->publishProspect($prospect, $realtime);
         if (in_array($prospect->crm_sync_status, ['created', 'duplicate', 'linked'], true)) {
             $conversationCleanup->cleanup($conversation);
         }
@@ -92,9 +95,43 @@ class SyncProspectToCrmJob implements ShouldQueue, ShouldBeUnique
 
     public function failed(Throwable $exception): void
     {
+        $prospect = Prospect::with('campaign')->find($this->prospectId);
         Prospect::whereKey($this->prospectId)->update([
             'crm_sync_status' => 'failed',
             'crm_sync_error' => Str::limit($exception->getMessage(), 1000),
+        ]);
+        if ($prospect) {
+            $this->publishProspect($prospect->fresh(), app(SalesHunterRealtimeService::class));
+        }
+    }
+
+    private function publishProspect(?Prospect $prospect, SalesHunterRealtimeService $realtime): void
+    {
+        if (! $prospect) {
+            return;
+        }
+
+        $realtime->publish($prospect->site_id, 'prospect_updated', [
+            'campaign_id' => $prospect->campaign_id,
+            'prospect' => [
+                'id' => $prospect->id,
+                'campaign_id' => $prospect->campaign_id,
+                'name' => $prospect->name,
+                'company' => $prospect->company,
+                'website' => $prospect->website,
+                'domain' => $prospect->domain,
+                'email' => $prospect->email,
+                'phone' => $prospect->phone,
+                'source' => $prospect->source,
+                'location' => $prospect->location,
+                'sector' => $prospect->sector,
+                'score' => $prospect->score,
+                'score_reasons' => $prospect->score_reasons,
+                'status' => $prospect->status,
+                'crm_sync_status' => $prospect->crm_sync_status,
+                'crm_sync_error' => $prospect->crm_sync_error,
+                'last_activity_at' => optional($prospect->last_activity_at)->toISOString(),
+            ],
         ]);
     }
 }

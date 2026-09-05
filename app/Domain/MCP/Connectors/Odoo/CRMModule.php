@@ -14,7 +14,7 @@ class CRMModule implements OdooModuleInterface
         return [
             new ToolSchema('odoo', 'crm_create_contact',
                 "Crée un nouveau contact Odoo ou retourne le contact existant lorsque l'adresse e-mail est déjà enregistrée. Utiliser lorsque l'utilisateur souhaite ajouter un nouveau contact et qu'une adresse e-mail ou un numéro de téléphone valide est disponible. Cet outil évite automatiquement les doublons à partir de l'adresse e-mail. Ne pas appeler crm_find_contact au préalable sauf si l'utilisateur souhaite uniquement vérifier l'existence d'un contact sans le créer. Ne jamais inventer une adresse e-mail ou créer un contact à partir d'informations incomplètes.", [
-                'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company_name' => ['type' => 'string']], 'anyOf' => [['required' => ['email']], ['required' => ['phone']]],
+                'type' => 'object', 'properties' => ['name' => ['type' => 'string'], 'email' => ['type' => 'string'], 'phone' => ['type' => 'string'], 'company_name' => ['type' => 'string']],
             ], isWriteAction: true, defaultMode: 'auto', capability: 'crm.create_or_update_contact'),
 
             new ToolSchema('odoo', 'crm_find_contact',
@@ -65,6 +65,10 @@ class CRMModule implements OdooModuleInterface
 
     private function createContact(array $p, OdooClient $client): ToolResult
     {
+        if (trim((string) ($p['email'] ?? '')) === '' && trim((string) ($p['phone'] ?? '')) === '') {
+            return ToolResult::fail('missing_contact_identifier', 'Un email ou un numéro de téléphone est requis pour créer un contact.');
+        }
+
         if (!empty($p['email'])) {
             $existing = $this->findPartner($p['email'], $client);
             if ($existing) return ToolResult::ok(['contact_id' => $existing['id']], 'Contact déjà existant.', identity: ['email' => $p['email']]);

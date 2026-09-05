@@ -245,7 +245,13 @@ class ProductReindexService
             |--------------------------------------------------------------------------
             */
 
-            $document = new Document([ 'id' => (string) Str::uuid(), 'path' => "unknown", 'type' => "other", 'extension' => "unknown"]);
+            $document = new Document([
+                'id' => (string) Str::uuid(),
+                'path' => 'unknown',
+                'type' => 'other',
+                'purpose' => 'product_import',
+                'extension' => 'unknown',
+            ]);
             $document = $site->documents()->save($document);
 
             $this->mercureService->post("site/{$product->site->id}/products/indexing", [

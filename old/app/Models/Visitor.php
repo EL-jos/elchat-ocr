@@ -23,4 +23,14 @@ class Visitor extends BaseModel
     {
         return $this->hasMany(Conversation::class);
     }
+
+    public function sessions()
+    {
+        return $this->hasMany(VisitorSession::class);
+    }
+
+    public function opportunities()
+    {
+        return $this->hasMany(VisitorOpportunity::class);
+    }
 }

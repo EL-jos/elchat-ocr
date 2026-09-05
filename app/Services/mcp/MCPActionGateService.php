@@ -59,6 +59,329 @@ class MCPActionGateService
         $this->maxHops = (int) config('mcp.orchestrator.max_hops', 8); // 🆕
     }
 
+    /**
+     * Indique si le site possède plusieurs agents publiés. Cette information
+     * sert uniquement au choix du mode de routage dans ChatService.
+     */
+    public function hasMultipleActiveAgents(Site $site): bool
+    {
+        return McpAgent::where('site_id', $site->id)
+            ->where('is_active', true)
+            ->take(2)
+            ->get()
+            ->count() > 1;
+    }
+
+    /**
+     * Construit le catalogue réellement exposable au modèle de conversation.
+     *
+     * Ce catalogue est filtré par acteur puis par l'union des compétences des
+     * agents actifs. Il ne constitue pas une autorisation en lui-même :
+     * executeUnifiedToolCall() repasse toujours par PermissionEngine et par
+     * le périmètre agent juste avant l'exécution réelle.
+     *
+     * @return array{
+     *     tools: array<int, array<string, mixed>>,
+     *     allowed_tool_names: array<int, string>,
+     *     system_prompt: string,
+     *     agent: ?McpAgent,
+     *     agents: array<int, McpAgent>,
+     *     tool_agent_ids: array<string, array<int, string>>,
+     *     agent_scope_snapshot: array<string, mixed>
+     * }|null
+     */
+    public function unifiedToolContext(Site $site, Conversation $conversation, ?string $intent = null): ?array
+    {
+        if (! config('mcp.enabled', true) || ! config('mcp.unified_tool_calling', true)) {
+            return null;
+        }
+
+        $actor = ActorContext::fromConversation($conversation);
+        $permittedTools = $this->permissions->filterAllowedTools(
+            $site,
+            $actor,
+            $this->connectorToolSchemas($site),
+        );
+
+        if ($permittedTools === []) {
+            return null;
+        }
+
+        $activeAgents = McpAgent::where('site_id', $site->id)
+            ->where('is_active', true)
+            ->get();
+
+        if ($activeAgents->count() > 1 && ! config('mcp.unified_multi_agent_tool_calling', true)) {
+            return null;
+        }
+
+        $agent = $activeAgents->first();
+        $agentAllowedNames = $agent && ! empty($agent->skills)
+            ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills)
+            : [];
+        $permittedToolNames = array_map(
+            static fn (ToolSchema $tool): string => $tool->qualifiedName(),
+            $permittedTools,
+        );
+
+        /** @var array<string, array<int, string>> $toolAgentIds */
+        $toolAgentIds = [];
+        /** @var array<string, array<int, string>> $agentToolNames */
+        $agentToolNames = [];
+
+        foreach ($activeAgents as $activeAgent) {
+            $allowedNames = ! empty($activeAgent->skills)
+                ? $this->agentSkills->resolveAllowedToolNames($site, $activeAgent->skills)
+                : $permittedToolNames;
+
+            $agentId = (string) $activeAgent->id;
+            $agentToolNames[$agentId] = array_values(array_unique($allowedNames));
+
+            foreach ($agentToolNames[$agentId] as $toolName) {
+                if (! in_array($toolName, $permittedToolNames, true)) {
+                    continue;
+                }
+
+                $toolAgentIds[$toolName] ??= [];
+                $toolAgentIds[$toolName][] = $agentId;
+            }
+        }
+
+        $scopedNames = $activeAgents->isEmpty() ? null : array_keys($toolAgentIds);
+        $scopedTools = $scopedNames === null
+            ? $permittedTools
+            : array_values(array_filter(
+                $permittedTools,
+                static fn (ToolSchema $tool): bool => in_array($tool->qualifiedName(), $scopedNames, true),
+            ));
+
+        if ($scopedTools === []) {
+            return null;
+        }
+
+        $agentWorkflowIds = $agent ? ($agent->workflow_ids ?? []) : null;
+        $systemPrompt = $activeAgents->count() > 1
+            ? $this->multiAgentSystemPrompt($site, $actor, $intent, $activeAgents->all(), $agentToolNames)
+            : $this->systemPrompt($site, $actor, $intent, $agent, $agentAllowedNames, $agentWorkflowIds);
+
+        $tools = [
+            // En mode unifié, l'absence de tool_call signifie directement
+            // "répondre en texte" : control__no_action_needed n'est donc pas
+            // nécessaire et ne doit pas consommer un appel d'outil artificiel.
+            ...array_values(array_filter(
+                $this->controlTools(),
+                fn (array $tool) => ($tool['function']['name'] ?? null) === 'control__ask_clarification',
+            )),
+            ...array_map(
+                static fn (ToolSchema $tool): array => $tool->toOpenAIFormat(),
+                $scopedTools,
+            ),
+        ];
+
+        $actionPrompt = <<<'PROMPT'
+
+MODE DÉCISION + RÉPONSE UNIFIÉ :
+Tu reçois simultanément le contexte documentaire et la liste des outils MCP
+réellement autorisés pour cet acteur. Si la demande est une question de
+connaissance sans action externe, réponds directement en texte à partir du
+contexte documentaire selon les règles de factualité déjà présentes. Si la
+demande nécessite une action réalisable par un outil, émets le tool_call
+correspondant. Si une donnée indispensable manque pour une action, utilise
+control__ask_clarification. N'utilise jamais un outil uniquement pour vérifier
+s'il pourrait être pertinent et n'invente jamais un résultat d'exécution.
+Après un tool_call, le résultat fourni par le système est la source de vérité
+pour rédiger la réponse finale.
+PROMPT;
+
+        return [
+            'tools' => $tools,
+            'allowed_tool_names' => array_map(
+                static fn (ToolSchema $tool): string => $tool->qualifiedName(),
+                $scopedTools,
+            ),
+            'system_prompt' => $systemPrompt.$actionPrompt,
+            'agent' => $agent,
+            'agents' => $activeAgents->all(),
+            'tool_agent_ids' => $toolAgentIds,
+            'agent_scope_snapshot' => [
+                'agent_ids' => $activeAgents->pluck('id')->map(static fn ($id): string => (string) $id)->values()->all(),
+                'allowed_tool_names' => array_map(
+                    static fn (ToolSchema $tool): string => $tool->qualifiedName(),
+                    $scopedTools,
+                ),
+                'tool_agent_ids' => $toolAgentIds,
+            ],
+        ];
+    }
+
+    /**
+     * Exécute un tool_call issu du flux unifié via le même chemin sécurisé que
+     * l'ancien runLoop(). Aucun appel ne peut contourner l'autorisation finale.
+     *
+     * @return array{status: string, result?: ToolResult, confirm_actor?: string, suggested_actions?: array}
+     */
+    public function executeUnifiedToolCall(
+        Site $site,
+        Conversation $conversation,
+        string $qualifiedToolName,
+        array $params,
+        array $allowedToolNames,
+        int $hop = 1,
+        ?McpAgent $agent = null,
+    ): array {
+        if (! in_array($qualifiedToolName, $allowedToolNames, true)) {
+            return [
+                'status' => 'denied',
+                'result' => ToolResult::fail(
+                    'tool_not_allowed',
+                    'Cet outil n’est pas disponible pour cette demande.',
+                ),
+            ];
+        }
+
+        if ($agent !== null) {
+            // Recharge l'agent afin de ne jamais faire confiance à un objet
+            // potentiellement périmé entre la construction du catalogue et
+            // l'exécution effective de l'outil.
+            $freshAgent = McpAgent::query()
+                ->whereKey($agent->id)
+                ->where('site_id', $site->id)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $freshAgent || ! $this->agentCanUseTool($site, $freshAgent, $qualifiedToolName)) {
+                Log::warning('MCP unified: outil refusé hors du périmètre agent', [
+                    'site_id' => $site->id,
+                    'agent_id' => $agent->id,
+                    'tool' => $qualifiedToolName,
+                ]);
+
+                return [
+                    'status' => 'denied',
+                    'result' => ToolResult::fail(
+                        'agent_scope_denied',
+                        'Cet outil n’est pas disponible pour cet agent.',
+                    ),
+                ];
+            }
+
+            $agent = $freshAgent;
+        }
+
+        $parts = ToolSchema::fromQualifiedName($qualifiedToolName);
+        $connectorSlug = $parts['connector'] ?? null;
+        $toolName = $parts['tool'] ?? null;
+
+        if (! is_string($connectorSlug) || trim($connectorSlug) === '' || ! is_string($toolName) || trim($toolName) === '') {
+            return [
+                'status' => 'denied',
+                'result' => ToolResult::fail('invalid_tool_name', 'Nom d’outil invalide.'),
+            ];
+        }
+
+        $actor = ActorContext::fromConversation($conversation);
+        $agentCallKey = $agent
+            ? $this->analytics->deterministicKey(
+                'unified_agent',
+                $conversation->id,
+                $agent->id,
+                $connectorSlug,
+                $toolName,
+                hash('sha256', json_encode($params)),
+            )
+            : null;
+
+        if ($agent && $agentCallKey) {
+            $this->trackAgentExecution($site, $conversation, $agent, AnalyticsEventType::AGENT_STARTED, $agentCallKey);
+        }
+
+        try {
+            $execution = $this->executeHop(
+                $site,
+                $conversation,
+                $actor,
+                $connectorSlug,
+                $toolName,
+                $params,
+                $hop,
+            );
+
+            if ($agent && $agentCallKey && ($execution['status'] ?? null) !== 'awaiting_confirmation') {
+                $this->trackAgentExecution($site, $conversation, $agent, AnalyticsEventType::AGENT_COMPLETED, $agentCallKey);
+            }
+        } catch (Throwable $exception) {
+            if ($agent && $agentCallKey) {
+                $this->trackAgentExecution(
+                    $site,
+                    $conversation,
+                    $agent,
+                    AnalyticsEventType::AGENT_FAILED,
+                    $agentCallKey,
+                    'execution_exception',
+                );
+            }
+
+            throw $exception;
+        }
+
+        if (($execution['status'] ?? null) === 'success' && ($execution['result'] ?? null) instanceof ToolResult) {
+            /** @var ToolResult $result */
+            $result = $execution['result'];
+
+            return [
+                ...$execution,
+                'agent_id' => $agent?->id,
+                'suggested_actions' => $result->success
+                    ? $this->suggestionsFor($site, $actor, $connectorSlug, $toolName, $result->data)
+                    : [],
+            ];
+        }
+
+        return $execution;
+    }
+
+    public function createUnifiedPendingAction(
+        Site $site,
+        Conversation $conversation,
+        string $connectorSlug,
+        string $toolName,
+        array $params,
+        string $confirmActor,
+        string $toolCallId,
+        array $messagesSnapshot,
+        ?McpAgent $agent = null,
+        array $agentScopeSnapshot = [],
+    ): McpPendingAction {
+        return McpPendingAction::create([
+            'id' => (string) Str::uuid(),
+            'site_id' => $site->id,
+            'conversation_id' => $conversation->id,
+            'session_id' => $conversation->metadata['session_id'] ?? null,
+            'correlation_id' => $conversation->metadata['session_id'] ?? $conversation->id,
+            'connector_slug' => $connectorSlug,
+            'tool_name' => $toolName,
+            'params' => $params,
+            'confirm_actor' => $confirmActor,
+            'tool_call_id' => $toolCallId,
+            'messages_snapshot' => $messagesSnapshot,
+            'agent_id' => $agent?->id,
+            'orchestration_mode' => 'unified',
+            'agent_scope_snapshot' => $agentScopeSnapshot !== [] ? $agentScopeSnapshot : null,
+            'status' => 'pending',
+            'expires_at' => now()->addDays(3),
+        ]);
+    }
+
+    public function notifyUnifiedThinking(Site $site, Conversation $conversation, string $label): void
+    {
+        $this->notifyThinking($site, $conversation, $label);
+    }
+
+    public function unifiedThinkingLabel(string $connectorSlug, string $toolName): string
+    {
+        return $this->thinkingLabelFor($connectorSlug, $toolName);
+    }
+
     public function tryHandle(Site $site, Conversation $conversation, string $question, array $history, ?string $intent = null): MCPGateResult
     {
         $actor = ActorContext::fromConversation($conversation);
@@ -210,11 +533,64 @@ class MCPActionGateService
         $actor = ActorContext::fromConversation($conversation);
         $messages = $pendingAction->messages_snapshot;
         $suggestedActions = [];
+        $isUnifiedPending = ($pendingAction->orchestration_mode ?? 'legacy') === 'unified';
+        $agentScope = $isUnifiedPending && is_array($pendingAction->agent_scope_snapshot)
+            ? $pendingAction->agent_scope_snapshot
+            : null;
 
         // 🆕 Reconstruit le même agent (ou aucun) que celui actif au moment de
         // la demande initiale — sinon la reprise pourrait exécuter l'action
         // hors du périmètre qui avait motivé la confirmation.
-        $agent = $pendingAction->agent_id ? McpAgent::find($pendingAction->agent_id) : null;
+        $agent = $pendingAction->agent_id
+            ? ($isUnifiedPending
+                ? McpAgent::query()
+                    ->whereKey($pendingAction->agent_id)
+                    ->where('site_id', $site->id)
+                    ->where('is_active', true)
+                    ->first()
+                : McpAgent::find($pendingAction->agent_id))
+            : null;
+
+        if (
+            $isUnifiedPending
+            && (
+                (
+                    $pendingAction->agent_id !== null
+                    && (
+                        $agent === null
+                        || ! $this->agentCanUseTool(
+                            $site,
+                            $agent,
+                            $pendingAction->connector_slug.'__'.$pendingAction->tool_name,
+                        )
+                    )
+                )
+                || (
+                    is_array($agentScope['allowed_tool_names'] ?? null)
+                    && ! in_array(
+                        $pendingAction->connector_slug.'__'.$pendingAction->tool_name,
+                        $agentScope['allowed_tool_names'],
+                        true,
+                    )
+                )
+            )
+        ) {
+            Log::warning('MCP unified: confirmation refusée hors du périmètre agent courant', [
+                'site_id' => $site->id,
+                'conversation_id' => $conversation->id,
+                'agent_id' => $pendingAction->agent_id,
+                'tool' => $pendingAction->connector_slug.'__'.$pendingAction->tool_name,
+            ]);
+
+            return MCPGateResult::finished(
+                new ChatResponse(
+                    message: "Cette action n'est plus disponible dans le périmètre de sécurité actuel.",
+                    ctas: [],
+                    entities: [],
+                ),
+                [],
+            );
+        }
 
         if (! $approved) {
             $messages[] = ['role' => 'tool', 'tool_call_id' => $pendingAction->tool_call_id, 'content' => json_encode(['status' => 'declined'])];
@@ -233,15 +609,55 @@ class MCPActionGateService
             ? array_values(array_filter($permittedTools, fn ($t) => in_array($t->qualifiedName(), $agentAllowedNames, true)))
             : $permittedTools;
 
+        // Une reprise unifiée doit conserver l'union des compétences
+        // originale, et non la réduire au seul agent qui portait l'action
+        // confirmée : le tour initial pouvait couvrir plusieurs domaines.
+        if ($agentScope !== null && is_array($agentScope['allowed_tool_names'] ?? null)) {
+            $scopedTools = array_values(array_filter(
+                $permittedTools,
+                static fn (ToolSchema $tool): bool => in_array(
+                    $tool->qualifiedName(),
+                    $agentScope['allowed_tool_names'],
+                    true,
+                ),
+            ));
+        }
+
+        $resumeToolSchemas = $isUnifiedPending
+            ? $scopedTools
+            : [...$scopedTools, $this->ragTool->schema()];
         $tools = [
             ...$this->controlTools(),
-            ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), [...$scopedTools, $this->ragTool->schema()]),
+            ...array_map(fn (ToolSchema $t) => $t->toOpenAIFormat(), $resumeToolSchemas),
         ];
 
-        return $this->runLoop($site, $conversation, $actor, $messages, $tools, hop: $this->maxHops, trace: [], suggestedActions: $suggestedActions, agent: $agent);
+        return $this->runLoop(
+            $site,
+            $conversation,
+            $actor,
+            $messages,
+            $tools,
+            hop: $this->maxHops,
+            trace: [],
+            suggestedActions: $suggestedActions,
+            agent: $agent,
+            agentScope: $agentScope,
+        );
     }
 
-    private function runLoop(Site $site, Conversation $conversation, ActorContext $actor, array $messages, array $tools, int $hop, array $trace, array $suggestedActions = [], array $executedCalls = [], ?McpAgent $agent = null): MCPGateResult
+    private function runLoop(
+        Site $site,
+        Conversation $conversation,
+        ActorContext $actor,
+        array $messages,
+        array $tools,
+        int $hop,
+        array $trace,
+        array $suggestedActions = [],
+        array $executedCalls = [],
+        ?McpAgent $agent = null,
+        ?array $agentScope = null,
+    ): MCPGateResult
     {
         while ($hop <= $this->maxHops) {
             if ($hop === 1) {
@@ -275,6 +691,31 @@ class MCPActionGateService
                     );
                 }
 
+                $unifiedToolAgent = $agentScope !== null
+                    ? $this->activeAgentForUnifiedTool($site, $qualifiedName, $agentScope)
+                    : null;
+                if (
+                    $agentScope !== null
+                    && ! empty($agentScope['agent_ids'] ?? [])
+                    && $unifiedToolAgent === null
+                ) {
+                    $trace[] = [
+                        'hop' => $hop,
+                        'connector' => 'unknown',
+                        'tool' => $qualifiedName,
+                        'status' => 'agent_scope_denied',
+                    ];
+                    $messages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $toolCallId,
+                        'content' => json_encode(ToolResult::fail(
+                            'agent_scope_denied',
+                            'Cet outil n’est pas disponible dans le périmètre multi-agent de cette demande.',
+                        )->toArrayForLLM()),
+                    ];
+                    continue;
+                }
+
                 [$connectorSlug, $toolName] = array_values(ToolSchema::fromQualifiedName($qualifiedName));
 
                 // 🆕 Garde-fou anti-doublon : le LLM redemande EXACTEMENT le même
@@ -304,10 +745,66 @@ class MCPActionGateService
                     $this->notifyThinking($site, $conversation, $this->thinkingLabelFor($connectorSlug, $toolName));
                 }
 
-                $execution = $this->executeHop($site, $conversation, $actor, $connectorSlug, $toolName, $args, $hop);
+                $agentForExecution = $unifiedToolAgent ?? $agent;
+                $agentCallKey = $agentScope !== null && $agentForExecution
+                    ? $this->analytics->deterministicKey(
+                        'unified_agent',
+                        $conversation->id,
+                        $agentForExecution->id,
+                        $connectorSlug,
+                        $toolName,
+                        hash('sha256', json_encode($args)),
+                    )
+                    : null;
+
+                if ($agentScope !== null && $agentForExecution && $agentCallKey) {
+                    $this->trackAgentExecution(
+                        $site,
+                        $conversation,
+                        $agentForExecution,
+                        AnalyticsEventType::AGENT_STARTED,
+                        $agentCallKey,
+                    );
+                }
+
+                try {
+                    $execution = $this->executeHop($site, $conversation, $actor, $connectorSlug, $toolName, $args, $hop);
+
+                    if (
+                        $agentScope !== null
+                        && $agentForExecution
+                        && $agentCallKey
+                        && ($execution['status'] ?? null) !== 'awaiting_confirmation'
+                    ) {
+                        $this->trackAgentExecution(
+                            $site,
+                            $conversation,
+                            $agentForExecution,
+                            AnalyticsEventType::AGENT_COMPLETED,
+                            $agentCallKey,
+                        );
+                    }
+                } catch (Throwable $exception) {
+                    if ($agentScope !== null && $agentForExecution && $agentCallKey) {
+                        $this->trackAgentExecution(
+                            $site,
+                            $conversation,
+                            $agentForExecution,
+                            AnalyticsEventType::AGENT_FAILED,
+                            $agentCallKey,
+                            'execution_exception',
+                        );
+                    }
+
+                    throw $exception;
+                }
                 $trace[] = ['hop' => $hop, 'connector' => $connectorSlug, 'tool' => $toolName, 'status' => $execution['status']];
 
                 if ($execution['status'] === 'awaiting_confirmation') {
+                    $pendingAgent = $agentScope !== null
+                        ? ($unifiedToolAgent ?? $agent)
+                        : $agent;
+
                     $pendingAction = McpPendingAction::create([
                         'id' => (string) Str::uuid(),
                         'site_id' => $site->id,
@@ -320,7 +817,9 @@ class MCPActionGateService
                         'confirm_actor' => $execution['confirm_actor'],
                         'tool_call_id' => $toolCallId,
                         'messages_snapshot' => $messages,
-                        'agent_id' => $agent?->id, // 🆕
+                        'agent_id' => $pendingAgent?->id, // 🆕
+                        'orchestration_mode' => $agentScope !== null ? 'unified' : 'legacy',
+                        'agent_scope_snapshot' => $agentScope,
                         'status' => 'pending',
                         'expires_at' => now()->addDays(3),
                     ]);
@@ -738,7 +1237,7 @@ PROMPT;
         $timezone = config('app.timezone', 'UTC');
         $now = now($timezone)->locale('fr')->isoFormat('dddd D MMMM YYYY [à] HH:mm');
 
-        return <<<PROMPT
+        $prompt = <<<PROMPT
 Tu es le module de décision d'action de l'assistant du site {$name}. {$roleNote} {$intentHint} Nous sommes
 actuellement le {$now} (fuseau horaire {$timezone}). Utilise cette date comme référence exacte pour tout calcul
 relatif (aujourd'hui, demain, cette semaine...). Exprime toute date/heure envoyée à un outil au format ISO 8601
@@ -758,7 +1257,73 @@ demande explicite — n'agis ainsi que si le signal est net et que l'action est 
 duplique jamais une action déjà réalisée dans cette même conversation.
 N'appelle jamais clear_cart sauf si le visiteur demande explicitement de vider son panier. Si un outil retourne
 un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche automatiquement séparément.
-PROMPT.$this->agentPersona($agent).$this->workflowGuidance($site, $agentAllowedNames, $agentWorkflowIds);
+PROMPT;
+
+        return $prompt.$this->agentPersona($agent).$this->workflowGuidance($site, $agentAllowedNames, $agentWorkflowIds);
+    }
+
+    /**
+     * Prompt de coordination pour plusieurs agents actifs.
+     *
+     * Les outils restent une union strictement filtrée par les compétences de
+     * chaque agent. Le modèle coordonne la demande dans une seule conversation
+     * et le serveur conserve l'association outil -> agent pour l'autorisation,
+     * l'audit, les métriques et les confirmations.
+     *
+     * @param array<int, McpAgent> $agents
+     * @param array<string, array<int, string>> $agentToolNames
+     */
+    private function multiAgentSystemPrompt(
+        Site $site,
+        ActorContext $actor,
+        ?string $intent,
+        array $agents,
+        array $agentToolNames,
+    ): string {
+        // Aucun workflow global ne doit être réintroduit par le prompt de base :
+        // chaque agent ne voit que les workflows qui lui sont attribués.
+        $prompt = $this->systemPrompt($site, $actor, $intent, null, [], []);
+        $roster = [];
+        $workflowGuidance = [];
+
+        foreach ($agents as $agent) {
+            $agentId = (string) $agent->id;
+            $tools = $agentToolNames[$agentId] ?? [];
+            $toolSummary = $tools !== []
+                ? implode(', ', $tools)
+                : 'aucun outil MCP attribué';
+            $objective = trim((string) ($agent->objective ?? '')) ?: 'objectif général non précisé';
+
+            $roster[] = "- {$agent->name} : {$objective}. Outils autorisés : {$toolSummary}.";
+
+            $agentWorkflows = $this->workflowGuidance(
+                $site,
+                $tools,
+                is_array($agent->workflow_ids) ? $agent->workflow_ids : [],
+            );
+            if ($agentWorkflows !== '') {
+                $workflowGuidance[] = "Workflows de l'agent « {$agent->name} » :{$agentWorkflows}";
+            }
+        }
+
+        $prompt .= "\n\nMODE COORDINATION MULTI-AGENT :\n"
+            ."Tu es l'assistant coordinateur d'une équipe interne. Les agents ci-dessous "
+            ."définissent des domaines et des outils autorisés, mais ils ne doivent jamais "
+            ."être mentionnés au visiteur.\n"
+            ."Détermine directement si la demande nécessite une réponse textuelle, un outil "
+            ."d'un agent ou plusieurs outils de domaines différents. Pour plusieurs sujets, "
+            ."respecte l'ordre logique et ne répète pas une action déjà exécutée.\n"
+            ."Les permissions serveur et les confirmations restent obligatoires même si un "
+            ."outil apparaît dans ce catalogue. N'invente jamais le résultat d'un agent ou "
+            ."d'un outil. Réponds au visiteur avec une seule réponse cohérente, dans le ton "
+            ."professionnel de l'assistant, sans exposer cette orchestration.\n\n"
+            ."Agents actifs :\n".implode("\n", $roster);
+
+        if ($workflowGuidance !== []) {
+            $prompt .= "\n\n".implode("\n", $workflowGuidance);
+        }
+
+        return $prompt;
     }
 
     private function thinkingLabelFor(string $connectorSlug, string $toolName): string
@@ -971,6 +1536,48 @@ PROMPT.$this->agentPersona($agent).$this->workflowGuidance($site, $agentAllowedN
         $allowedNames = $this->agentSkills->resolveAllowedToolNames($site, $agent->skills);
 
         return array_values(array_filter($tools, fn (ToolSchema $t) => in_array($t->qualifiedName(), $allowedNames, true)));
+    }
+
+    private function agentCanUseTool(Site $site, McpAgent $agent, string $qualifiedToolName): bool
+    {
+        // Comme dans le routage historique, un agent sans compétences
+        // explicites reste généraliste sur les outils déjà autorisés par le
+        // PermissionEngine. Il ne peut toutefois jamais élargir ces permissions.
+        if (empty($agent->skills)) {
+            return true;
+        }
+
+        return in_array(
+            $qualifiedToolName,
+            $this->agentSkills->resolveAllowedToolNames($site, $agent->skills),
+            true,
+        );
+    }
+
+    private function activeAgentForUnifiedTool(
+        Site $site,
+        string $qualifiedToolName,
+        array $agentScope,
+    ): ?McpAgent {
+        $agentIds = $agentScope['tool_agent_ids'][$qualifiedToolName] ?? [];
+        if (! is_array($agentIds) || $agentIds === []) {
+            return null;
+        }
+
+        $agents = McpAgent::query()
+            ->where('site_id', $site->id)
+            ->where('is_active', true)
+            ->whereIn('id', array_map('strval', $agentIds))
+            ->get()
+            ->keyBy(fn (McpAgent $agent): string => (string) $agent->id);
+
+        foreach (array_map('strval', $agentIds) as $agentId) {
+            if ($agents->has($agentId)) {
+                return $agents->get($agentId);
+            }
+        }
+
+        return null;
     }
 
     private function agentPersona(?McpAgent $agent): string

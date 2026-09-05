@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\v1;
 
 use App\Enums\AnalyticsEventType;
+use App\Jobs\UpdateConversationContextJob;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Document;
@@ -47,7 +48,9 @@ class ChatController extends Controller
             // 🖼️ La question devient optionnelle : un visiteur peut envoyer
             // uniquement une image ("qu'est-ce que c'est ?" implicite).
             'question' => 'nullable|string|max:1000',
-            'conversation_id' => 'nullable|exists:conversations,id',
+            // Le widget peut réserver un UUID local avant le traitement afin
+            // de s'abonner à Mercure dès le premier message.
+            'conversation_id' => 'nullable|uuid',
             'visitor_id' => 'nullable|exists:visitors,id',
             'session_id' => 'nullable|string|max:100',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192', // 8 Mo, cohérent avec vision.max_image_bytes
@@ -71,17 +74,22 @@ class ChatController extends Controller
         $site = Site::where('id', $data['site_id'])
             ->firstOrFail();
 
-        // 🔑 Continuité OU nouvelle conversation
-        $isNewConversation = empty($data['conversation_id']);
+        // 🔑 Continuité OU nouvelle conversation. Un widget peut fournir un
+        // UUID encore inexistant pour s'abonner au topic Mercure avant le
+        // début du traitement LLM.
+        $requestedConversationId = $data['conversation_id'] ?? null;
+        $conversationAlreadyExists = $requestedConversationId !== null
+            && Conversation::whereKey($requestedConversationId)->exists();
+        $isNewConversation = !$conversationAlreadyExists;
 
         if (!$isNewConversation) {
-            $conversation = Conversation::where('id', $data['conversation_id'])
+            $conversation = Conversation::where('id', $requestedConversationId)
                 ->where('site_id', $site->id) // ✅ sécurité supplémentaire
                 ->when($userId, fn ($q) => $q->where('user_id', $userId))
                 ->when(!$userId && $visitorId, fn ($q) => $q->where('visitor_id', $visitorId))
                 ->firstOrFail();
         } else {
-            $conversation = Conversation::create([
+            $conversation = new Conversation([
                 'site_id' => $site->id,
                 'user_id' => $userId,
                 'visitor_id' => $visitorId,
@@ -90,6 +98,10 @@ class ChatController extends Controller
                     'session_id' => $data['session_id'] ?? null,
                 ]),
             ]);
+            // saveQuietly() conserve l'UUID fourni par le widget. Le modèle
+            // génère toujours son UUID habituel lorsque ce champ est absent.
+            $conversation->id = $requestedConversationId ?? (string) Str::uuid();
+            $conversation->saveQuietly();
 
         }
 
@@ -238,23 +250,9 @@ class ChatController extends Controller
             "Conversation Message Count" => $conversation->messages->count()
         ]);
 
-        if ($messageCount === 1) {
-            // Premier message => extraction immédiate
-            $memory = $this->chatService->extractStructuredMemoryFromMessage($userMessage);
-
-            //dd($memory);
-            if (!empty($memory)) {
-                DB::table('conversation_memories')->updateOrInsert(
-                    ['conversation_id' => $conversation->id],
-                    [
-                        'id' => (string) Str::uuid(),
-                        'memory' => json_encode($memory),
-                        'updated_at' => now(),
-                        'created_at' => now(),
-                    ]
-                );
-            }
-        }
+        // Le premier message conserve son déclenchement mémoire, mais
+        // l'extraction est exécutée après la réponse par le job différé.
+        $isFirstConversationMessage = $messageCount === 1;
 
         //dd("On verifie", ConversationMemory::where('conversation_id', $conversation->id)->get());
 
@@ -358,13 +356,18 @@ class ChatController extends Controller
 
         $messageCount = $conversation->messages()->count(); // Je recalcule
 
-        if ($messageCount % 5 === 0) {
-            // ✅ Ici, après l’indexation et avant d’envoyer la réponse
-            $this->chatService->updateConversationMemory($conversation); // ✅ mémoire structurée
-        }
+        $updateMemory = ($messageCount % 5 === 0) || $chatResponse->memoryRefreshRequested;
+        $updateSummary = $messageCount % 8 === 0;
 
-        if ($messageCount % 8 === 0){
-            $this->chatService->updateConversationSummary($conversation);
+        if ($updateMemory || $updateSummary) {
+            // Le job est enregistré après l'envoi de la réponse HTTP : les deux
+            // appels LLM de contexte ne ralentissent donc pas le visiteur.
+            UpdateConversationContextJob::dispatchAfterResponse(
+                conversationId: (string) $conversation->id,
+                updateMemory: $updateMemory,
+                updateSummary: $updateSummary,
+                memoryMessageId: $isFirstConversationMessage ? (string) $userMessage->id : null,
+            );
         }
 
 

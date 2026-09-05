@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Jobs\crawl;
+use romanzipp\QueueMonitor\Traits\IsMonitored;
 
 use App\Models\CrawlJob;
 use App\Models\Site;
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Log;
 // CheckCrawlCompletionJob.php
 class CheckCrawlCompletionJob implements ShouldQueue
 {
+    use IsMonitored;
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     protected string $siteId;

@@ -187,6 +187,17 @@ class McpCapabilityPlaybookSeeder extends Seeder
                 'connector_slugs' => ['google_analytics', 'mailchimp'],
                 'priority_tier' => 2,
             ],
+
+            // Microsoft 365 est recommandé comme un seul connecteur unifié :
+            // ses permissions détaillées sont choisies dans le Marketplace.
+            [
+                'key' => 'microsoft365_productivity_hub',
+                'label' => 'Hub de productivité Microsoft 365',
+                'value_pitch' => "Retrouvez vos documents OneDrive/SharePoint, vos données Excel et vos échanges Outlook ou Teams depuis ELChat, avec des permissions choisies par votre site.",
+                'applicable_type_sites' => ['Intranet / Extranet', 'Portail institutionnel', 'SaaS', 'Application web', 'PWA'],
+                'connector_slugs' => ['microsoft_365'],
+                'priority_tier' => 1,
+            ],
         ];
 
         foreach ($playbooks as $playbook) {

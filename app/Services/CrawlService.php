@@ -7,6 +7,7 @@ use App\Models\Page;
 use App\Models\Site;
 use App\Models\Vision\PageImage;
 use App\Models\WidgetSetting;
+use App\Services\hops\LLMService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -1212,6 +1213,32 @@ EOT,
             ...($prompt['messages'] ?? []),
         ];
 
+        try {
+            return app(LLMService::class)->chat($messages, [
+                'task' => 'crawl',
+                'temperature' => (float) ($settings->ai_temperature ?? 0.2),
+                'max_tokens' => (int) ($settings->ai_max_tokens ?? 800),
+            ]);
+        } catch (Throwable $exception) {
+            Log::warning('Crawl LLM centralisé indisponible, utilisation du fallback sûr', [
+                'site_id' => $site->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        // Le client central a déjà géré les retries et le modèle de secours.
+        return json_encode([
+            'type' => 'fallback',
+            'intents' => ['information'],
+            'entities' => [],
+            'sections' => [[
+                'title' => 'Information',
+                'content' => $context ?: 'Information non disponible',
+                'intent' => 'information',
+            ]],
+            'rag_text' => $context ?: "Informations fournies par {$companyName}",
+        ], JSON_UNESCAPED_UNICODE);
+
         $maxRetries = 5;
         $delaySeconds = 1;
 
@@ -1232,7 +1259,7 @@ EOT,
                         'X-Title' => 'RAG SaaS Engine',
                     ])
                     ->post('https://openrouter.ai/api/v1/chat/completions', [
-                        'model' => 'meta-llama/llama-3.1-8b-instruct',
+                        'model' => config('llm.tasks.crawl.model'),
                         'messages' => $messages,
                         'temperature' => floatval($settings->ai_temperature ?? 0.2),
                         'max_tokens' => intval($settings->ai_max_tokens ?? 800),

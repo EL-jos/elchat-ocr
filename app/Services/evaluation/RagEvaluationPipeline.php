@@ -118,6 +118,8 @@ class RagEvaluationPipeline
                 'role' => 'user',
                 'content' => $this->buildPrompt($query, $selectedContext)
             ]
+        ], [
+            'task' => 'rag_answer',
         ]);
 
         // =========================================================
@@ -192,7 +194,7 @@ class RagEvaluationPipeline
             'execution_meta' => [
                 'site_id' => $siteId,
                 'timestamp' => now()->toIso8601String(),
-                'model' => config('llm.model', 'unknown'),
+                'model' => config('llm.tasks.rag_answer.model', 'unknown'),
                 'pipeline_version' => 'v1',
             ]
         ];
