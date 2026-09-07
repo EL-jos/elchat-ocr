@@ -30,6 +30,10 @@ return [
     // ponctuellement un budget différent.
     'multi_hop' => [
         'max_hops' => max(1, (int) env('LLM_MULTI_HOP_MAX_HOPS', 2)),
+        // Nombre maximal de seed queries dont les recherches hybrides sont
+        // lancées simultanément. La borne évite de saturer PHP-FPM, Qdrant ou
+        // Meilisearch lorsqu'un plan contient beaucoup de variantes.
+        'seed_parallelism' => min(8, max(1, (int) env('LLM_MULTI_HOP_SEED_PARALLELISM', 4))),
     ],
 
     'tasks' => [

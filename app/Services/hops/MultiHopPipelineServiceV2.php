@@ -74,35 +74,70 @@ class MultiHopPipelineServiceV2
         $state = $this->initState($objectives, $plan);
 
         // 🔥 inject initial evidence BEFORE hops
-        if (empty($state['evidence'])) {
-            foreach ($seedQueries as $q) {
+        if (empty($state['evidence']) && $seedQueries !== []) {
+            // Les embeddings sont calculés en lots et conservent l'ordre des
+            // seed queries. Cela remplace N appels API par un nombre borné de
+            // requêtes batchées, sans modifier le score de retrieval.
+            $seedEmbeddings = $this->embeddingService->getEmbeddings($seedQueries);
+            if (count($seedEmbeddings) !== count($seedQueries)) {
+                throw new \RuntimeException('Seed embedding count does not match seed query count.');
+            }
 
-                $results = $this->retrieve($q, $site, $state, $actor);
+            $seedParallelism = min(8, max(1, (int) config('llm.multi_hop.seed_parallelism', 4)));
 
-                if (empty($results)) continue;
+            // Les appels réseau sont parallèles par petits lots. La phase de
+            // traitement ci-dessous reste séquentielle pour garder exactement
+            // le comportement historique de visited_ids/filterRedundant.
+            foreach (array_chunk($seedQueries, $seedParallelism, true) as $seedBatch) {
+                $batchRequests = [];
+                $batchIndexes = [];
 
-                // 🔥 RERANK léger (clé)
-                $results = $this->reranker->rerank(
-                    query: $q,
-                    chunks: $results,
-                    topK: 6
-                );
+                foreach ($seedBatch as $queryIndex => $q) {
+                    $batchIndexes[] = $queryIndex;
+                    $batchRequests[] = [
+                        'query' => $q,
+                        'embedding' => $seedEmbeddings[$queryIndex],
+                        'siteId' => $site->id,
+                        'limit' => 20,
+                    ];
+                }
 
-                // 🔥 OPTION SAFE (encore mieux)
-                $results = $this->contextSelectionService->select(
-                    chunks: $results,
-                    queryPlan: $plan,
-                    limit: 4,
-                    maxTokens: 400
-                );
+                $batchResults = $this->hybridSearchService->searchMany($batchRequests);
 
-                $results = $this->filterRedundant($results, $state);
+                foreach ($batchIndexes as $batchIndex => $queryIndex) {
+                    $q = $seedQueries[$queryIndex];
+                    $retrievedResults = $batchResults[$batchIndex] ?? [];
+                    $results = $this->hydrateAndFilterSeedResults(
+                        $retrievedResults,
+                        $state,
+                        $actor,
+                    );
 
-                $state['evidence'] = array_merge($state['evidence'], $results);
-                $state['visited_ids'] = array_values(array_unique(array_merge(
-                    $state['visited_ids'],
-                    array_column($results, 'id')
-                )));
+                    if (empty($results)) continue;
+
+                    // 🔥 RERANK léger (clé)
+                    $results = $this->reranker->rerank(
+                        query: $q,
+                        chunks: $results,
+                        topK: 6
+                    );
+
+                    // 🔥 OPTION SAFE (encore mieux)
+                    $results = $this->contextSelectionService->select(
+                        chunks: $results,
+                        queryPlan: $plan,
+                        limit: 4,
+                        maxTokens: 400
+                    );
+
+                    $results = $this->filterRedundant($results, $state);
+
+                    $state['evidence'] = array_merge($state['evidence'], $results);
+                    $state['visited_ids'] = array_values(array_unique(array_merge(
+                        $state['visited_ids'],
+                        array_column($results, 'id')
+                    )));
+                }
             }
         }
 
@@ -409,6 +444,23 @@ CONTENT;
         // ❗ anti re-fetch
         return array_filter($results, fn($r)
         => !in_array($r['id'], $state['visited_ids']));
+    }
+
+    /**
+     * Hydrate une seed query déjà recherchée dans un pool HTTP.
+     * Le filtrage des IDs reste local et séquentiel, après la fin du pool.
+     */
+    protected function hydrateAndFilterSeedResults(
+        array $results,
+        array $state,
+        ?ActorContext $actor = null,
+    ): array {
+        $results = $this->chunkHydrationService->hydrate($results, $actor);
+
+        return array_values(array_filter(
+            $results,
+            fn ($result): bool => ! in_array($result['id'], $state['visited_ids'], true),
+        ));
     }
     // =====================================================
     // 🚫 ANTI REDUNDANCY

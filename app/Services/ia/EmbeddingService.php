@@ -72,6 +72,62 @@ class EmbeddingService
     }
 
     /**
+     * Retourne un embedding par texte dans le même ordre que les entrées.
+     *
+     * Cette méthode est destinée aux requêtes courtes (par exemple les seed
+     * queries du retrieval). Les lots sont limités afin de garder une taille
+     * de requête maîtrisée et LLMService conserve la gestion centralisée des
+     * retries, timeouts et modèles de secours.
+     *
+     * @return array<int, array<int, float>>
+     */
+    public function getEmbeddings(array $texts): array
+    {
+        if ($texts === []) {
+            return [];
+        }
+
+        $inputs = [];
+
+        foreach (array_values($texts) as $text) {
+            if (! is_string($text)) {
+                throw new RuntimeException('Embedding inputs must be strings.');
+            }
+
+            $normalized = $this->normalize($text);
+            $chunks = $this->chunkByTokens($normalized);
+
+            if ($chunks === []) {
+                throw new RuntimeException('No chunks generated for an embedding input.');
+            }
+
+            // Même compatibilité que getEmbedding() pour un texte trop long :
+            // le premier chunk représente l'entrée dans le retrieval court.
+            $inputs[] = $chunks[0];
+        }
+
+        $results = [];
+
+        foreach (array_chunk($inputs, self::BATCH_SIZE) as $batch) {
+            $embeddings = $this->requestEmbeddings($batch);
+
+            if (count($embeddings) !== count($batch)) {
+                throw new RuntimeException('Embedding API returned an unexpected number of embeddings.');
+            }
+
+            foreach ($embeddings as $embedding) {
+                if (! is_array($embedding) || $embedding === []) {
+                    throw new RuntimeException('Embedding API returned an invalid embedding.');
+                }
+
+                $results[] = $embedding;
+            }
+        }
+
+        return $results;
+    }
+
+    /**
      * Nouvelle méthode PRO :
      * retourne tous les embeddings des chunks
      *

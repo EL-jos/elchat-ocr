@@ -23,24 +23,80 @@ class HybridSearchService
         int $limit = 10,
         float $scoreThreshold = 0.15,
     ): array {
+        return $this->searchMany([[
+            'query' => $query,
+            'embedding' => $embedding,
+            'siteId' => $siteId,
+            'limit' => $limit,
+            'scoreThreshold' => $scoreThreshold,
+        ]])[0] ?? [];
+    }
 
-        $collection = "chunks_{$siteId}";
+    /**
+     * Exécute plusieurs recherches hybrides dans un seul pool HTTP.
+     *
+     * Le tableau retourné conserve exactement l'ordre des requêtes entrantes.
+     * La méthode ne fusionne jamais les requêtes entre elles : chaque entrée
+     * reçoit son propre RRF, ce qui préserve le scoring historique de search().
+     * Le caller peut découper les entrées en lots pour contrôler la concurrence.
+     *
+     * @param array<int, array{
+     *     query:string,
+     *     embedding:array<int, float>,
+     *     siteId:string,
+     *     limit?:int,
+     *     scoreThreshold?:float
+     * }> $requests
+     * @return array<int, array<int, array<string, mixed>>>
+     */
+    public function searchMany(array $requests): array
+    {
+        if ($requests === []) {
+            return [];
+        }
 
-        // 1️⃣ Retrieve en parallèle. Le chemin REST est limité à cette
-        // recherche hybride afin de conserver le SDK Meilisearch ailleurs.
-        $qdrantUrl = rtrim((string) config('qdrant.url'), '/')
-            . "/collections/{$collection}/points/search";
+        $prepared = [];
 
-        $responses = Http::pool(function (Pool $pool) use (
-            $qdrantUrl,
-            $query,
-            $embedding,
-            $siteId,
-            $limit,
-            $scoreThreshold,
-        ) {
-            return [
-                'vector' => $pool->as('vector')
+        foreach (array_values($requests) as $request) {
+            if (! is_array($request)) {
+                throw new \InvalidArgumentException('Hybrid search requests must be arrays.');
+            }
+
+            $query = $request['query'] ?? null;
+            $embedding = $request['embedding'] ?? null;
+            $siteId = $request['siteId'] ?? null;
+
+            if (
+                ! is_string($query)
+                || trim($query) === ''
+                || ! is_array($embedding)
+                || $embedding === []
+                || ! is_string($siteId)
+                || trim($siteId) === ''
+            ) {
+                throw new \InvalidArgumentException('Invalid hybrid search request.');
+            }
+
+            $prepared[] = [
+                'query' => $query,
+                'embedding' => $embedding,
+                'siteId' => $siteId,
+                'limit' => max(1, (int) ($request['limit'] ?? 10)),
+                'scoreThreshold' => (float) ($request['scoreThreshold'] ?? 0.15),
+            ];
+        }
+
+        $responses = Http::pool(function (Pool $pool) use ($prepared): array {
+            $poolRequests = [];
+
+            foreach ($prepared as $index => $request) {
+                $collection = "chunks_{$request['siteId']}";
+                $qdrantUrl = rtrim((string) config('qdrant.url'), '/')
+                    . "/collections/{$collection}/points/search";
+                $vectorAlias = "vector_{$index}";
+                $keywordAlias = "keyword_{$index}";
+
+                $poolRequests[$vectorAlias] = $pool->as($vectorAlias)
                     ->timeout((int) config('qdrant.timeout', 8))
                     ->withHeaders([
                         'api-key' => config('qdrant.api_key'),
@@ -48,47 +104,66 @@ class HybridSearchService
                     ])
                     ->post(
                         $qdrantUrl,
-                        $this->vectorSearch->buildSearchPayload($embedding, $limit, $scoreThreshold),
-                    ),
+                        $this->vectorSearch->buildSearchPayload(
+                            $request['embedding'],
+                            $request['limit'],
+                            $request['scoreThreshold'],
+                        ),
+                    );
 
-                'keyword' => $pool->as('keyword')
+                $poolRequests[$keywordAlias] = $pool->as($keywordAlias)
                     ->timeout(8)
                     ->withHeaders([
                         'Authorization' => 'Bearer ' . config('meilisearch.key'),
                         'Content-Type' => 'application/json',
                     ])
                     ->post(
-                        $this->lexicalSearch->buildSearchUrl($siteId),
-                        $this->lexicalSearch->buildSearchPayload($query, $limit),
-                    ),
-            ];
+                        $this->lexicalSearch->buildSearchUrl($request['siteId']),
+                        $this->lexicalSearch->buildSearchPayload(
+                            $request['query'],
+                            $request['limit'],
+                        ),
+                    );
+            }
+
+            return $poolRequests;
         });
 
-        $vectorResults = $this->vectorSearch->parseSearchResponse(
-            $responses['vector'] ?? null,
-            $collection,
-        );
+        $results = [];
 
-        $vectorResults = collect($vectorResults)
-            ->unique('id')
-            ->values()
-            ->toArray();
+        foreach ($prepared as $index => $request) {
+            $collection = "chunks_{$request['siteId']}";
+            $vectorResults = collect($this->vectorSearch->parseSearchResponse(
+                $responses["vector_{$index}"] ?? null,
+                $collection,
+            ))
+                ->unique('id')
+                ->values()
+                ->toArray();
 
-        $keywordResults = $this->lexicalSearch->parseSearchResponse(
-            $responses['keyword'] ?? null,
-        );
+            $keywordResults = collect($this->lexicalSearch->parseSearchResponse(
+                $responses["keyword_{$index}"] ?? null,
+            ))
+                ->unique('id')
+                ->values()
+                ->toArray();
 
-        /*Log::info("RESULTAT LEXICAL", [
-            'keywords' => $keywordResults,
-        ]);*/
+            $results[] = $this->fuseSearchResults(
+                $request['query'],
+                $vectorResults,
+                $keywordResults,
+            );
+        }
 
-        $keywordResults = collect($keywordResults)
-            ->unique('id')
-            ->values()
-            ->toArray();
+        return $results;
+    }
 
-        // 2️⃣ Convert to ranked lists
-        // 🔥 Dynamic weighting (très important)
+    /**
+     * Applique la fusion historique à une paire de résultats.
+     */
+    protected function fuseSearchResults(string $query, array $vectorResults, array $keywordResults): array
+    {
+        // Convertir en ranked lists sans modifier la formule RRF existante.
         [$vectorWeight, $keywordWeight] = $this->getWeights($query);
 
         $rankedLists = [
@@ -96,26 +171,17 @@ class HybridSearchService
                 'type' => 'vector',
                 'list' => $this->toRankedList($vectorResults),
                 'weight' => $vectorWeight,
-                'raw' => $vectorResults, // 🔥 IMPORTANT
+                'raw' => $vectorResults,
             ],
             [
                 'type' => 'keyword',
                 'list' => $this->toRankedList($keywordResults),
                 'weight' => $keywordWeight,
-                'raw' => $keywordResults, // 🔥 IMPORTANT
+                'raw' => $keywordResults,
             ],
         ];
 
-        // 3️⃣ RRF Fusion
-        //$fused = $this->reciprocalRankFusion($rankedLists);
-        /*Log::info("SOURCES DE LA RECHERCHE", [
-            "rankedLists" => $rankedLists,
-        ]);*/
-        $fused = $this->reciprocalRankFusionWeighted($rankedLists);
-
-        // 4️⃣ Hydratation minimale (ids uniquement)
-        return collect($fused)
-            //->take($limit)
+        return collect($this->reciprocalRankFusionWeighted($rankedLists))
             ->values()
             ->toArray();
     }
