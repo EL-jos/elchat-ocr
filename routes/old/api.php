@@ -364,8 +364,8 @@ Route::prefix('v1')->group(function () {
             ->middleware(['widget.origin', 'throttle:120,1']);
         Route::post('/site/{site}/visitor-intelligence/events', [VisitorIntelligenceIngestionController::class, 'store'])
             ->middleware(['widget.origin', 'throttle:300,1']);
-        /*Route::post('/site/{site}/visitor-intelligence/frames', [VisitorIntelligenceIngestionController::class, 'frame'])
-            ->middleware(['widget.origin', 'throttle:300,1']);*/
+        Route::post('/site/{site}/visitor-intelligence/frames', [VisitorIntelligenceIngestionController::class, 'frame'])
+            ->middleware(['widget.origin', 'throttle:300,1']);
         Route::post('/site/{site}/visitor-intelligence/replay-chunks', [VisitorIntelligenceIngestionController::class, 'replayChunk'])
             ->middleware(['widget.origin', 'throttle:120,1']);
     });

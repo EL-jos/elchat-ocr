@@ -11,19 +11,6 @@ use Illuminate\Support\Str;
 
 class VisitorIntelligenceReplayService
 {
-    /**
-     * rrweb sérialise le DOM en JSON imbriqué (node.childNodes[].childNodes[]...),
-     * donc la profondeur JSON reflète directement la profondeur d'imbrication réelle
-     * du DOM source. Un site construit avec un page builder (Elementor, WPBakery...)
-     * dépasse couramment plusieurs dizaines de niveaux rien que dans son squelette
-     * structurel. Cette constante DOIT rester identique à l'écriture (storeChunk)
-     * et à la lecture (decodeChunk) : un écart entre les deux fait qu'un chunk
-     * s'encode et se stocke avec succès, puis devient illisible à la relecture
-     * sans qu'aucune erreur ne soit jamais remontée à l'écriture — exactement le
-     * bug qui a produit les 422 "Le chunk rrweb est illisible." sur DOM profond.
-     */
-    private const JSON_MAX_DEPTH = 512;
-
     public function storeChunk(Site $site, VisitorSession $session, array $data): array
     {
         abort_unless($session->site_id === $site->id, 404, 'Session introuvable.');
@@ -32,7 +19,7 @@ class VisitorIntelligenceReplayService
         abort_if($events === [], 422, 'Le chunk rrweb ne contient aucun événement exploitable.');
 
         try {
-            $json = json_encode($events, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR, self::JSON_MAX_DEPTH);
+            $json = json_encode($events, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
             $compressed = gzencode($json, 6);
         } catch (\Throwable $exception) {
             Log::warning('Visitor Intelligence rrweb chunk encoding failed.', [
@@ -185,12 +172,10 @@ class VisitorIntelligenceReplayService
         $json = gzdecode($compressed);
         if (!is_string($json)) return [];
         try {
-            $events = json_decode($json, true, self::JSON_MAX_DEPTH, JSON_THROW_ON_ERROR);
-        } catch (\Throwable $exception) {
-            Log::warning('Visitor Intelligence rrweb chunk decoding failed.', [
-                'error' => $exception->getMessage(),
-                'payload_bytes' => strlen($payload),
-            ]);
+            $events = json_decode($json, true, 64, JSON_THROW_ON_ERROR);
+            Log::info("OK à profondeur 64");
+        } catch (\Throwable $e) {
+            Log::error("ÉCHEC à profondeur 64 : " . $e->getMessage());
             return [];
         }
         return is_array($events) ? $events : [];

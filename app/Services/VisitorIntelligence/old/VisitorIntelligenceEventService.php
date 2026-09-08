@@ -9,6 +9,7 @@ use App\Models\Visitor;
 use App\Models\VisitorSession;
 use App\Services\analytics\AnalyticsEventService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -50,6 +51,7 @@ class VisitorIntelligenceEventService
 
     public function __construct(
         private readonly AnalyticsEventService $analytics,
+        private readonly VisitorIntelligenceFrameService $frames,
     )
     {
     }
@@ -161,6 +163,42 @@ class VisitorIntelligenceEventService
         }
     }
 
+    public function captureFrame(
+        Site $site,
+        UploadedFile $screenshot,
+        array $data,
+        Request $request,
+    ): array {
+        [$visitor, $isNewVisitor] = $this->resolveVisitor($site, (string) $data['visitor_uuid'], $request);
+        $event = [
+            'event_id' => (string) ($data['event_id'] ?? Str::uuid()),
+            'event_type' => AnalyticsEventType::POINTER_MOVE->value,
+            'occurred_at' => $data['occurred_at'] ?? now()->toISOString(),
+            'page_url' => $data['page_url'] ?? null,
+            'path' => $data['path'] ?? null,
+            'title' => $data['title'] ?? null,
+            'metadata' => $data['metadata'] ?? [],
+        ];
+        $session = $this->ensureSession($site, $visitor, (string) $data['session_id'], $event, $isNewVisitor);
+        $frame = $this->frames->store($screenshot, $site, $session, $event['event_id']);
+        $event['metadata'] = [
+            ...($event['metadata'] ?? []),
+            'screenshot_url' => $frame['url'],
+            'screenshot_path' => $frame['path'],
+            'screenshot_bytes' => $frame['bytes'],
+        ];
+
+        // A frame must be visible to the replay as soon as the upload has
+        // completed. Other browser events may remain asynchronous.
+        $this->capture($site, $session, $visitor, $event, $request, false);
+
+        return [
+            'visitor_id' => (string) $visitor->id,
+            'session_id' => $session->session_key,
+            'screenshot_url' => $frame['url'],
+        ];
+    }
+
     /** Apply only after AnalyticsEventService has accepted a new event. */
     public function applyRecordedEvent(AnalyticsEvent $event): ?VisitorSession
     {
@@ -244,8 +282,11 @@ class VisitorIntelligenceEventService
             'intent_level', 'outcome', 'question_hash', 'resource_type', 'resource_id',
             'image_url', 'image_width', 'image_height', 'image_x', 'image_y',
             'viewport_width', 'viewport_height', 'cursor_x', 'cursor_y', 'pointer_type',
-            'surface', 'page_width', 'page_height',
-            'scroll_x', 'scroll_y', 'scroll_source', 'scroll_positions', 'cursor_page_x', 'cursor_page_y',
+            'surface', 'screenshot_url', 'screenshot_path', 'screenshot_bytes',
+            'screenshot_width', 'screenshot_height', 'page_width', 'page_height',
+            'scroll_x', 'scroll_y', 'scroll_source', 'scroll_positions', 'cursor_page_x', 'cursor_page_y', 'frame_index',
+            'capture_mode', 'capture_scale', 'host_viewport_width', 'host_viewport_height',
+            'widget_left', 'widget_top', 'widget_width', 'widget_height',
         ];
         $result = [];
         foreach (array_merge($metadata, array_filter([
@@ -267,12 +308,14 @@ class VisitorIntelligenceEventService
             // removed by the privacy filter.
             if (
                 is_string($value)
-                && $key !== 'scroll_positions'
+                && !in_array($key, ['screenshot_url', 'screenshot_path', 'scroll_positions'], true)
                 && preg_match('/(?:@|\+?\d[\d\s().-]{7,})/', $value)
             ) continue;
             if (in_array($key, ['page_url', 'referrer', 'image_url'], true)) {
                 $value = Str::limit($this->safeUrl((string) $value), 2048, '');
-            } elseif (in_array($key, ['path', 'title', 'target'], true)) {
+            } elseif ($key === 'screenshot_url') {
+                $value = Str::limit($this->safeScreenshotUrl((string) $value), 2048, '');
+            } elseif (in_array($key, ['path', 'title', 'target', 'screenshot_path'], true)) {
                 $value = Str::limit((string) $value, 255, '');
             } elseif ($key === 'scroll_positions') {
                 $value = $this->sanitizeScrollPositions($value);
@@ -282,7 +325,10 @@ class VisitorIntelligenceEventService
                 'inactivity_count', 'inactivity_threshold_ms', 'session_duration_ms',
                 'image_width', 'image_height', 'image_x', 'image_y',
                 'viewport_width', 'viewport_height', 'cursor_x', 'cursor_y',
-                'page_width', 'page_height', 'scroll_x', 'scroll_y', 'cursor_page_x', 'cursor_page_y',
+                'screenshot_bytes', 'screenshot_width', 'screenshot_height', 'page_width', 'page_height',
+                'scroll_x', 'scroll_y', 'cursor_page_x', 'cursor_page_y', 'frame_index',
+                'host_viewport_width', 'host_viewport_height', 'widget_left', 'widget_top',
+                'widget_width', 'widget_height',
             ], true)) {
                 if (!is_numeric($value)) continue;
                 $value = (int) $value;
@@ -290,11 +336,19 @@ class VisitorIntelligenceEventService
                 if (in_array($key, ['y', 'image_y', 'cursor_y'], true)) $value = max(0, min(10000, $value));
                 if (in_array($key, [
                     'viewport_width', 'viewport_height', 'image_width', 'image_height',
-                    'page_width', 'page_height', 'scroll_x', 'scroll_y', 'cursor_page_x', 'cursor_page_y',
+                    'screenshot_width', 'screenshot_height', 'page_width', 'page_height',
+                    'scroll_x', 'scroll_y', 'cursor_page_x', 'cursor_page_y',
                 ], true)) $value = max(0, min(20000, $value));
+                if (in_array($key, ['screenshot_bytes'], true)) $value = max(0, min(10000000, $value));
                 if (in_array($key, ['duration_ms', 'idle_duration_ms', 'active_duration_ms', 'session_duration_ms'], true)) $value = max(0, min(86400000, $value));
                 if (in_array($key, ['inactivity_count'], true)) $value = max(0, min(10000, $value));
                 if (in_array($key, ['inactivity_threshold_ms'], true)) $value = max(1000, min(86400000, $value));
+            } elseif ($key === 'capture_mode') {
+                $value = (string) $value === 'viewport' ? 'viewport' : null;
+                if ($value === null) continue;
+            } elseif ($key === 'capture_scale') {
+                if (!is_numeric($value)) continue;
+                $value = max(0.1, min(2, (float) $value));
             } elseif ($key === 'device') {
                 $value = $this->normalizeDevice((string) $value);
                 if ($value === null) continue;
@@ -366,6 +420,16 @@ class VisitorIntelligenceEventService
         $parts = parse_url($url);
         if (!$parts || empty($parts['scheme']) || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)) return '';
         return ($parts['scheme'] . '://' . ($parts['host'] ?? '') . ($parts['path'] ?? ''));
+    }
+
+    private function safeScreenshotUrl(string $url): string
+    {
+        $url = trim($url);
+        if (str_starts_with($url, '/storage/visitor-intelligence/frames/')) {
+            return str_contains($url, '..') ? '' : $url;
+        }
+
+        return $this->safeUrl($url);
     }
 
     private function safeLabel(mixed $label): ?string

@@ -8,11 +8,9 @@ return [
     'summary_retention_days' => (int) env('VISITOR_INTELLIGENCE_SUMMARY_RETENTION_DAYS', 365),
     'ingestion_max_batch' => (int) env('VISITOR_INTELLIGENCE_INGESTION_MAX_BATCH', 100),
     'pointer_tracking_enabled' => env('VISITOR_INTELLIGENCE_POINTER_TRACKING_ENABLED', true),
-    // Le pipeline de capture d'écran a été retiré (rrweb est l'unique canal de
-    // replay visuel). Cette clé n'est conservée que pour purger, via
-    // VisitorIntelligenceFrameService, les screenshots déjà stockés avant ce
-    // changement lors d'une suppression RGPD explicite d'une session.
+    'frame_capture_enabled' => env('VISITOR_INTELLIGENCE_FRAME_CAPTURE_ENABLED', true),
     'frame_storage_disk' => env('VISITOR_INTELLIGENCE_FRAME_STORAGE_DISK', 'public'),
+    'frame_max_bytes' => (int) env('VISITOR_INTELLIGENCE_FRAME_MAX_BYTES', 2097152),
     'replay_chunk_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_EVENTS', 500),
     'replay_chunk_max_bytes' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_BYTES', 1572864),
     'replay_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_MAX_EVENTS', 100000),

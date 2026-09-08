@@ -8,6 +8,7 @@ use App\Services\VisitorIntelligence\VisitorIntelligenceEventService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceReplayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class VisitorIntelligenceIngestionController extends Controller
@@ -53,6 +54,37 @@ class VisitorIntelligenceIngestionController extends Controller
             'visitor_id' => $visitor->id,
             'session_id' => $session->session_key,
         ], 202);
+    }
+
+    public function frame(Request $request, Site $site): JsonResponse
+    {
+        if (!config('visitor-intelligence.frame_capture_enabled', true)) {
+            Log::warning('Visitor Intelligence frame capture is disabled.', ['site_id' => $site->id]);
+            return response()->json(['success' => false, 'accepted' => false], 202);
+        }
+
+        $rawMetadata = $request->input('metadata', []);
+        if (is_string($rawMetadata)) {
+            $decoded = json_decode($rawMetadata, true);
+            $request->merge(['metadata' => is_array($decoded) ? $decoded : []]);
+        }
+
+        $maxBytes = max(1024, (int) config('visitor-intelligence.frame_max_bytes', 2097152));
+        $data = $request->validate([
+            'visitor_uuid' => ['required', 'uuid'],
+            'session_id' => ['required', 'string', 'max:100'],
+            'event_id' => ['required', 'string', 'max:100'],
+            'occurred_at' => ['nullable', 'date'],
+            'page_url' => ['nullable', 'url:http,https', 'max:2048'],
+            'path' => ['nullable', 'string', 'max:1024'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'metadata' => ['nullable', 'array', 'max:30'],
+            'screenshot' => ['required', 'file', 'mimetypes:image/jpeg,image/png,image/webp', 'max:'.(int) ceil($maxBytes / 1024)],
+        ]);
+
+        $result = $this->events->captureFrame($site, $request->file('screenshot'), $data, $request);
+
+        return response()->json(['success' => true, 'accepted' => true, ...$result], 202);
     }
 
     public function replayChunk(Request $request, Site $site): JsonResponse

@@ -27,7 +27,6 @@
     const API_URL = `${API_BASE}/site/${SITE_ID}/widget/config`;
     const VISUAL_EVENTS_URL = `${API_BASE}/widget/site/${SITE_ID}/visitor-intelligence/events`;
     const PROACTIVE_PENDING_URL = `${API_BASE}/widget/proactive/pending/${SITE_ID}`;
-    const VISUAL_FRAMES_URL = `${API_BASE}/widget/site/${SITE_ID}/visitor-intelligence/frames`;
     const REPLAY_CHUNKS_URL = `${API_BASE}/widget/site/${SITE_ID}/visitor-intelligence/replay-chunks`;
     const IFRAME_ORIGIN = new URL(`${ELCHAT_ORIGIN}/widget`).origin;
     const STORAGE_KEY = `elchat_user_opened_${SITE_ID}`;
@@ -89,19 +88,10 @@
     let isOpened = false;
     let visitorUUID = HOST_VISITOR_UUID;
     let visualSequence = 0;
-    let frameSequence = 0;
     let visualEvents = [];
     let visualFlushTimer = null;
-    let frameTimer = null;
-    let widgetFrameTimer = null;
-    let frameInFlight = false;
-    let frameRequestedAgain = false;
-    let lastFrameCapturedAt = 0;
-    let pendingFrameContext = null;
     let lastVisualContext = null;
     let visualSessionStarted = false;
-    let frameFailureCount = 0;
-    let html2canvasPromise = null;
     let pageScrollTimer = null;
     let pageScrollTarget = null;
     let pageLastPointerX = null;
@@ -112,8 +102,6 @@
     let pageFormStarts = new WeakSet();
     let lastRecordedPageScrollX = null;
     let lastRecordedPageScrollY = null;
-    let tenantLoadReadyPromise = null;
-    let tenantFirstFrameCaptured = false;
     let fallbackTenantScrollX = 0;
     let fallbackTenantScrollY = 0;
     let fallbackScrollTimer = null;
@@ -146,10 +134,7 @@
     let proactivePollTimer = null;
     let proactivePollInFlight = false;
     let lastProactiveMessageId = null;
-    let lastWidgetObservedScrollX = null;
-    let lastWidgetObservedScrollY = null;
 
-    const VISUAL_FRAME_INTERVAL = 700;
     const VISUAL_FLUSH_SIZE = 20;
     const RRWEB_CHUNK_MAX_EVENTS = 80;
     const RRWEB_CHUNK_MAX_BYTES = 180000;
@@ -207,9 +192,9 @@
         };
     }
 
-    function rrwebChunkEventBounds(events) {
-        const timestamps = events
-            .map(event => Number(event?.timestamp))
+    function rrwebChunkEventBounds(entries) {
+        const timestamps = entries
+            .map(entry => entry.timestamp)
             .filter(timestamp => Number.isFinite(timestamp) && timestamp > 0);
         if (!timestamps.length) return { first: null, last: null };
         const first = Math.min(...timestamps);
@@ -221,7 +206,7 @@
     }
 
     async function sendRrwebChunk(chunk) {
-        const body = JSON.stringify(chunk);
+        const body = chunk.body;
         let lastError = null;
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
@@ -274,19 +259,26 @@
     function queueRrwebChunk(force = false) {
         if (!rrwebPendingEvents.length) return;
         if (!force && rrwebPendingEvents.length < RRWEB_CHUNK_MAX_EVENTS && rrwebPendingBytes < RRWEB_CHUNK_MAX_BYTES) return;
-        const events = rrwebPendingEvents;
+        const entries = rrwebPendingEvents;
         rrwebPendingEvents = [];
         rrwebPendingBytes = 0;
-        const bounds = rrwebChunkEventBounds(events);
-        rrwebPendingChunks.push({
-            visitor_uuid: visitorUUID,
-            session_id: SESSION_ID,
-            chunk_index: rrwebChunkIndex++,
-            rrweb_version: '2.0.0',
-            occurred_at: bounds.first || new Date().toISOString(),
-            metadata: rrwebChunkMetadata(),
-            events,
-        });
+        const bounds = rrwebChunkEventBounds(entries);
+        // Each event was already JSON-encoded once in the `emit` callback below
+        // (needed there to size the chunk). Reusing those strings here — instead
+        // of re-stringifying the whole batch — halves the JSON-encoding cost of
+        // every chunk, which matters most for the large `FullSnapshot` events a
+        // heavy DOM produces.
+        const eventsJson = `[${entries.map(entry => entry.json).join(',')}]`;
+        const body = '{'
+            + `"visitor_uuid":${JSON.stringify(visitorUUID)},`
+            + `"session_id":${JSON.stringify(SESSION_ID)},`
+            + `"chunk_index":${rrwebChunkIndex++},`
+            + '"rrweb_version":"2.0.0",'
+            + `"occurred_at":${JSON.stringify(bounds.first || new Date().toISOString())},`
+            + `"metadata":${JSON.stringify(rrwebChunkMetadata())},`
+            + `"events":${eventsJson}`
+            + '}';
+        rrwebPendingChunks.push({ body });
         pumpRrwebChunks();
     }
 
@@ -325,12 +317,18 @@
                 rrwebStop = api.record({
                     emit: event => {
                         if (!event || rrwebRecordingStopped) return;
-                        rrwebPendingEvents.push(event);
-                        rrwebPendingBytes += JSON.stringify(event).length;
+                        const json = JSON.stringify(event);
+                        rrwebPendingEvents.push({ json, timestamp: Number(event.timestamp) || 0 });
+                        rrwebPendingBytes += json.length;
                         queueRrwebChunk();
                     },
                     recordAfter: 'load',
-                    checkoutEveryNms: 30000,
+                    // A full DOM re-snapshot happens every `checkoutEveryNms`, and its
+                    // cost (serialization + collectFonts/inlineStylesheet below) scales
+                    // with DOM/CSS size. Space full snapshots out further on pages we've
+                    // already detected as heavy, instead of paying that cost every 30s
+                    // regardless of page complexity.
+                    checkoutEveryNms: isLargeDomPage() ? 120000 : 45000,
                     blockSelector: '#elchat-iframe, [data-recording-ignore], [data-elchat-recording-ignore]',
                     maskTextSelector: '[data-recording-mask], [data-elchat-recording-mask]',
                     maskInputOptions: {
@@ -343,8 +341,30 @@
                     },
                     recordCrossOriginIframes: false,
                     recordCanvas: false,
+                    // collectFonts/inlineStylesheet make each full snapshot bigger and
+                    // costlier to build on a large/complex page — but they were made
+                    // conditional on isLargeDomPage() in an earlier pass and that
+                    // regressed replay loading on a large-DOM WooCommerce test (the
+                    // dashboard's replay player likely expects inlined styles/fonts to
+                    // initialize). Kept unconditionally on until that player's tolerance
+                    // for their absence is confirmed; checkoutEveryNms/slimDOMOptions
+                    // below already absorb most of the large-DOM cost safely.
                     collectFonts: true,
                     inlineStylesheet: true,
+                    // Strips head/comment/script noise that has zero replay value
+                    // (SEO meta, favicons, verification tags...) out of every snapshot.
+                    slimDOMOptions: {
+                        script: true,
+                        comment: true,
+                        headFavicon: true,
+                        headWhitespace: true,
+                        headMetaDescKeywords: true,
+                        headMetaSocial: true,
+                        headMetaRobots: true,
+                        headMetaHttpEquiv: true,
+                        headMetaAuthorship: true,
+                        headMetaVerification: true,
+                    },
                     mousemoveWait: 150,
                 });
                 scheduleRrwebFlush();
@@ -373,6 +393,41 @@
             // Custom events are optional; the DOM and native rrweb stream stay authoritative.
         }
     }
+
+    /* =========================
+       Perf: gros DOM (WordPress/WooCommerce/page builders)
+       -------------------------------------------------------------------
+       Ces pages dépassent couramment 10-30k nœuds DOM. `pageViewportState()`
+       et `captureScrollPositions()` sont appelées à chaque événement suivi
+       (clic, scroll, pointer_move throttlé) : un `document.querySelectorAll('*')`
+       complet à chaque appel, combiné à un `getComputedStyle` par nœud,
+       sature le thread principal et fait perdre/retarder des événements.
+       Trois garde-fous, sans changer le contrat de sortie des fonctions :
+        1. Détection "gros DOM" ponctuelle et réévaluée périodiquement.
+        2. Cache TTL court pour absorber les rafales d'événements rapprochés.
+        3. La recherche d'un conteneur de scroll imbriqué (le seul cas
+           réellement coûteux) devient un fallback rare et mis en cache,
+           plutôt qu'un scan systématique : un vrai événement `scroll`
+           renseigne déjà `pageScrollTarget` sans coût de parcours DOM.
+    ========================= */
+    const LARGE_DOM_NODE_THRESHOLD = 6000;
+    const LARGE_DOM_RECHECK_MS = 15000;
+    const VIEWPORT_STATE_CACHE_MS = 120;
+    const SCROLL_POSITIONS_CACHE_MS = 1500;
+    const NESTED_SCROLL_SCAN_CACHE_MS = 1500;
+
+    let cachedIsLargeDom = null;
+    function isLargeDomPage() {
+        if (cachedIsLargeDom !== null) return cachedIsLargeDom;
+        // Lecture de .length sur une HTMLCollection "live" : pas de matérialisation
+        // de tableau, c'est la façon la moins coûteuse de dimensionner l'arbre.
+        cachedIsLargeDom = document.getElementsByTagName('*').length > LARGE_DOM_NODE_THRESHOLD;
+        return cachedIsLargeDom;
+    }
+    // Une page peut grossir après le chargement initial (scroll infini, grilles
+    // WooCommerce re-rendues par AJAX). On ré-évalue de temps en temps plutôt
+    // qu'à chaque appel, pour rester correct sans reproduire le coût qu'on retire.
+    setInterval(() => { cachedIsLargeDom = null; }, LARGE_DOM_RECHECK_MS);
 
     function isScrollableElement(element) {
         if (!(element instanceof HTMLElement) || element === document.body || element === document.documentElement) return false;
@@ -405,7 +460,17 @@
         return current === document.documentElement ? path : null;
     }
 
+    let scrollPositionsCache = [];
+    let scrollPositionsCacheAt = 0;
     function captureScrollPositions() {
+        const now = Date.now();
+        if ((now - scrollPositionsCacheAt) < SCROLL_POSITIONS_CACHE_MS) return scrollPositionsCache;
+        scrollPositionsCacheAt = now;
+        // rrweb est désormais l'unique canal de replay et observe déjà nativement
+        // le scroll de chaque élément ; cette liste n'est qu'une métadonnée
+        // descriptive attachée aux événements métier. Sur un gros DOM, on
+        // préfère la sacrifier plutôt que de payer un parcours complet.
+        if (isLargeDomPage()) return (scrollPositionsCache = []);
         const positions = [];
         const elements = document.querySelectorAll('*');
         for (const element of elements) {
@@ -417,7 +482,38 @@
             if (path) positions.push({ path, left, top });
             if (positions.length >= 128) break;
         }
+        scrollPositionsCache = positions;
         return positions;
+    }
+
+    // Fallback rare : ne sert qu'à retrouver un conteneur scrollable imbriqué
+    // quand ni le scroll natif de la page ni un `scroll` déjà observé
+    // n'expliquent la position courante (site avec scroller custom). Mis en
+    // cache et désactivé au-delà du seuil "gros DOM" : le cas courant est déjà
+    // couvert gratuitement par le vrai listener `scroll` (voir pageScrollTarget).
+    let nestedScrollContainerCache = null;
+    let nestedScrollContainerCacheAt = 0;
+    function discoverNestedScrollContainer() {
+        const now = Date.now();
+        if ((now - nestedScrollContainerCacheAt) < NESTED_SCROLL_SCAN_CACHE_MS) return nestedScrollContainerCache;
+        nestedScrollContainerCacheAt = now;
+        if (isLargeDomPage()) return (nestedScrollContainerCache = null);
+
+        const seen = new Set();
+        const candidates = [];
+        if (pageScrollTarget instanceof HTMLElement) {
+            seen.add(pageScrollTarget);
+            if (isScrollableElement(pageScrollTarget)) candidates.push(pageScrollTarget);
+        }
+        for (const element of document.querySelectorAll('*')) {
+            if (seen.has(element)) continue;
+            seen.add(element);
+            if (isScrollableElement(element)) candidates.push(element);
+        }
+        const current = candidates
+            .filter(element => Math.abs(element.scrollTop) > 0 || Math.abs(element.scrollLeft) > 0)
+            .sort((left, right) => elementDepth(right) - elementDepth(left))[0];
+        return (nestedScrollContainerCache = current || null);
     }
 
     function readNativePageScroll(root = document.documentElement, body = document.body) {
@@ -448,7 +544,12 @@
         };
     }
 
+    let viewportStateCache = null;
+    let viewportStateCacheAt = 0;
     function pageViewportState() {
+        const now = Date.now();
+        if (viewportStateCache && (now - viewportStateCacheAt) < VIEWPORT_STATE_CACHE_MS) return viewportStateCache;
+
         const root = document.documentElement;
         const body = document.body;
         const viewportWidth = Math.max(1, Math.round(window.innerWidth || root.clientWidth || 1));
@@ -456,12 +557,18 @@
         const nativePageScroll = readNativePageScroll(root, body);
         const windowScrollX = nativePageScroll.x || fallbackTenantScrollX;
         const windowScrollY = nativePageScroll.y || fallbackTenantScrollY;
-        const candidates = [pageScrollTarget, ...Array.from(document.querySelectorAll('*'))]
-            .filter((element, index, all) => element instanceof HTMLElement && all.indexOf(element) === index && isScrollableElement(element));
-        const current = candidates
-            .filter(element => Math.abs(element.scrollTop) > 0 || Math.abs(element.scrollLeft) > 0)
-            .sort((left, right) => elementDepth(right) - elementDepth(left))[0];
-        const scrollContainer = current || pageScrollTarget || null;
+
+        // `nestedScroll` ne peut être vrai que si le scroll natif de la page est
+        // à zéro (cf. plus bas) : c'est la seule situation où ça vaut la peine de
+        // chercher un conteneur imbriqué. Dans tous les autres cas — la grande
+        // majorité des événements trackés — on évite entièrement le scan.
+        let scrollContainer = null;
+        if (windowScrollX === 0 && windowScrollY === 0) {
+            const targetHasOffset = pageScrollTarget instanceof HTMLElement
+                && isScrollableElement(pageScrollTarget)
+                && (Math.abs(pageScrollTarget.scrollTop) > 0 || Math.abs(pageScrollTarget.scrollLeft) > 0);
+            scrollContainer = targetHasOffset ? pageScrollTarget : discoverNestedScrollContainer();
+        }
         const nestedScroll = scrollContainer && isScrollableElement(scrollContainer) && windowScrollX === 0 && windowScrollY === 0;
         const scrollX = nestedScroll ? Math.max(0, Math.round(scrollContainer.scrollLeft || 0)) : windowScrollX;
         const scrollY = nestedScroll ? Math.max(0, Math.round(scrollContainer.scrollTop || 0)) : windowScrollY;
@@ -477,7 +584,7 @@
             body?.scrollHeight || 0,
             scrollContainer?.scrollHeight || 0,
         );
-        return {
+        viewportStateCache = {
             viewportWidth,
             viewportHeight,
             pageWidth,
@@ -491,148 +598,12 @@
             scrollSource: nestedScroll ? 'nested_element' : (nativePageScroll.source === 'none' ? 'fallback_gesture' : nativePageScroll.source),
             scrollContainer,
         };
+        viewportStateCacheAt = now;
+        return viewportStateCache;
     }
 
     function wait(milliseconds) {
         return new Promise(resolve => setTimeout(resolve, milliseconds));
-    }
-
-    function nextPaint() {
-        return new Promise(resolve => window.requestAnimationFrame(() => resolve()));
-    }
-
-    function waitForTenantLoad() {
-        if (document.readyState === 'complete') return Promise.resolve();
-        if (tenantLoadReadyPromise) return tenantLoadReadyPromise;
-
-        tenantLoadReadyPromise = new Promise(resolve => {
-            let settled = false;
-            const finish = () => {
-                if (settled) return;
-                settled = true;
-                window.removeEventListener('load', finish);
-                resolve();
-            };
-            window.addEventListener('load', finish, { once: true });
-            // A SPA can keep the load event pending; never block tracking
-            // indefinitely because of a third-party resource.
-            setTimeout(finish, 2200);
-        });
-        return tenantLoadReadyPromise;
-    }
-
-    async function waitForTenantFonts() {
-        if (!document.fonts?.ready) return;
-        await Promise.race([
-            document.fonts.ready.catch(() => undefined),
-            wait(1800),
-        ]);
-    }
-
-    function visibleTenantImages(viewport) {
-        return Array.from(document.images).filter(image => {
-            if (!image.isConnected) return false;
-            const rect = image.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0
-                && rect.right > 0 && rect.bottom > 0
-                && rect.left < viewport.viewportWidth && rect.top < viewport.viewportHeight;
-        });
-    }
-
-    async function waitForVisibleTenantImages(viewport, timeout = 900) {
-        const images = visibleTenantImages(viewport);
-        if (!images.length) return;
-        await Promise.race([
-            Promise.all(images.map(image => new Promise(resolve => {
-                let settled = false;
-                const finish = () => {
-                    if (settled) return;
-                    settled = true;
-                    image.removeEventListener('load', finish);
-                    image.removeEventListener('error', finish);
-                    resolve();
-                };
-                if (image.complete) {
-                    const decoded = typeof image.decode === 'function' ? image.decode() : Promise.resolve();
-                    Promise.resolve(decoded).catch(() => undefined).finally(finish);
-                } else {
-                    image.addEventListener('load', finish, { once: true });
-                    image.addEventListener('error', finish, { once: true });
-                }
-            }))),
-            wait(timeout),
-        ]);
-    }
-
-    function tenantLayoutSignature(viewport) {
-        const root = document.documentElement;
-        const body = document.body;
-        const bodyRect = body?.getBoundingClientRect();
-        return [
-            viewport.viewportWidth,
-            viewport.viewportHeight,
-            viewport.windowScrollX,
-            viewport.windowScrollY,
-            root.scrollWidth,
-            root.scrollHeight,
-            body?.scrollWidth || 0,
-            body?.scrollHeight || 0,
-            Math.round(bodyRect?.width || 0),
-            Math.round(bodyRect?.height || 0),
-        ].join(':');
-    }
-
-    async function waitForStableTenantViewport() {
-        const firstCapture = !tenantFirstFrameCaptured;
-        if (firstCapture) await waitForTenantLoad();
-        await waitForTenantFonts();
-
-        let viewport = pageViewportState();
-        await waitForVisibleTenantImages(viewport, firstCapture ? 1200 : 500);
-        await nextPaint();
-        await nextPaint();
-        if (firstCapture) await wait(180);
-
-        // Re-read the viewport after fonts/images/layout have settled. If a
-        // lazy image changed the document height, wait one more paint before
-        // capturing so the screenshot and its scroll metadata agree.
-        for (let attempt = 0; attempt < 3; attempt++) {
-            const before = tenantLayoutSignature(viewport);
-            await wait(firstCapture ? 90 : 40);
-            await nextPaint();
-            const nextViewport = pageViewportState();
-            const after = tenantLayoutSignature(nextViewport);
-            viewport = nextViewport;
-            if (before === after) break;
-        }
-        return viewport;
-    }
-
-    function canvasLooksBlank(canvas) {
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        if (!context) return false;
-        const columns = 32;
-        const rows = 16;
-        const colors = new Map();
-        let samples = 0;
-        try {
-            for (let row = 0; row < rows; row++) {
-                for (let column = 0; column < columns; column++) {
-                    const x = Math.min(canvas.width - 1, Math.floor((column + 0.5) * canvas.width / columns));
-                    const y = Math.min(canvas.height - 1, Math.floor((row + 0.5) * canvas.height / rows));
-                    const pixel = context.getImageData(x, y, 1, 1).data;
-                    const color = [pixel[0] >> 4, pixel[1] >> 4, pixel[2] >> 4].join(':');
-                    colors.set(color, (colors.get(color) || 0) + 1);
-                    samples++;
-                }
-            }
-        } catch (_) {
-            return false;
-        }
-        const dominant = Math.max(...colors.values(), 0);
-        // A uniform white/black canvas is normally the result of capturing
-        // before the tenant page rendered or after the scroll crop lost it.
-        return samples > 0 && dominant / samples >= 0.985;
     }
 
     function pageContext(extra = {}) {
@@ -722,231 +693,6 @@
         if (visualEvents.length && !keepalive) scheduleVisualFlush();
     }
 
-    function scheduleFrameCapture(delay = 260) {
-        if (!visitorUUID) return;
-        if (frameTimer) clearTimeout(frameTimer);
-        const waitForCadence = Math.max(0, VISUAL_FRAME_INTERVAL - (Date.now() - lastFrameCapturedAt));
-        frameTimer = setTimeout(() => {
-            frameTimer = null;
-            requestFrameCapture();
-        }, Math.max(delay, waitForCadence));
-    }
-
-    function requestFrameCapture() {
-        if (!visitorUUID) return;
-        if (frameInFlight) {
-            frameRequestedAgain = true;
-            return;
-        }
-        frameInFlight = true;
-        lastFrameCapturedAt = Date.now();
-        pendingFrameContext = lastVisualContext || enqueueVisualEvent('page_view', pageContext());
-        captureTenantFrame()
-            .then(frame => finishFrameCapture(frame))
-            .catch(error => {
-                console.warn('[ELChat] Tenant page frame capture failed', error);
-                finishFrameCapture(null);
-            });
-    }
-
-    function requestWidgetFrameCapture(delay = 260) {
-        if (!visitorUUID || !iframe || !isOpened) return;
-        if (widgetFrameTimer) clearTimeout(widgetFrameTimer);
-        widgetFrameTimer = setTimeout(() => {
-            widgetFrameTimer = null;
-            if (!iframe || !isOpened || !iframe.contentWindow) return;
-            iframe.contentWindow.postMessage({
-                source: 'elchat',
-                type: 'WIDGET_VISUAL_FRAME_REQUEST',
-            }, IFRAME_ORIGIN);
-        }, Math.max(0, delay));
-    }
-
-    function receiveWidgetFrame(frame) {
-        if (!visitorUUID || !iframe || !isOpened || !frame || typeof frame.data_url !== 'string') return;
-        const hostViewport = pageViewportState();
-        const rect = iframe.getBoundingClientRect();
-        const widgetContext = {
-            page_url: window.location.href,
-            path: window.location.pathname || '/',
-            title: document.title || '',
-            metadata: {
-                surface: 'widget',
-                device: deviceType(),
-                host_viewport_width: hostViewport.viewportWidth,
-                host_viewport_height: hostViewport.viewportHeight,
-                widget_left: Math.round(Math.max(0, rect.left)),
-                widget_top: Math.round(Math.max(0, rect.top)),
-                widget_width: Math.round(Math.max(1, rect.width)),
-                widget_height: Math.round(Math.max(1, rect.height)),
-            },
-        };
-        uploadFrame({
-            ...frame,
-            surface: 'widget',
-            host_viewport_width: hostViewport.viewportWidth,
-            host_viewport_height: hostViewport.viewportHeight,
-            widget_left: Math.round(Math.max(0, rect.left)),
-            widget_top: Math.round(Math.max(0, rect.top)),
-            widget_width: Math.round(Math.max(1, rect.width)),
-            widget_height: Math.round(Math.max(1, rect.height)),
-        }, widgetContext).catch(error => {
-            console.warn('[ELChat] Visitor Intelligence widget frame relay failed', error);
-        });
-    }
-
-    function ensureHtml2Canvas() {
-        if (typeof window.html2canvas === 'function') return Promise.resolve(window.html2canvas);
-        if (html2canvasPromise) return html2canvasPromise;
-
-        html2canvasPromise = new Promise((resolve, reject) => {
-            const existing = document.querySelector('script[data-elchat-replay-capture]');
-            if (existing) {
-                existing.addEventListener('load', () => typeof window.html2canvas === 'function' ? resolve(window.html2canvas) : reject(new Error('html2canvas unavailable')), { once: true });
-                existing.addEventListener('error', () => reject(new Error('html2canvas failed to load')), { once: true });
-                return;
-            }
-            const script = document.createElement('script');
-            script.async = true;
-            script.src = `${ELCHAT_ORIGIN}/js/html2canvas.min.js`;
-            script.dataset.elchatReplayCapture = 'true';
-            script.onload = () => typeof window.html2canvas === 'function'
-                ? resolve(window.html2canvas)
-                : reject(new Error('html2canvas unavailable'));
-            script.onerror = () => reject(new Error('html2canvas failed to load'));
-            document.head.appendChild(script);
-        });
-        return html2canvasPromise;
-    }
-
-    async function captureTenantFrame() {
-        const html2canvas = await ensureHtml2Canvas();
-        const viewport = await waitForStableTenantViewport();
-        const scale = Math.min(1, 1440 / viewport.viewportWidth, 1080 / viewport.viewportHeight);
-        const sourceImages = Array.from(document.images);
-        const originalFields = document.querySelectorAll('input, textarea, [contenteditable="true"]');
-        const scrollPositions = captureScrollPositions();
-        const options = {
-            backgroundColor: '#ffffff',
-            allowTaint: false,
-            useCORS: true,
-            imageTimeout: 1500,
-            scale,
-            width: viewport.viewportWidth,
-            height: viewport.viewportHeight,
-            windowWidth: viewport.viewportWidth,
-            windowHeight: viewport.viewportHeight,
-            scrollX: viewport.captureScrollX,
-            scrollY: viewport.captureScrollY,
-            // x/y crop the document canvas at the real browser scroll. The
-            // scrollX/scrollY values are kept only for fixed-position elements
-            // as intended by html2canvas; applying the page scroll again during
-            // the post-render crop would shift the viewport a second time.
-            x: viewport.captureScrollX,
-            y: viewport.captureScrollY,
-            logging: false,
-            ignoreElements: element => {
-                // Never copy secrets or broken image resources into the replay.
-                if (element instanceof HTMLImageElement) {
-                    return !element.complete || !element.naturalWidth;
-                }
-                return false;
-            },
-            onclone: clonedDocument => {
-                clonedDocument.querySelectorAll('script[data-elchat-replay-capture]').forEach(script => script.remove());
-                const clonedImages = Array.from(clonedDocument.images);
-                clonedImages.forEach((clonedImage, index) => {
-                    const sourceImage = sourceImages[index];
-                    if (!sourceImage?.complete || !sourceImage.naturalWidth) {
-                        clonedImage.removeAttribute('srcset');
-                        clonedImage.removeAttribute('crossorigin');
-                        clonedImage.removeAttribute('src');
-                    }
-                });
-                const clonedFields = clonedDocument.querySelectorAll('input, textarea, [contenteditable="true"]');
-                originalFields.forEach((original, index) => {
-                    const cloned = clonedFields[index];
-                    if (!cloned) return;
-                    if (original.matches('input')) {
-                        const input = cloned;
-                        if (!['checkbox', 'radio', 'button', 'submit', 'reset'].includes(input.type)) {
-                            input.value = '';
-                            input.removeAttribute('value');
-                        }
-                    } else if (original.matches('textarea')) {
-                        cloned.value = '';
-                        cloned.textContent = '';
-                    } else {
-                        cloned.innerHTML = '';
-                    }
-                });
-                clonedDocument.querySelectorAll('*').forEach(element => {
-                    element.style.animation = 'none';
-                    element.style.transition = 'none';
-                });
-                scrollPositions.forEach(position => {
-                    let clonedElement = clonedDocument.documentElement;
-                    for (const index of position.path || []) {
-                        clonedElement = clonedElement?.children?.[index] || null;
-                    }
-                    const clonedHTMLElement = clonedDocument.defaultView?.HTMLElement;
-                    if (!clonedHTMLElement || !(clonedElement instanceof clonedHTMLElement)) return;
-                    clonedElement.scrollLeft = position.left;
-                    clonedElement.scrollTop = position.top;
-                });
-            },
-        };
-        const renderedCanvas = await html2canvas(document.documentElement, options);
-        const targetWidth = Math.max(1, Math.round(viewport.viewportWidth * scale));
-        const targetHeight = Math.max(1, Math.round(viewport.viewportHeight * scale));
-        let canvas = renderedCanvas;
-
-        // html2canvas can still return the document canvas for pages with a
-        // custom scrolling root. The replay contract is strictly one visible
-        // viewport, so crop the rendered result before it is uploaded.
-        if (renderedCanvas.width !== targetWidth || renderedCanvas.height !== targetHeight) {
-            canvas = document.createElement('canvas');
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
-            const context = canvas.getContext('2d');
-            if (!context) throw new Error('viewport canvas unavailable');
-            context.fillStyle = '#ffffff';
-            context.fillRect(0, 0, targetWidth, targetHeight);
-            context.imageSmoothingEnabled = true;
-            context.imageSmoothingQuality = 'high';
-
-            const pageWidth = Math.max(viewport.viewportWidth, viewport.pageWidth || viewport.viewportWidth);
-            const pageHeight = Math.max(viewport.viewportHeight, viewport.pageHeight || viewport.viewportHeight);
-            const sourceScaleX = renderedCanvas.width / pageWidth;
-            const sourceScaleY = renderedCanvas.height / pageHeight;
-            const sourceWidth = Math.max(1, Math.min(renderedCanvas.width, targetWidth / Math.max(0.0001, sourceScaleX)));
-            const sourceHeight = Math.max(1, Math.min(renderedCanvas.height, targetHeight / Math.max(0.0001, sourceScaleY)));
-            const sourceX = Math.max(0, Math.min(renderedCanvas.width - sourceWidth, viewport.captureScrollX * sourceScaleX));
-            const sourceY = Math.max(0, Math.min(renderedCanvas.height - sourceHeight, viewport.captureScrollY * sourceScaleY));
-            context.drawImage(renderedCanvas, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
-        }
-        if (canvasLooksBlank(canvas)) throw new Error('tenant page viewport is visually blank');
-        return {
-            data_url: canvas.toDataURL('image/jpeg', 0.72),
-            width: canvas.width,
-            height: canvas.height,
-            viewport_width: viewport.viewportWidth,
-            viewport_height: viewport.viewportHeight,
-            page_width: viewport.pageWidth,
-            page_height: viewport.pageHeight,
-            scroll_x: viewport.scrollX,
-            scroll_y: viewport.scrollY,
-            scroll_source: viewport.scrollSource,
-            capture_mode: 'viewport',
-            capture_scale: canvas.width / viewport.viewportWidth,
-            scroll_positions: scrollPositions,
-            cursor_x: pageLastPointerX,
-            cursor_y: pageLastPointerY,
-            cursor_page_x: pageLastPointerX === null ? null : pageLastPointerX + viewport.scrollX,
-            cursor_page_y: pageLastPointerY === null ? null : pageLastPointerY + viewport.scrollY,
-        };
-    }
-
     function hashValue(value) {
         let hash = 2166136261;
         for (let index = 0; index < value.length; index++) {
@@ -975,9 +721,11 @@
     }
 
     function recordPageEvent(eventType, metadata = {}, options = {}, capture = true) {
-        const event = enqueueVisualEvent(eventType, pageContext(metadata), options);
-        if (capture) scheduleFrameCapture(eventType === 'page_view' ? 180 : 260);
-        return event;
+        // `capture` is kept in the signature for call-site compatibility but is
+        // now a no-op: visual replay is handled exclusively by rrweb (see
+        // startTenantReplayRecording), the screenshot pipeline was retired.
+        void capture;
+        return enqueueVisualEvent(eventType, pageContext(metadata), options);
     }
 
     function recordNavigation(reason) {
@@ -1276,92 +1024,6 @@
         }, { once: true });
     }
 
-    function dataUrlToBlob(dataUrl) {
-        const match = /^data:([^;,]+)?(?:;base64)?,(.*)$/s.exec(dataUrl || '');
-        if (!match) return null;
-        const mime = match[1] || 'image/jpeg';
-        const payload = match[2];
-        const binary = atob(payload);
-        const bytes = new Uint8Array(binary.length);
-        for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-        return new Blob([bytes], { type: mime });
-    }
-
-    function uploadFrame(frame, frameContext = null) {
-        const context = frameContext || pendingFrameContext || lastVisualContext || {};
-        const surface = frame.surface || context.metadata?.surface || 'page';
-        const metadata = {
-            ...(context.metadata || {}),
-            device: deviceType(),
-            surface,
-            screenshot_width: Number(frame.width) || 0,
-            screenshot_height: Number(frame.height) || 0,
-            viewport_width: Number(frame.viewport_width) || Number(context.metadata && context.metadata.viewport_width) || 0,
-            viewport_height: Number(frame.viewport_height) || Number(context.metadata && context.metadata.viewport_height) || 0,
-            page_width: Number(frame.page_width) || Number(context.metadata && context.metadata.page_width) || 0,
-            page_height: Number(frame.page_height) || Number(context.metadata && context.metadata.page_height) || 0,
-            scroll_x: Number(frame.scroll_x) || 0,
-            scroll_y: Number(frame.scroll_y) || 0,
-            scroll_source: frame.scroll_source || context.metadata?.scroll_source || 'unknown',
-            capture_mode: frame.capture_mode || 'viewport',
-            capture_scale: Number(frame.capture_scale) || 1,
-            frame_index: frameSequence,
-            cursor_x: frame.cursor_x ?? context.metadata?.cursor_x ?? null,
-            cursor_y: frame.cursor_y ?? context.metadata?.cursor_y ?? null,
-            cursor_page_x: frame.cursor_page_x ?? context.metadata?.cursor_page_x ?? null,
-            cursor_page_y: frame.cursor_page_y ?? context.metadata?.cursor_page_y ?? null,
-            scroll_positions: JSON.stringify(frame.scroll_positions || []),
-        };
-        [
-            'host_viewport_width', 'host_viewport_height',
-            'widget_left', 'widget_top', 'widget_width', 'widget_height',
-        ].forEach(key => {
-            if (frame[key] !== undefined && frame[key] !== null) metadata[key] = Number(frame[key]) || 0;
-        });
-        const blob = dataUrlToBlob(frame.data_url);
-        if (!blob) return Promise.reject(new Error('invalid frame data URL'));
-        const body = new FormData();
-        body.append('visitor_uuid', visitorUUID);
-        body.append('session_id', SESSION_ID);
-        body.append('event_id', `${SESSION_ID}-frame-${++frameSequence}`);
-        body.append('occurred_at', frame.occurred_at || new Date().toISOString());
-        body.append('page_url', context.page_url || window.location.href);
-        body.append('path', context.path || window.location.pathname || '/');
-        body.append('title', context.title || document.title || '');
-        body.append('metadata', JSON.stringify(metadata));
-        body.append('screenshot', blob, `visitor-frame-${frameSequence}.jpg`);
-        return fetch(VISUAL_FRAMES_URL, { method: 'POST', body }).then(response => {
-            if (!response.ok) throw new Error(`visual frame HTTP ${response.status}`);
-        });
-    }
-
-    function finishFrameCapture(frame) {
-        const hasFrame = !!(frame && frame.data_url);
-        const upload = hasFrame
-            ? uploadFrame(frame)
-            : Promise.reject(new Error('tenant page frame capture returned no image'));
-        upload.then(() => {
-            frameFailureCount = 0;
-            tenantFirstFrameCaptured = true;
-        }).catch(error => {
-            frameFailureCount += 1;
-            console.warn('[ELChat] Visitor Intelligence frame relay failed', error);
-        })
-            .finally(() => {
-                frameInFlight = false;
-                pendingFrameContext = null;
-                if (frameRequestedAgain) {
-                    frameRequestedAgain = false;
-                    scheduleFrameCapture(120);
-                } else if (frameFailureCount > 0 && frameFailureCount < 5) {
-                    // Desktop browsers can fail the first html2canvas pass while
-                    // fonts/images are settling. Retry with bounded backoff so a
-                    // transient failure does not permanently disable replay.
-                    scheduleFrameCapture(Math.min(4000, 350 * (2 ** (frameFailureCount - 1))));
-                }
-            });
-    }
-
     /* =========================
        1️⃣ Charger la config depuis backend
     ========================= */
@@ -1515,13 +1177,6 @@
         iframe.allow = "microphone";
         iframe.allowTransparency = true;
         iframe.sandbox = "allow-scripts allow-same-origin allow-popups allow-forms"
-        iframe.addEventListener('load', () => {
-            // WIDGET_READY is the normal handshake. The load fallback keeps
-            // replay alive when a desktop browser delays or drops a message
-            // during iframe startup.
-            scheduleFrameCapture(450);
-            requestWidgetFrameCapture(520);
-        }, { once: true });
 
         Object.assign(iframe.style, {
             position: 'fixed',
@@ -1603,11 +1258,6 @@
             case 'WIDGET_READY':
                 markPageActivity('widget_opened');
                 enqueueVisualEvent('widget_opened', { device: deviceType(), surface: 'widget' });
-                scheduleFrameCapture(80);
-                requestWidgetFrameCapture(120);
-                break;
-            case 'WIDGET_VISUAL_FRAME':
-                receiveWidgetFrame(event.data.payload || {});
                 break;
             case 'VISITOR_VISUAL_EVENT': {
                 markPageActivity('widget_interaction');
@@ -1616,21 +1266,6 @@
                     resource_type: visual.resource_type,
                     label: visual.label,
                 });
-                if (tracked.event_type !== 'pointer_move') {
-                    scheduleFrameCapture(tracked.event_type === 'page_view' ? 180 : 300);
-                    requestWidgetFrameCapture(tracked.event_type === 'page_view' ? 220 : 340);
-                } else if (String(visual.metadata?.surface || '').toLowerCase() === 'widget') {
-                    const scrollX = Number(visual.metadata?.scroll_x);
-                    const scrollY = Number(visual.metadata?.scroll_y);
-                    if (
-                        (Number.isFinite(scrollX) && scrollX !== lastWidgetObservedScrollX)
-                        || (Number.isFinite(scrollY) && scrollY !== lastWidgetObservedScrollY)
-                    ) {
-                        lastWidgetObservedScrollX = Number.isFinite(scrollX) ? scrollX : lastWidgetObservedScrollX;
-                        lastWidgetObservedScrollY = Number.isFinite(scrollY) ? scrollY : lastWidgetObservedScrollY;
-                        requestWidgetFrameCapture(220);
-                    }
-                }
                 if (tracked.event_type === 'page_view') flushVisualEvents();
                 break;
             }
@@ -1811,15 +1446,6 @@
        6️⃣ Fermer iframe
     ========================= */
     function closeIframe() {
-        if (frameTimer) {
-            clearTimeout(frameTimer);
-            frameTimer = null;
-        }
-        if (widgetFrameTimer) {
-            clearTimeout(widgetFrameTimer);
-            widgetFrameTimer = null;
-        }
-        frameRequestedAgain = false;
         if (iframe) {
             iframe.remove();
             iframe = null;
