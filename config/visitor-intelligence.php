@@ -2,10 +2,10 @@
 
 return [
     'enabled' => env('VISITOR_INTELLIGENCE_ENABLED', true),
-    // Raw visitor replays are intentionally short-lived. Keep the setting
-    // configurable through the environment while using 48 hours by default.
-    'session_retention_days' => (int) env('VISITOR_INTELLIGENCE_SESSION_RETENTION_DAYS', 2),
-    'summary_retention_days' => (int) env('VISITOR_INTELLIGENCE_SUMMARY_RETENTION_DAYS', 365),
+    // Visitor Intelligence is intentionally ephemeral: every journey artifact
+    // shares one fixed two-day retention boundary.
+    'session_retention_days' => 2,
+    'summary_retention_days' => 2,
     'ingestion_max_batch' => (int) env('VISITOR_INTELLIGENCE_INGESTION_MAX_BATCH', 100),
     'pointer_tracking_enabled' => env('VISITOR_INTELLIGENCE_POINTER_TRACKING_ENABLED', true),
     // Le pipeline de capture d'écran a été retiré (rrweb est l'unique canal de
@@ -16,4 +16,26 @@ return [
     'replay_chunk_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_EVENTS', 500),
     'replay_chunk_max_bytes' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_BYTES', 1572864),
     'replay_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_MAX_EVENTS', 100000),
+    'ai' => [
+        'enabled' => env('VISITOR_INTELLIGENCE_AI_ENABLED', true),
+        'analysis_delay_seconds' => (int) env('VISITOR_INTELLIGENCE_AI_ANALYSIS_DELAY_SECONDS', 20),
+        'max_timeline_events' => (int) env('VISITOR_INTELLIGENCE_AI_MAX_TIMELINE_EVENTS', 180),
+        'max_moments' => (int) env('VISITOR_INTELLIGENCE_AI_MAX_MOMENTS', 12),
+        'max_visual_captures' => (int) env('VISITOR_INTELLIGENCE_AI_MAX_VISUAL_CAPTURES', 3),
+        'request_timeout' => (int) env('VISITOR_INTELLIGENCE_AI_REQUEST_TIMEOUT', 45),
+    ],
+    'rrweb_context' => [
+        'enabled' => env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_ENABLED', true),
+        'node_binary' => env('VISITOR_INTELLIGENCE_RRWEB_NODE_BINARY', 'node'),
+        'worker_script' => env('VISITOR_INTELLIGENCE_RRWEB_WORKER_SCRIPT', base_path('rrweb-renderer/render.mjs')),
+        'replay_umd_path' => env(
+            'VISITOR_INTELLIGENCE_RRWEB_REPLAY_UMD_PATH',
+            is_file(base_path('rrweb-renderer'.DIRECTORY_SEPARATOR.'node_modules'.DIRECTORY_SEPARATOR.'@rrweb'.DIRECTORY_SEPARATOR.'replay'.DIRECTORY_SEPARATOR.'dist'.DIRECTORY_SEPARATOR.'replay.umd.cjs'))
+                ? base_path('rrweb-renderer'.DIRECTORY_SEPARATOR.'node_modules'.DIRECTORY_SEPARATOR.'@rrweb'.DIRECTORY_SEPARATOR.'replay'.DIRECTORY_SEPARATOR.'dist'.DIRECTORY_SEPARATOR.'replay.umd.cjs')
+                : dirname(base_path()).DIRECTORY_SEPARATOR.'frontend'.DIRECTORY_SEPARATOR.'dashboard'.DIRECTORY_SEPARATOR.'node_modules'.DIRECTORY_SEPARATOR.'@rrweb'.DIRECTORY_SEPARATOR.'replay'.DIRECTORY_SEPARATOR.'dist'.DIRECTORY_SEPARATOR.'replay.umd.cjs',
+        ),
+        'chromium_path' => env('VISITOR_INTELLIGENCE_RRWEB_CHROMIUM_PATH'),
+        'timeout' => (int) env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_TIMEOUT', 90),
+        'max_payload_bytes' => (int) env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_MAX_PAYLOAD_BYTES', 33554432),
+    ],
 ];

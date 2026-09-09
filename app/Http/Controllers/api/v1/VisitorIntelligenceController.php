@@ -4,11 +4,13 @@ namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Concerns\AuthorizesSiteAccess;
 use App\Http\Controllers\Controller;
+use App\Jobs\VisitorIntelligence\BuildVisitorSessionAiAnalysisJob;
 use App\Jobs\VisitorIntelligence\ExecuteVisitorIntelligenceActionJob;
 use App\Models\Site;
 use App\Models\VisitorSession;
 use App\Models\VisitorIntelligenceAction;
 use App\Models\VisitorIntelligenceRule;
+use App\Models\VisitorSessionSummary;
 use App\Services\VisitorIntelligence\VisitorIntelligenceActionService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceFrameService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceQueryService;
@@ -84,6 +86,44 @@ class VisitorIntelligenceController extends Controller
         return response()->json([
             'data' => $this->replays->chunkForSession($site, $model, $chunk),
         ])->header('Cache-Control', 'private, no-store');
+    }
+
+    public function analyzeWithAi(Request $request, Site $site, string $session): JsonResponse
+    {
+        $this->authorizeSiteAccess($request, $site);
+        $model = VisitorSession::query()
+            ->where('site_id', $site->id)
+            ->findOrFail($session);
+
+        abort_unless($model->ended_at, 422, 'L’analyse IA manuelle est disponible après la fin du parcours.');
+
+        $summary = VisitorSessionSummary::query()->firstOrCreate(
+            ['visitor_session_id' => $model->id],
+            [
+                'account_id' => $model->account_id,
+                'site_id' => $model->site_id,
+                'analysis_version' => 'deterministic-1',
+            ],
+        );
+
+        $summary->forceFill([
+            'ai_status' => 'pending',
+            'ai_error' => null,
+            'ai_generated_at' => null,
+        ])->save();
+
+        // The second argument explicitly bypasses the tenant's automatic AI
+        // preference for this one, user-requested analysis.
+        BuildVisitorSessionAiAnalysisJob::dispatch((string) $model->id, true);
+
+        return response()->json([
+            'message' => 'L’analyse IA de ce parcours a été lancée.',
+            'data' => [
+                'session_id' => (string) $model->id,
+                'ai_status' => 'pending',
+                'forced' => true,
+            ],
+        ], 202);
     }
 
     public function journey(Request $request, Site $site): JsonResponse

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\VisitorIntelligence\BuildVisitorSessionAiAnalysisJob;
 use App\Models\Site;
 use App\Services\VisitorIntelligence\VisitorIntelligenceEventService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceReplayService;
@@ -94,6 +95,10 @@ class VisitorIntelligenceIngestionController extends Controller
         ];
         $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor);
         $result = $this->replays->storeChunk($site, $session, $data);
+        if ($session->fresh()?->ended_at) {
+            BuildVisitorSessionAiAnalysisJob::dispatch((string) $session->id)
+                ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.ai.analysis_delay_seconds', 20))));
+        }
 
         return response()->json([
             'success' => true,

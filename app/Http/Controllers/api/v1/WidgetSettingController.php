@@ -170,6 +170,7 @@ class WidgetSettingController extends Controller
             // Widget / AI
             'widget_enabled' => 'boolean',
             'ai_enabled' => 'boolean',
+            'visitor_intelligence_ai_enabled' => 'sometimes|boolean',
             'auto_open_enabled' => 'nullable|boolean',
             'auto_open_delay' => 'nullable|integer|min:1|max:86400',
             'bot_name' => 'nullable|string|max:50',

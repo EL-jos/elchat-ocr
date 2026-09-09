@@ -1,0 +1,8 @@
+{
+  "name": "elchat-visitor-intelligence-rrweb-renderer",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rrweb/replay": "2.0.0"
+  }
+}

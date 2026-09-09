@@ -52,6 +52,13 @@ return [
             'request_timeout' => 30,
         ],
 
+        'visitor_intelligence_analysis' => [
+            'model' => env('LLM_VISITOR_INTELLIGENCE_MODEL', 'openai/gpt-4.1-mini'),
+            'fallback_model' => env('LLM_VISITOR_INTELLIGENCE_FALLBACK_MODEL', 'deepseek/deepseek-v3.2'),
+            'connect_timeout' => 10,
+            'request_timeout' => (int) env('VISITOR_INTELLIGENCE_AI_REQUEST_TIMEOUT', 45),
+        ],
+
         'social_lead_rewrite' => [
             'model' => env('LLM_SOCIAL_LEAD_MODEL', 'deepseek/deepseek-v3.2'),
             'fallback_model' => env('LLM_SOCIAL_LEAD_FALLBACK_MODEL', 'openai/gpt-4.1-mini'),

@@ -11,6 +11,8 @@ class VisitorSessionSummary extends BaseModel
         'unresolved_questions' => 'array', 'important_pages' => 'array',
         'important_ctas' => 'array', 'abandonment_signals' => 'array',
         'evidence' => 'array', 'generated_at' => 'datetime',
+        'ai_analysis' => 'array', 'ai_generated_at' => 'datetime',
+        'ai_input_tokens' => 'integer', 'ai_output_tokens' => 'integer',
     ];
 
     public function session(): BelongsTo { return $this->belongsTo(VisitorSession::class, 'visitor_session_id'); }

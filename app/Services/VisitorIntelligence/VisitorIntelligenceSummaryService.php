@@ -104,6 +104,13 @@ class VisitorIntelligenceSummaryService
                 'evidence' => $evidence,
                 'analysis_version' => 'deterministic-1',
                 'generated_at' => now(),
+                'ai_status' => 'pending',
+                'ai_model' => null,
+                'ai_analysis' => null,
+                'ai_generated_at' => null,
+                'ai_error' => null,
+                'ai_input_tokens' => null,
+                'ai_output_tokens' => null,
             ],
         );
 
@@ -181,11 +188,13 @@ class VisitorIntelligenceSummaryService
     private function evidence(AnalyticsEvent $row): array
     {
         return [
+            'event_id' => (string) $row->id,
             'event_type' => $row->event_type,
             'path' => data_get($row->metadata, 'path'),
             'resource_id' => $row->resource_id,
             'label' => $row->label,
             'occurred_at' => $row->occurred_at?->toISOString(),
+            'replay_timestamp' => $row->occurred_at?->valueOf(),
         ];
     }
 
