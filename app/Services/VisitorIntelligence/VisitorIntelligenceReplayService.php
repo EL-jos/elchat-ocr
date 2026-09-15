@@ -60,6 +60,14 @@ class VisitorIntelligenceReplayService
         // network. Keep the first accepted chunk immutable so a duplicate
         // cannot silently replace part of a replay with different events.
         if ($existing) {
+            if ($existing->payload_hash !== $hash) {
+                Log::warning('Visitor Intelligence rrweb chunk collision: index already used with different content.', [
+                    'site_id' => $site->id,
+                    'session_id' => $session->session_key,
+                    'chunk_index' => $chunkIndex,
+                ]);
+            }
+
             return [
                 'accepted' => true,
                 'duplicate' => true,

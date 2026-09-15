@@ -11,6 +11,7 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\MessageCTA;
 use App\Models\Site;
+use App\Models\WidgetSetting;
 use App\Services\analytics\ResourceEventLogger;
 use App\Services\analytics\AnalyticsEventService;
 use App\Services\ia\ChatService;
@@ -74,6 +75,11 @@ class ChatController extends Controller
         $site = Site::where('id', $data['site_id'])
             ->firstOrFail();
 
+        // `visitor_id` est renseigné uniquement par le chemin public du
+        // widget. Les réponses envoyées depuis le back-office continuent donc
+        // de fonctionner même si l'IA du widget du tenant est désactivée.
+        $visitorAiEnabled = !$visitorId || $this->isVisitorAiEnabled($site);
+
         // 🔑 Continuité OU nouvelle conversation. Un widget peut fournir un
         // UUID encore inexistant pour s'abonner au topic Mercure avant le
         // début du traitement LLM.
@@ -136,11 +142,10 @@ class ChatController extends Controller
         // ─────────────────────────────
         $attachmentUrl = null;
         $visionResult = null;
+        $files = $request->file('image');
         //$attachement = new MessageAttachment();
 
-        if ($request->hasFile('image')) {
-
-            $files = $request->file('image');
+        if ($files && $visitorAiEnabled) {
 
             $bytes = file_get_contents($files->getRealPath());
 
@@ -197,6 +202,7 @@ class ChatController extends Controller
             'conversation_id' => $conversation->id,
             'user_id' => $userId,
             'role' => 'user',
+            'sender_type' => 'visitor',
             // 🖼️ On garde le contenu affiché à l'utilisateur PROPRE (son texte
             // brut, pas la description/OCR) : l'historique visuel du chat ne
             // doit pas s'encombrer du texte extrait de l'image.
@@ -260,10 +266,21 @@ class ChatController extends Controller
 
         $topic = "/sites/{$site->id}/conversations/{$conversation->id}";
 
+        // Sans IA, le message devient une nouvelle demande à traiter par un
+        // humain. Le statut "open" permet aussi au filtre "Nouvelles" du
+        // back-office de l'afficher immédiatement.
+        if (!$visitorAiEnabled) {
+            $conversation->update(['status' => 'open']);
+            $conversation->touch();
+        }
+
         $this->mercureService->post($topic, [
             'type' => 'user_message',
+            'id' => $userMessage->id,
+            'message_id' => $userMessage->id,
             'conversation_id' => $conversation->id,
             'content' => $userMessage->content,
+            'sender_type' => 'visitor',
             // 🖼️ objet minimal (pas besoin du MessageAttachment complet côté front)
             'attachment' => $attachmentUrl ? [
                 'url' => $attachmentUrl,
@@ -271,6 +288,42 @@ class ChatController extends Controller
             ] : null,
             'created_at' => now()->toISOString(),
         ]);
+
+        // Topic agrégé destiné à la liste Conversations du back-office. Il ne
+        // contient pas le texte : le contenu reste diffusé uniquement sur le
+        // topic de la conversation sélectionnée.
+        $this->mercureService->post("/sites/{$site->id}/conversations", [
+            'type' => 'conversation_updated',
+            'conversation_id' => $conversation->id,
+            'message_id' => $userMessage->id,
+            'status' => $conversation->status,
+            'updated_at' => $userMessage->created_at->toISOString(),
+        ]);
+
+        if (!$visitorAiEnabled) {
+            // Le message, ainsi que sa pièce jointe éventuelle, sont déjà
+            // persistés et publiés sur Mercure : il est immédiatement visible
+            // dans Conversations pour une prise en charge humaine. Aucun
+            // pipeline LLM, vision ou job mémoire n'est lancé ici.
+            return response()->json([
+                'answer' => null,
+                'ctas' => [],
+                'entities' => [],
+                'conversation_id' => $conversation->id,
+                'message_id' => null,
+                'user_message_id' => $userMessage->id,
+                'status' => 'awaiting_human',
+                'ai_enabled' => false,
+                'human_handoff' => true,
+                'attachment' => $attachmentUrl ? [
+                    'url' => $attachmentUrl,
+                    'type' => 'image',
+                ] : null,
+                'user_message_attachment_url' => $attachmentUrl,
+                'pending_mcp_confirmation' => null,
+                'suggested_actions' => [],
+            ]);
+        }
 
 
         // Générer la réponse (🧠 avec mémoire)
@@ -289,6 +342,7 @@ class ChatController extends Controller
             'conversation_id' => $conversation->id,
             'user_id' => $userId,
             'role' => 'bot',
+            'sender_type' => 'ai',
             'content' => $chatResponse->message, // texte LLM uniquement
             'entities' => $chatResponse->entities,
         ]);
@@ -342,12 +396,15 @@ class ChatController extends Controller
         $this->mercureService->post($topic, [
             'type' => 'bot_message',
             'conversation_id' => $conversation->id,
+            'id' => $botMessage->id,
             // Le widget utilise cet identifiant pour rattacher les impressions
             // et les clics CTA au message réellement enregistré. Sans lui, le
             // widget génère un UUID local qui est rejeté par l'endpoint public
             // de tracking (le message n'existe pas en base).
             'message_id' => $botMessage->id,
             'content' => $chatResponse->message,
+            'sender_type' => 'ai',
+            'generated_by_ai' => true,
             'ctas' => $chatResponse->ctas, // ajout CTA
             'entities' => $chatResponse->entities,
             'suggested_actions' => $chatResponse->suggestedActions, // 🆕
@@ -404,6 +461,16 @@ class ChatController extends Controller
         $file->move(public_path('assets/resources/chats/'), $path_file);
 
         return "assets/resources/chats/" . $path_file;
+    }
+
+    private function isVisitorAiEnabled(Site $site): bool
+    {
+        $enabled = WidgetSetting::query()
+            ->where('site_id', $site->id)
+            ->value('ai_enabled');
+
+        // Compatibilité avec les sites créés avant l'existence du réglage.
+        return !in_array($enabled, [false, 0, '0'], true);
     }
     // Méthode pour supprimer une image
     private function deleteImage($path)

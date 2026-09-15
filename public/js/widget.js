@@ -32,6 +32,8 @@
     const STORAGE_KEY = `elchat_user_opened_${SITE_ID}`;
     const SESSION_KEY = `elchat_vi_session_${SITE_ID}`;
     const VISITOR_KEY = `elchat_visitor_uuid_${SITE_ID}`;
+    const RRWEB_INDEX_KEY = `elchat_vi_rrweb_idx_${SITE_ID}`;
+    const VISUAL_SEQUENCE_KEY = `elchat_vi_visual_seq_${SITE_ID}`;
 
     function createId() {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
@@ -82,6 +84,10 @@
     };
 
     let config = DEFAULT_CONFIG;
+    // Le suivi Visitor Intelligence reste indépendant du widget de chat :
+    // widget_enabled ne contrôle que le bouton, l'ouverture automatique et
+    // l'iframe de conversation.
+    let widgetEnabled = true;
     let btn = null;
     let iframe = null;
     let autoOpenTimer = null;
@@ -118,6 +124,12 @@
     let rrwebRecordingStopped = false;
     let rrwebFlushTimer = null;
     let rrwebChunkIndex = 0;
+    try {
+        const storedRrwebIndex = parseInt(sessionStorage.getItem(RRWEB_INDEX_KEY) || '0', 10);
+        if (Number.isFinite(storedRrwebIndex) && storedRrwebIndex > 0) rrwebChunkIndex = storedRrwebIndex;
+    } catch (_) {
+        // sessionStorage indisponible : l'index reste limité à cette page.
+    }
     let rrwebPendingEvents = [];
     let rrwebPendingBytes = 0;
     let rrwebPendingChunks = [];
@@ -140,6 +152,33 @@
     const RRWEB_CHUNK_MAX_BYTES = 180000;
     const RRWEB_FLUSH_INTERVAL = 3500;
     const PAGE_INACTIVITY_THRESHOLD_MS = 30000;
+
+    function nextRrwebChunkIndex() {
+        const index = rrwebChunkIndex++;
+        try {
+            sessionStorage.setItem(RRWEB_INDEX_KEY, String(rrwebChunkIndex));
+        } catch (_) {
+            // L'index avance quand même en mémoire pour cette page.
+        }
+        return index;
+    }
+
+    function nextVisualSequence() {
+        visualSequence++;
+        try {
+            sessionStorage.setItem(VISUAL_SEQUENCE_KEY, String(visualSequence));
+        } catch (_) {
+            // La séquence reste valide pour cette page si le stockage est indisponible.
+        }
+        return visualSequence;
+    }
+
+    try {
+        const storedVisualSequence = parseInt(sessionStorage.getItem(VISUAL_SEQUENCE_KEY) || '0', 10);
+        if (Number.isFinite(storedVisualSequence) && storedVisualSequence > 0) visualSequence = storedVisualSequence;
+    } catch (_) {
+        // sessionStorage indisponible : la séquence reste locale à cette page.
+    }
 
     function deviceType() {
         const userAgent = navigator.userAgent.toLowerCase();
@@ -272,7 +311,7 @@
         const body = '{'
             + `"visitor_uuid":${JSON.stringify(visitorUUID)},`
             + `"session_id":${JSON.stringify(SESSION_ID)},`
-            + `"chunk_index":${rrwebChunkIndex++},`
+            + `"chunk_index":${nextRrwebChunkIndex()},`
             + '"rrweb_version":"2.0.0",'
             + `"occurred_at":${JSON.stringify(bounds.first || new Date().toISOString())},`
             + `"metadata":${JSON.stringify(rrwebChunkMetadata())},`
@@ -641,7 +680,7 @@
         }
         const occurredAt = new Date().toISOString();
         const event = {
-            event_id: `${SESSION_ID}-event-${++visualSequence}`,
+            event_id: `${SESSION_ID}-event-${nextVisualSequence()}`,
             event_type: eventType,
             occurred_at: occurredAt,
             page_url: window.location.href,
@@ -1030,6 +1069,10 @@
     fetch(API_URL)
         .then(res => res.ok ? res.json() : null)
         .then(data => {
+            if (data && data.success && data.config) {
+                widgetEnabled = data.config.widget_enabled !== false;
+            }
+
             if (data && data.success && data.config && data.config.button) {
                 const b = data.config.button;
                 config.button = {
@@ -1051,12 +1094,18 @@
                     ? autoOpenDelay
                     : DEFAULT_CONFIG.auto_open_delay;
             }
-            createButton();
-            setupAutoOpen();
-            setupProactivePolling();
+            if (widgetEnabled) {
+                createButton();
+                setupAutoOpen();
+                setupProactivePolling();
+            }
         })
         .catch(() => {
             console.warn('[ELChat] Config non trouvée → fallback par défaut');
+            // En cas d'indisponibilité temporaire de la configuration, on
+            // conserve le comportement historique pour ne pas casser les sites
+            // existants.
+            widgetEnabled = true;
             createButton();
             setupAutoOpen();
             setupProactivePolling();
@@ -1066,7 +1115,7 @@
        2️⃣ Créer le bouton flottant
     ========================= */
     function createButton() {
-        if (btn) return;
+        if (!widgetEnabled || btn) return;
 
         btn = document.createElement('button');
         btn.id = 'elchat-btn';
@@ -1109,7 +1158,7 @@
        3️⃣ Auto-open configurable
     ========================= */
     function setupAutoOpen() {
-        if (!config.auto_open_enabled || userClosed) return; // ✅ opt-in et ignore si l'utilisateur a fermé
+        if (!widgetEnabled || !config.auto_open_enabled || userClosed) return; // ✅ opt-in et ignore si l'utilisateur a fermé
         const delay = Number(config.auto_open_delay);
         if (!Number.isFinite(delay) || delay < 0) return;
 
@@ -1122,7 +1171,7 @@
     // agrégation des événements Visitor Intelligence. Ce polling permet aussi
     // d'ouvrir le widget lorsque l'iframe n'était pas encore ouverte.
     function setupProactivePolling() {
-        if (proactivePollTimer) return;
+        if (!widgetEnabled || proactivePollTimer) return;
 
         const poll = async () => {
             proactivePollTimer = null;
@@ -1158,7 +1207,7 @@
        4️⃣ Ouvrir iframe
     ========================= */
     function openIframe() {
-        if (isOpened) return;
+        if (!widgetEnabled || isOpened) return;
         isOpened = true;
 
         if (autoOpenTimer) {

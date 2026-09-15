@@ -47,7 +47,7 @@ class VisitorIntelligenceController extends Controller
     public function visitors(Request $request, Site $site): JsonResponse
     {
         $this->authorizeSiteAccess($request, $site);
-        return response()->json(['data' => $this->query->visitors($site, $this->filters($request))]);
+        return response()->json($this->query->visitors($site, $this->filters($request)));
     }
 
     public function session(Request $request, Site $site, string $session): JsonResponse
@@ -247,6 +247,8 @@ class VisitorIntelligenceController extends Controller
             'with_elchat' => ['nullable', 'boolean'], 'converted' => ['nullable', 'boolean'],
             'visitor_id' => ['nullable', 'uuid'],
             'per_page' => ['nullable', 'integer', 'between:10,100'],
+            'sessions_page' => ['nullable', 'integer', 'min:1'],
+            'visitors_page' => ['nullable', 'integer', 'min:1'],
         ]);
     }
 

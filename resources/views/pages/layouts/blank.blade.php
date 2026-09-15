@@ -74,7 +74,7 @@
                     <li class="nav-item">
                         <a @class(["nav-link p-0", "active" => $routeName === 'faqs.page']) href="{{ route('faqs.page') }}">FAQ</a>
                     </li>
-                    <li class="nav-item free-trial"><a class="nav-link font-weight-700" href="">Essayer gratuitement</a></li>
+                    <li class="nav-item free-trial"><a class="nav-link font-weight-700" href="https://elchat.io/centre-d-aide/">Centre d'aide</a></li>
                 </ul>
 
                 <!-- navbar collapse -->

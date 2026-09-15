@@ -30,6 +30,10 @@ class MessageResource extends JsonResource
             'id' => $this->id,
             'content' => $this->content,
             'role' => $this->role,
+            'sender_type' => $this->sender_type
+                ?? ($this->role === 'bot' ? 'ai' : 'visitor'),
+            'generated_by_ai' => ($this->sender_type
+                ?? ($this->role === 'bot' ? 'ai' : 'visitor')) === 'ai',
             'created_at' => optional($this->created_at)->toIso8601String(),
             'entities' => $this->entities ?? [],
 

@@ -86,6 +86,7 @@ Route::prefix('v1')->group(function () {
             Route::get('site/{siteId}/conversations/{conversation}', 'show');
             Route::get('site/{siteId}/conversations/{conversation}/messages', 'adminMessages');
             Route::patch('conversations/{conversation}/status', 'updateStatus');
+            Route::post('sites/{siteId}/conversations/{conversation}/reply', 'reply');
             Route::post('conversations/{conversation}/convert-to-user', 'convertToUser');
         });
         Route::post('/site/{site}/manual-content', [ManualContentController::class, 'store']);

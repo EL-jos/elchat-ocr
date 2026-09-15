@@ -11,6 +11,7 @@
         "aws/aws-sdk-php": "*",
         "darkaonline/l5-swagger": "^9.0",
         "facebook/graph-sdk": "^5.1",
+        "geoip2/geoip2": "^3.4",
         "google/apiclient": "^2.19",
         "laravel/framework": "^12.0",
         "laravel/socialite": "^5.24",

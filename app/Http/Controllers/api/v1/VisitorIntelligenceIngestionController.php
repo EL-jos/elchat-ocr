@@ -7,6 +7,7 @@ use App\Jobs\VisitorIntelligence\BuildVisitorSessionAiAnalysisJob;
 use App\Models\Site;
 use App\Services\VisitorIntelligence\VisitorIntelligenceEventService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceReplayService;
+use App\Services\VisitorIntelligence\VisitorSessionLocationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,7 @@ class VisitorIntelligenceIngestionController extends Controller
     public function __construct(
         private readonly VisitorIntelligenceEventService $events,
         private readonly VisitorIntelligenceReplayService $replays,
+        private readonly VisitorSessionLocationService $locations,
     )
     {
     }
@@ -43,6 +45,7 @@ class VisitorIntelligenceIngestionController extends Controller
         [$visitor, $isNewVisitor] = $this->events->resolveVisitor($site, $data['visitor_uuid'], $request);
         $firstEvent = $data['events'][0];
         $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor);
+        $this->locations->dispatchIfNeeded($session, $request->ip());
 
         foreach ($data['events'] as $event) {
             $this->events->capture($site, $session, $visitor, $event, $request);
@@ -94,6 +97,7 @@ class VisitorIntelligenceIngestionController extends Controller
             ],
         ];
         $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor);
+        $this->locations->dispatchIfNeeded($session, $request->ip());
         $result = $this->replays->storeChunk($site, $session, $data);
         if ($session->fresh()?->ended_at) {
             BuildVisitorSessionAiAnalysisJob::dispatch((string) $session->id)

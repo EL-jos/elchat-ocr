@@ -109,6 +109,9 @@ ANALYTICS_ANOMALY_RELATIVE_THRESHOLD=0.25
 ANALYTICS_INSIGHT_MINIMUM_SAMPLE=10
 ANALYTICS_EXECUTION_FAILURE_RATE_THRESHOLD=0.15
 WIDGET_ORIGIN=https://adresse-du-widget.example
+TRUSTED_PROXIES=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+# Laisser vide pour utiliser la queue par défaut déjà consommée par le worker.
+VISITOR_INTELLIGENCE_GEO_QUEUE=
 ```
 
 ## Déploiement production

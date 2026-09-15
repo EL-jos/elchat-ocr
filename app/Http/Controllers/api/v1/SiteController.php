@@ -447,18 +447,8 @@ class SiteController extends Controller
 
         $settings->refresh();
 
-        // =====================================
-        // 🚫 3. Vérifier si le widget est activé
-        // =====================================
-        /*if (!$settings->widget_enabled) {
-            return response()->json([
-                'success' => false,
-                'error'   => 'WIDGET_DISABLED',
-            ], 403);
-        }*/
-
         // =====================
-        // ✅ 4. Retourner la config
+        // ✅ 3. Retourner la config
         // =====================
         return response()->json([
             'success' => true,
@@ -475,6 +465,11 @@ class SiteController extends Controller
                     'offsetX'    => $settings->button_offset_x,
                     'offsetY'    => $settings->button_offset_y,
                 ],
+                // Ces deux flags sont consommés par le loader public du
+                // widget. Les exposer ici permet d'appliquer immédiatement la
+                // préférence du tenant avant de créer un bouton ou une iframe.
+                'widget_enabled' => (bool) $settings->widget_enabled,
+                'ai_enabled' => (bool) $settings->ai_enabled,
                 'auto_open_enabled' => (bool) $settings->auto_open_enabled,
                 'auto_open_delay' => (int) ($settings->auto_open_delay ?? 5),
                 'ai_engagement_enabled' => (bool) $settings->ai_engagement_enabled,

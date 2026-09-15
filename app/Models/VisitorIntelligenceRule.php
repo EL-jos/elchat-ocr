@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class VisitorIntelligenceRule extends BaseModel
 {
     protected $casts = [
-        'conditions' => 'array', 'action' => 'array', 'limits' => 'array',
+        'conditions' => 'array', 'action' => 'array', 'frequency' => 'string', 'limits' => 'array',
+        'cooldown_seconds' => 'integer',
         'approval_required' => 'boolean', 'audience' => 'array', 'schedule' => 'array',
         'is_active' => 'boolean', 'last_triggered_at' => 'datetime',
     ];

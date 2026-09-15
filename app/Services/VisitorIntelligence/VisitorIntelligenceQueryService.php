@@ -41,9 +41,9 @@ class VisitorIntelligenceQueryService
             $metric('sessions_without_elchat', 'Sessions sans ELChat', max(0, $total - $withChat), 'count', $total > 0),
             $metric('conversations', 'Conversations', $this->distinctEvent($events, 'conversation_id', [AnalyticsEventType::CONVERSATION_STARTED->value]), 'count', $total > 0),
             $metric('high_intent', 'Forte intention', (clone $sessions)->whereIn('intent_level', ['high'])->count(), 'count', $total > 0),
-            $metric('leads', 'Leads', (clone $events)->where('event_type', AnalyticsEventType::LEAD_CREATED->value)->count(), 'count', $total > 0),
-            $metric('appointments', 'Rendez-vous', (clone $events)->whereIn('event_type', [AnalyticsEventType::MEETING_BOOKED->value, AnalyticsEventType::APPOINTMENT_CREATED->value])->count(), 'count', $total > 0),
-            $metric('conversions', 'Conversions', (clone $events)->whereIn('event_type', [AnalyticsEventType::CONVERSION->value, AnalyticsEventType::PURCHASE_COMPLETED->value])->count(), 'count', $total > 0),
+            $metric('leads', 'Leads', $this->distinctEvent($events, 'session_id', [AnalyticsEventType::LEAD_CREATED->value]), 'count', $total > 0),
+            $metric('appointments', 'Rendez-vous', $this->distinctEvent($events, 'session_id', [AnalyticsEventType::MEETING_BOOKED->value, AnalyticsEventType::APPOINTMENT_CREATED->value]), 'count', $total > 0),
+            $metric('conversions', 'Conversions', $this->distinctEvent($events, 'session_id', [AnalyticsEventType::CONVERSION->value, AnalyticsEventType::PURCHASE_COMPLETED->value]), 'count', $total > 0),
             $metric('cta_impressions', 'CTA affichés', (clone $events)->whereIn('event_type', [AnalyticsEventType::CTA_IMPRESSION->value])->count(), 'count', $total > 0),
             $metric('cta_clicks', 'CTA cliqués', (clone $events)->whereIn('event_type', [AnalyticsEventType::CTA_CLICK->value])->count(), 'count', $total > 0),
             $metric('product_views', 'Produits consultés', (clone $events)->where('event_type', AnalyticsEventType::PRODUCT_VIEWED->value)->count(), 'count', $total > 0),
@@ -75,7 +75,12 @@ class VisitorIntelligenceQueryService
         return $this->sessionQuery($site, $from, $to, $filters)
             ->with(['summary', 'visitor:id,uuid,device'])
             ->latest('started_at')
-            ->paginate(min(100, max(10, (int) ($filters['per_page'] ?? 25))));
+            ->paginate(
+                min(100, max(10, (int) ($filters['per_page'] ?? 25))),
+                ['*'],
+                'page',
+                max(1, (int) ($filters['sessions_page'] ?? 1)),
+            );
     }
 
     /**
@@ -83,7 +88,7 @@ class VisitorIntelligenceQueryService
      * grouping never crosses the site boundary and exposes only aggregate
      * journey facts useful to an administrator.
      */
-    public function visitors(Site $site, array $filters): array
+    public function visitors(Site $site, array $filters)
     {
         [$from, $to] = $this->period($filters);
         $rows = $this->sessionQuery($site, $from, $to, $filters)
@@ -100,10 +105,14 @@ class VisitorIntelligenceQueryService
             ])
             ->groupBy('visitor_id')
             ->orderByDesc('last_seen_at')
-            ->limit(100)
-            ->get();
+            ->paginate(
+                min(100, max(10, (int) ($filters['per_page'] ?? 25))),
+                ['*'],
+                'page',
+                max(1, (int) ($filters['visitors_page'] ?? 1)),
+            );
 
-        if ($rows->isEmpty()) return [];
+        if ($rows->isEmpty()) return $rows;
 
         $visitors = Visitor::query()
             ->where('site_id', $site->id)
@@ -111,7 +120,7 @@ class VisitorIntelligenceQueryService
             ->get(['id', 'uuid', 'device'])
             ->keyBy('id');
 
-        return $rows->map(function ($row) use ($visitors) {
+        $rows->setCollection($rows->getCollection()->map(function ($row) use ($visitors) {
             $visitor = $visitors->get($row->visitor_id);
             return [
                 'visitor_id' => (string) $row->visitor_id,
@@ -125,7 +134,9 @@ class VisitorIntelligenceQueryService
                 'conversions' => (int) $row->conversions,
                 'high_intent_sessions' => (int) $row->high_intent_sessions,
             ];
-        })->values()->all();
+        })->values());
+
+        return $rows;
     }
 
     public function sessionDetail(Site $site, string $sessionId): array

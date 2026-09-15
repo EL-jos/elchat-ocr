@@ -14,8 +14,10 @@ use App\Models\Site;
 use App\Models\User;
 use App\Services\conversation\VisitorConversionService;
 use App\Services\analytics\AnalyticsEventService;
+use App\Services\MercureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use App\Http\Resources\MessageResource;
 
 class ConversationController extends Controller
@@ -23,6 +25,7 @@ class ConversationController extends Controller
     public function __construct(
         private readonly VisitorConversionService $conversionService,
         private readonly AnalyticsEventService $analytics,
+        private readonly MercureService $mercure,
     ) {
     }
 
@@ -353,6 +356,96 @@ class ConversationController extends Controller
             'last_page' => $paginator->lastPage(),
             'per_page' => $paginator->perPage(),
             'total' => $paginator->total(),
+        ]);
+    }
+
+    /**
+     * POST /api/sites/{siteId}/conversations/{conversation}/reply
+     *
+     * Réponse envoyée par un administrateur humain. Le rôle historique
+     * "bot" reste utilisé pour que le widget l'affiche côté assistant, tandis
+     * que sender_type conserve l'origine réelle du message.
+     */
+    public function reply(Request $request, string $siteId, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->site_id === $siteId, 404);
+        $this->authorizeSite($conversation->site);
+
+        $content = trim((string) $request->validate([
+            'content' => ['required', 'string', 'max:5000'],
+        ])['content']);
+
+        if ($content === '') {
+            return response()->json([
+                'message' => 'Le contenu de la réponse ne peut pas être vide.',
+            ], 422);
+        }
+
+        $admin = auth()->user();
+        $message = Message::create([
+            'id' => (string) Str::uuid(),
+            'conversation_id' => $conversation->id,
+            'user_id' => $admin->id,
+            'role' => 'bot',
+            'sender_type' => 'human',
+            'content' => $content,
+        ]);
+
+        // Une réponse humaine reprend une conversation nouvelle ou résolue.
+        $conversation->update(['status' => 'active']);
+        $conversation->touch();
+
+        $site = $conversation->site;
+        $sessionId = $conversation->metadata['session_id'] ?? null;
+
+        $this->analytics->capture(
+            $site,
+            AnalyticsEventType::MESSAGE_SENT,
+            [
+                'visitor_id' => $conversation->visitor_id,
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+                'session_id' => $sessionId,
+                'correlation_id' => $sessionId ?? $conversation->id,
+                'source' => 'admin',
+                'channel' => $conversation->metadata['channel'] ?? 'widget',
+            ],
+            metadata: ['sender_type' => 'human', 'admin_user_id' => $admin->id],
+            idempotencyKey: $this->analytics->deterministicKey('human_message_sent', $message->id),
+        );
+
+        $topic = "/sites/{$site->id}/conversations/{$conversation->id}";
+        $this->mercure->post($topic, [
+            'type' => 'bot_message',
+            'id' => $message->id,
+            'message_id' => $message->id,
+            'conversation_id' => $conversation->id,
+            'content' => $message->content,
+            'ctas' => [],
+            'entities' => [],
+            'suggested_actions' => [],
+            'sender_type' => 'human',
+            'generated_by_ai' => false,
+            'created_at' => $message->created_at->toISOString(),
+        ]);
+
+        // Réordonne aussi la liste du back-office si la conversation était
+        // déjà ouverte dans une autre vue.
+        $this->mercure->post("/sites/{$site->id}/conversations", [
+            'type' => 'conversation_updated',
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+            'status' => $conversation->status,
+            'updated_at' => $message->created_at->toISOString(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'conversation_id' => $conversation->id,
+            'message_id' => $message->id,
+            'status' => $conversation->status,
+            'sender_type' => 'human',
+            'message' => new MessageResource($message),
         ]);
     }
 }

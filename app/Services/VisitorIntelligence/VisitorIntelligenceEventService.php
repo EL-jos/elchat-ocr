@@ -182,7 +182,7 @@ class VisitorIntelligenceEventService
 
             if ($event->event_type === AnalyticsEventType::PAGE_VIEW->value) {
                 $updates['page_count'] = $session->page_count + 1;
-                $updates['unique_page_count'] = max($session->unique_page_count, $session->page_count + 1);
+                $updates['unique_page_count'] = $this->uniquePageCountForSession($event);
             }
             if (in_array($event->event_type, [
                 AnalyticsEventType::WIDGET_IMPRESSION->value,
@@ -232,6 +232,32 @@ class VisitorIntelligenceEventService
             $session->forceFill($updates)->save();
             return $session->fresh();
         });
+    }
+
+    private function uniquePageCountForSession(AnalyticsEvent $event): int
+    {
+        return AnalyticsEvent::query()
+            ->where('site_id', $event->site_id)
+            ->where('session_id', $event->session_id)
+            ->where('event_type', AnalyticsEventType::PAGE_VIEW->value)
+            ->get(['metadata'])
+            ->map(function (AnalyticsEvent $pageView): ?string {
+                $metadata = $pageView->metadata ?? [];
+                $path = $metadata['path'] ?? $metadata['page_url'] ?? null;
+                if (!is_string($path) || trim($path) === '') return null;
+
+                $path = trim($path);
+                if (filter_var($path, FILTER_VALIDATE_URL)) {
+                    $path = (string) (parse_url($path, PHP_URL_PATH) ?: '/');
+                } else {
+                    $path = (string) (parse_url($path, PHP_URL_PATH) ?: $path);
+                }
+
+                return $path !== '' ? $path : '/';
+            })
+            ->filter()
+            ->unique()
+            ->count();
     }
 
     public function sanitizeBrowserMetadata(array $metadata, array $event = []): array

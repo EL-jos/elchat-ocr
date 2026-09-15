@@ -35,7 +35,7 @@ class BuildVisitorSessionAiAnalysisJob implements ShouldQueue, ShouldBeUnique
 
     public function uniqueId(): string
     {
-        return $this->sessionId;
+        return $this->sessionId.':'.($this->isForced() ? 'forced' : 'automatic');
     }
 
     public function handle(

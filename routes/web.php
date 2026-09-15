@@ -174,5 +174,67 @@ Route::get('/widget/{any?}', function () {
     );
 })->where('any', '.*');
 
+Route::get('/centre-d-aide/{path?}', function ($path = null) {
+    $basePath = public_path('documentation');
+
+    // Page d'accueil
+    if (!$path) {
+        return response()->file($basePath . '/index.html');
+    }
+
+    $path = trim($path, '/');
+    $file = $basePath . '/' . $path;
+
+    // Fichiers statiques : CSS, JS, images, fonts, etc.
+    if (is_file($file)) {
+        $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+
+        $mimeTypes = [
+            'css'   => 'text/css',
+            'js'    => 'application/javascript',
+            'mjs'   => 'application/javascript',
+            'json'  => 'application/json',
+            'svg'   => 'image/svg+xml',
+            'png'   => 'image/png',
+            'jpg'   => 'image/jpeg',
+            'jpeg'  => 'image/jpeg',
+            'webp'  => 'image/webp',
+            'gif'   => 'image/gif',
+            'ico'   => 'image/x-icon',
+            'woff'  => 'font/woff',
+            'woff2' => 'font/woff2',
+            'ttf'   => 'font/ttf',
+            'map'   => 'application/json',
+        ];
+
+        return response()->file(
+            $file,
+            [
+                'Content-Type' => $mimeTypes[$extension] ?? 'application/octet-stream',
+            ]
+        );
+    }
+
+    // Pages Astro générées dans /index.html
+    $indexFile = $basePath . '/' . $path . '/index.html';
+
+    if (is_file($indexFile)) {
+        return response()->file($indexFile, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+        ]);
+    }
+
+    // Éventuellement une page .html
+    $htmlFile = $basePath . '/' . $path . '.html';
+
+    if (is_file($htmlFile)) {
+        return response()->file($htmlFile, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+        ]);
+    }
+
+    abort(404);
+})->where('path', '.*');
+
 Route::get('/paypal/checkout/return', [PaypalCheckoutReturnController::class, 'handle'])->name('paypal.checkout.return');
 Route::get('/paypal/checkout/cancel', [PaypalCheckoutReturnController::class, 'cancel'])->name('paypal.checkout.cancel');

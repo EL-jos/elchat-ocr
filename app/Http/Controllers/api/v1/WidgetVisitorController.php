@@ -29,6 +29,10 @@ class WidgetVisitorController extends Controller
 
         $site = Site::findOrFail($request->site_id);
 
+        if ($response = $this->widgetDisabledResponse($site)) {
+            return $response;
+        }
+
         $visitor = Visitor::where('site_id', $site->id)
             ->where('uuid', $request->visitor_uuid)
             ->first();
@@ -87,6 +91,13 @@ class WidgetVisitorController extends Controller
 
         $site = Site::findOrFail($data['site_id']);
 
+        // Le script public masque déjà le widget côté navigateur. Ce garde-fou
+        // serveur évite néanmoins qu'un ancien iframe ou un appel direct puisse
+        // continuer à envoyer des messages après désactivation.
+        if ($response = $this->widgetDisabledResponse($site)) {
+            return $response;
+        }
+
         // 1️⃣ récupérer visitor
         $visitor = Visitor::where('site_id', $site->id)
             ->where('uuid', $data['visitor_uuid'])
@@ -143,6 +154,25 @@ class WidgetVisitorController extends Controller
         }
 
         return 'desktop';
+    }
+
+    private function widgetDisabledResponse(Site $site): ?JsonResponse
+    {
+        $enabled = WidgetSetting::query()
+            ->where('site_id', $site->id)
+            ->value('widget_enabled');
+
+        // Une configuration absente reste compatible avec les sites existants
+        // et est donc considérée comme activée.
+        if (!in_array($enabled, [false, 0, '0'], true)) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'error' => 'WIDGET_DISABLED',
+            'message' => 'Le widget est désactivé pour ce site.',
+        ], 403);
     }
 
     public function visitorMessages(Request $request, string $conversationId, string $siteId)
@@ -218,18 +248,8 @@ class WidgetVisitorController extends Controller
 
         $settings->refresh();
 
-        // =====================================
-        // 🚫 3. Vérifier si le widget est activé
-        // =====================================
-        /*if (!$settings->widget_enabled) {
-            return response()->json([
-                'success' => false,
-                'error'   => 'WIDGET_DISABLED',
-            ], 403);
-        }*/
-
         // =====================
-        // ✅ 4. Retourner la config
+        // ✅ 3. Retourner la config
         // =====================
         return response()->json([
             'success' => true,

@@ -16,6 +16,22 @@ return [
     'replay_chunk_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_EVENTS', 500),
     'replay_chunk_max_bytes' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_BYTES', 1572864),
     'replay_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_MAX_EVENTS', 100000),
+    'geo' => [
+        'enabled' => env('VISITOR_INTELLIGENCE_GEO_ENABLED', true),
+        'fallback_enabled' => env('VISITOR_INTELLIGENCE_GEO_FALLBACK_ENABLED', true),
+        'endpoint' => env('VISITOR_INTELLIGENCE_GEO_ENDPOINT', 'https://ipwho.is/{ip}'),
+        'connect_timeout' => (int) env('VISITOR_INTELLIGENCE_GEO_CONNECT_TIMEOUT', 2),
+        'timeout' => (int) env('VISITOR_INTELLIGENCE_GEO_TIMEOUT', 5),
+        // Null uses the queue connection's default queue, which is consumed by
+        // a standard Laravel worker. A dedicated queue remains opt-in.
+        'queue' => env('VISITOR_INTELLIGENCE_GEO_QUEUE'),
+        'retry_after_seconds' => (int) env('VISITOR_INTELLIGENCE_GEO_RETRY_AFTER_SECONDS', 300),
+        'queue_stale_after_seconds' => (int) env('VISITOR_INTELLIGENCE_GEO_QUEUE_STALE_AFTER_SECONDS', 900),
+        'database_path' => env(
+            'VISITOR_GEO_DATABASE_PATH',
+            public_path('tools/geoip/GeoLite2-City.mmdb')
+        ),
+    ],
     'ai' => [
         'enabled' => env('VISITOR_INTELLIGENCE_AI_ENABLED', true),
         'analysis_delay_seconds' => (int) env('VISITOR_INTELLIGENCE_AI_ANALYSIS_DELAY_SECONDS', 20),
