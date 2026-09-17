@@ -101,8 +101,24 @@ class ProactiveEngagementController extends Controller
     public function destroy(Request $request, Site $site, ProactiveCampaign $campaign)
     {
         $this->ensureCampaignAccess($request, $site, $campaign);
-        abort_unless($campaign->status === 'draft' && !$campaign->sequences()->exists(), 409, 'Seule une campagne brouillon sans historique peut être supprimée.');
-        $campaign->delete();
+        $hasActiveSequence = $campaign->sequences()->where('status', 'active')->exists();
+        $hasPendingMessage = $campaign->messages()
+            ->whereIn('status', ['scheduled', 'retrying', 'processing'])
+            ->exists();
+        $hasHistory = $campaign->sequences()->exists()
+            || $campaign->messages()->exists()
+            || $campaign->outcomes()->exists();
+        $canDelete = $campaign->status === 'stopped'
+            ? !$hasActiveSequence && !$hasPendingMessage
+            : $campaign->status === 'draft' && !$hasHistory;
+
+        abort_unless(
+            $canDelete,
+            409,
+            'Seules les campagnes brouillon ou arrêtées, sans traitement en cours, peuvent être supprimées.'
+        );
+
+        DB::transaction(fn () => $campaign->delete());
         return response()->json(['status' => 'deleted']);
     }
 

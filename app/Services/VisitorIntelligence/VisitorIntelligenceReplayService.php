@@ -22,8 +22,6 @@ class VisitorIntelligenceReplayService
      * sans qu'aucune erreur ne soit jamais remontée à l'écriture — exactement le
      * bug qui a produit les 422 "Le chunk rrweb est illisible." sur DOM profond.
      */
-    private const JSON_MAX_DEPTH = 512;
-
     public function storeChunk(Site $site, VisitorSession $session, array $data): array
     {
         abort_unless($session->site_id === $site->id, 404, 'Session introuvable.');
@@ -32,8 +30,7 @@ class VisitorIntelligenceReplayService
         abort_if($events === [], 422, 'Le chunk rrweb ne contient aucun événement exploitable.');
 
         try {
-            $json = json_encode($events, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR, self::JSON_MAX_DEPTH);
-            $compressed = gzencode($json, 6);
+            [$payload, $hash, $compressedBytes] = RrwebChunkCodec::encode($events);
         } catch (\Throwable $exception) {
             Log::warning('Visitor Intelligence rrweb chunk encoding failed.', [
                 'site_id' => $site->id,
@@ -43,12 +40,8 @@ class VisitorIntelligenceReplayService
             abort(422, 'Le chunk rrweb est invalide.');
         }
 
-        if (!is_string($compressed)) abort(422, 'Le chunk rrweb n’a pas pu être compressé.');
         $maxBytes = max(65536, (int) config('visitor-intelligence.replay_chunk_max_bytes', 1572864));
-        abort_if(strlen($compressed) > $maxBytes, 413, 'Le chunk rrweb est trop volumineux.');
-
-        $payload = base64_encode($compressed);
-        $hash = hash('sha256', $payload);
+        abort_if($compressedBytes > $maxBytes, 413, 'Le chunk rrweb est trop volumineux.');
         $chunkIndex = max(0, min(1000000, (int) ($data['chunk_index'] ?? 0)));
         $existing = VisitorSessionReplayChunk::query()
             ->where('site_id', $site->id)
@@ -85,7 +78,7 @@ class VisitorIntelligenceReplayService
             'format' => 'rrweb-json-gzip-base64',
             'rrweb_version' => Str::limit((string) ($data['rrweb_version'] ?? '2.0.0'), 16, ''),
             'event_count' => count($events),
-            'payload_bytes' => strlen($compressed),
+            'payload_bytes' => $compressedBytes,
             'payload_hash' => $hash,
             'first_event_at' => $firstEventAt,
             'last_event_at' => $lastEventAt,
@@ -144,7 +137,7 @@ class VisitorIntelligenceReplayService
             ->where('chunk_index', $chunkIndex)
             ->firstOrFail();
 
-        $events = $this->decodeChunk($chunk->payload, $chunk->format);
+        $events = RrwebChunkCodec::decode($chunk->payload, $chunk->format);
         abort_if($events === [], 422, 'Le chunk rrweb est illisible.');
 
         return [
@@ -185,22 +178,4 @@ class VisitorIntelligenceReplayService
         return [Carbon::createFromTimestampMs($timestamps[0]), Carbon::createFromTimestampMs($timestamps[count($timestamps) - 1])];
     }
 
-    private function decodeChunk(string $payload, string $format): array
-    {
-        if ($format !== 'rrweb-json-gzip-base64') return [];
-        $compressed = base64_decode($payload, true);
-        if (!is_string($compressed)) return [];
-        $json = gzdecode($compressed);
-        if (!is_string($json)) return [];
-        try {
-            $events = json_decode($json, true, self::JSON_MAX_DEPTH, JSON_THROW_ON_ERROR);
-        } catch (\Throwable $exception) {
-            Log::warning('Visitor Intelligence rrweb chunk decoding failed.', [
-                'error' => $exception->getMessage(),
-                'payload_bytes' => strlen($payload),
-            ]);
-            return [];
-        }
-        return is_array($events) ? $events : [];
-    }
 }

@@ -35,6 +35,8 @@ class MessageResource extends JsonResource
             'generated_by_ai' => ($this->sender_type
                 ?? ($this->role === 'bot' ? 'ai' : 'visitor')) === 'ai',
             'created_at' => optional($this->created_at)->toIso8601String(),
+            'visitor_read_at' => optional($this->visitor_read_at)->toIso8601String(),
+            'tenant_read_at' => optional($this->tenant_read_at)->toIso8601String(),
             'entities' => $this->entities ?? [],
 
             // message_ctas (snapshot des CTAs réellement affichées sur ce message)

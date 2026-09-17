@@ -199,7 +199,7 @@ class SiteController extends Controller
         Log::info('Dans crawl');
 
         // Dispatch le Job en arrière-plan
-        CrawlSiteJob::dispatch($site->id);
+        CrawlSiteJob::dispatch($site->id)->onQueue('batch');
 
         $mercureService->post(
             "site/{$site->id}/knowledge/indexing",

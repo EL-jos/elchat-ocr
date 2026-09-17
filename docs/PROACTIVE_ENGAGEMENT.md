@@ -118,8 +118,10 @@ PROACTIVE_FACEBOOK_WINDOW_HOURS=24
 PROACTIVE_INSTAGRAM_WINDOW_HOURS=24
 ```
 
-Les workers Supervisor doivent consommer `proactive` en plus de `default` et
-`analytics`, par exemple `php artisan queue:work database --queue=default,analytics,proactive --tries=1`.
+En production, `proactive` doit être consommée par un worker Supervisor dédié
+et ne doit pas être mélangée avec `default` ou `analytics`. Les jobs de crawl
+et d'indexation longue durée sont routés vers une queue `batch` séparée, qui
+doit également disposer de son propre worker.
 Le scheduler Laravel doit être actif (`php artisan schedule:work` ou cron
 `php artisan schedule:run`).
 

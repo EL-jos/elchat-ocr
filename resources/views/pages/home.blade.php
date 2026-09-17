@@ -137,8 +137,8 @@
                                              data-wow-duration="2s" data-wow-delay="1.4s"></figure>
                                 <figure style="background-color: #000; padding: .15rem 0;"><img src="https://www.cuisinehabitat.mu/assets/images/logos/logo.svg" alt="Cuisine Habitat Maurice" class="img-fluid wow fadeInRight"
                                              data-wow-duration="2s" data-wow-delay="1.8s"></figure>
-                                {{--<figure><img src="assets/images/client-logo5.png" alt="telegram" class="img-fluid wow fadeInRight"
-                                             data-wow-duration="2s" data-wow-delay="2.2s"></figure>--}}
+                                <figure><img src="https://ledsrun.re/wp-content/uploads/2025/10/Logo-web-head.png" alt="LED's RUN" class="img-fluid wow fadeInRight"
+                                             data-wow-duration="2s" data-wow-delay="2.2s"></figure>
                             </div>
                             <!-- client logo inner -->
                         </div>
@@ -363,8 +363,16 @@
             </div>
             <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
                 <div class="choose-box">
+                    <h6>Observer avant l’échange</h6>
+                    <p class="mb-0">Le parcours commence dès l’arrivée sur le site : pages consultées, source, périphérique et premières actions posent le contexte.</p>
+                </div>
+                <div class="choose-box">
                     <h6>Le viewport du visiteur</h6>
                     <p class="mb-0">Les captures concernent uniquement la zone visible du site, sur desktop, mobile ou tablette, sans capturer la page entière.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Relier les interactions</h6>
+                    <p class="mb-0">Clics, scrolls, inactivité, widget et CTA sont replacés dans l’ordre du parcours pour faire ressortir les signaux utiles.</p>
                 </div>
                 <div class="choose-box">
                     <h6>Un parcours terminé</h6>

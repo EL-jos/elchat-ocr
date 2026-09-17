@@ -10,6 +10,8 @@ class Message extends BaseModel
 {
     protected $casts = [
         'entities' => 'array',// ✅ nouveau
+        'visitor_read_at' => 'datetime',
+        'tenant_read_at' => 'datetime',
     ];
 
     // Charge automatiquement la pièce jointe à chaque fois qu'un Message est

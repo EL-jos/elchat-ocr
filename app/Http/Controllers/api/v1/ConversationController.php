@@ -251,7 +251,7 @@ class ConversationController extends Controller
 
         $messages = Message::where('conversation_id', $conversationId)
             ->orderBy('created_at', 'asc') // déjà global scope mais sécurité
-            ->get(['id', 'conversation_id', 'user_id', 'role', 'content', 'created_at']);
+            ->get(['id', 'conversation_id', 'user_id', 'role', 'content', 'created_at', 'visitor_read_at', 'tenant_read_at']);
 
         /*
         |--------------------------------------------------------------------------
@@ -356,6 +356,64 @@ class ConversationController extends Controller
             'last_page' => $paginator->lastPage(),
             'per_page' => $paginator->perPage(),
             'total' => $paginator->total(),
+        ]);
+    }
+
+    /**
+     * POST /conversations/{conversation}/read
+     *
+     * Marque comme lus tous les messages à l'ouverture d'une conversation
+     * authentifiée. Le widget envoie actor=visitor ; le dashboard envoie
+     * actor=tenant. Les conversations n'ont pas forcément de visitor_id.
+     */
+    public function markMessagesRead(Request $request, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->user_id === auth()->id(), 404);
+
+        $validated = $request->validate([
+            'actor' => ['sometimes', 'in:visitor,tenant'],
+        ]);
+        $actor = (string) ($validated['actor'] ?? 'tenant');
+
+        $readColumn = $actor === 'visitor' ? 'visitor_read_at' : 'tenant_read_at';
+        $eventType = $actor === 'visitor' ? 'visitor_conversation_read' : 'tenant_conversation_read';
+
+        $readAt = now();
+        $readMessageIds = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->whereNull($readColumn)
+            ->pluck('id')
+            ->values()
+            ->all();
+
+        if ($readMessageIds === []) {
+            return response()->json([
+                'success' => true,
+                'conversation_id' => $conversation->id,
+                'message_ids' => [],
+                'read_at' => null,
+            ]);
+        }
+
+        Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->whereIn('id', $readMessageIds)
+            ->whereNull($readColumn)
+            ->update([$readColumn => $readAt]);
+
+        $readAtIso = $readAt->toISOString();
+        $this->mercure->post("/sites/{$conversation->site_id}/conversations/{$conversation->id}", [
+            'type' => $eventType,
+            'conversation_id' => $conversation->id,
+            'message_ids' => $readMessageIds,
+            'read_at' => $readAtIso,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'conversation_id' => $conversation->id,
+            'message_ids' => $readMessageIds,
+            'read_at' => $readAtIso,
         ]);
     }
 

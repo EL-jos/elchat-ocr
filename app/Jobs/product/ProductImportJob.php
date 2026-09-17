@@ -112,7 +112,7 @@ class ProductImportJob implements ShouldQueue
                         $this->document,
                         $import->id,
                         $import->site->id,
-                    );
+                    )->onQueue('batch');
                 });
             $mercureService->post("site/{$this->site->id}/products/indexing", [
                 'type' => 'indexing_progress',

@@ -6,6 +6,15 @@
 <html lang="fr">
 
 <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-GQK67VF1RK"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'G-GQK67VF1RK');
+    </script>
     @yield('seo')
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <!-- /SEO Ultimate -->

@@ -11,8 +11,9 @@ class VisitorSession extends BaseModel
     protected $casts = [
         'started_at' => 'datetime', 'last_seen_at' => 'datetime', 'ended_at' => 'datetime',
         'is_new_visitor' => 'boolean', 'has_widget_interaction' => 'boolean',
-        'converted' => 'boolean', 'metadata' => 'array',
-        'location_resolved_at' => 'datetime',
+        'converted' => 'boolean', 'metadata' => 'array', 'client_signals' => 'array',
+        'bot_score' => 'integer',
+        'location_resolved_at' => 'datetime', 'bot_score_computed_at' => 'datetime',
     ];
 
     public function site(): BelongsTo { return $this->belongsTo(Site::class); }

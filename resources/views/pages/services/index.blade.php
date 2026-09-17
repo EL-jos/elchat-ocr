@@ -194,6 +194,10 @@
                     <p class="mb-0">L’agent utilise mémoire, résumé, historique, profil visiteur et RAG sans inventer d’information.</p>
                 </div>
                 <div class="choose-box">
+                    <h6>Choisir le bon canal</h6>
+                    <p class="mb-0">Le message est orienté vers le canal autorisé et le moment défini pour rester utile et pertinent.</p>
+                </div>
+                <div class="choose-box">
                     <h6>Agir sous contrôle</h6>
                     <p class="mb-0">Permissions, quotas, cooldowns, horaires et validations humaines encadrent chaque canal.</p>
                 </div>
@@ -222,8 +226,16 @@
                     <p class="mb-0">Le système observe la zone visible du site hôte, pas le scroll interne du widget et pas une capture de page entière.</p>
                 </div>
                 <div class="choose-box">
+                    <h6>Respecter le périphérique</h6>
+                    <p class="mb-0">Le replay restitue le contexte desktop, mobile ou tablette pour interpréter chaque parcours avec le bon affichage.</p>
+                </div>
+                <div class="choose-box">
                     <h6>Relier les signaux</h6>
                     <p class="mb-0">Navigation, clics, scrolls, inactivité, widget, CTA, conversations et conversions sont replacés dans l’ordre du parcours.</p>
+                </div>
+                <div class="choose-box">
+                    <h6>Repérer les points de friction</h6>
+                    <p class="mb-0">Les événements du parcours aident les équipes à comprendre où l’attention baisse, où une aide manque ou où une conversion bloque.</p>
                 </div>
                 <div class="choose-box">
                     <h6>Analyser avec contrôle</h6>

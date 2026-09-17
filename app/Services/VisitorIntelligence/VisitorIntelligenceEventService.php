@@ -82,9 +82,11 @@ class VisitorIntelligenceEventService
         string $sessionKey,
         array $event,
         bool $isNewVisitor,
+        array $clientSignals = [],
     ): VisitorSession {
         $occurredAt = $this->occurredAt($event['occurred_at'] ?? null);
         $metadata = $this->sanitizeBrowserMetadata($event['metadata'] ?? [], $event);
+        $clientSignals = $this->sanitizeClientSignals($clientSignals);
 
         $session = VisitorSession::query()->firstOrCreate(
             ['site_id' => $site->id, 'session_key' => $sessionKey],
@@ -98,6 +100,7 @@ class VisitorIntelligenceEventService
                 'source' => $metadata['source'] ?? 'website',
                 'is_new_visitor' => $isNewVisitor,
                 'metadata' => $metadata,
+                'client_signals' => $clientSignals ?: null,
             ],
         );
 
@@ -105,14 +108,16 @@ class VisitorIntelligenceEventService
 
         $startedAt = $session->started_at;
         $lastSeenAt = $session->last_seen_at;
-        $session->forceFill([
+        $updates = [
             // Browser batches and frame uploads can arrive out of order. Keep
             // the session bounds chronological instead of letting the first
             // HTTP request define the journey start forever.
             'started_at' => $startedAt && $startedAt->lessThan($occurredAt) ? $startedAt : $occurredAt,
             'last_seen_at' => $lastSeenAt && $lastSeenAt->greaterThan($occurredAt) ? $lastSeenAt : $occurredAt,
             'metadata' => array_slice(array_replace($session->metadata ?? [], $metadata), 0, 30, true),
-        ])->save();
+        ];
+        if (!$session->client_signals && $clientSignals) $updates['client_signals'] = $clientSignals;
+        $session->forceFill($updates)->save();
 
         return $session;
     }
@@ -337,6 +342,32 @@ class VisitorIntelligenceEventService
             $result[$key] = $value;
         }
         return array_slice($result, 0, 30, true);
+    }
+
+    /** Keep the browser fingerprint small, typed and limited to bot-detection signals. */
+    public function sanitizeClientSignals(array $signals): array
+    {
+        $result = [];
+        foreach (['webdriver', 'has_chrome_runtime'] as $key) {
+            if (array_key_exists($key, $signals)) $result[$key] = (bool) $signals[$key];
+        }
+        foreach (['plugins_count', 'hardware_concurrency', 'max_touch_points', 'screen_w', 'screen_h'] as $key) {
+            if (!array_key_exists($key, $signals) || !is_numeric($signals[$key])) continue;
+            $result[$key] = max(0, min(10000, (int) $signals[$key]));
+        }
+        if (array_key_exists('device_memory', $signals) && is_numeric($signals['device_memory'])) {
+            $result['device_memory'] = max(0, min(1024, (float) $signals['device_memory']));
+        }
+        foreach (['languages', 'webgl_renderer'] as $key) {
+            if (!array_key_exists($key, $signals) || !is_scalar($signals[$key])) continue;
+            $value = trim(strip_tags((string) $signals[$key]));
+            if ($value !== '') $result[$key] = Str::limit($value, 512, '');
+        }
+        foreach (['chrome_diff_w', 'chrome_diff_h'] as $key) {
+            if (!array_key_exists($key, $signals) || !is_numeric($signals[$key])) continue;
+            $result[$key] = max(-10000, min(10000, (int) $signals[$key]));
+        }
+        return array_slice($result, 0, 20, true);
     }
 
     private function sanitizeScrollPositions(mixed $value): ?string

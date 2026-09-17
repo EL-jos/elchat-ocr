@@ -4,6 +4,7 @@ namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\VisitorIntelligence\BuildVisitorSessionAiAnalysisJob;
+use App\Jobs\VisitorIntelligence\ScoreVisitorSessionForBotActivityJob;
 use App\Models\Site;
 use App\Services\VisitorIntelligence\VisitorIntelligenceEventService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceReplayService;
@@ -28,6 +29,19 @@ class VisitorIntelligenceIngestionController extends Controller
         $data = $request->validate([
             'visitor_uuid' => ['required', 'uuid'],
             'session_id' => ['required', 'string', 'max:100'],
+            'client_signals' => ['nullable', 'array', 'max:20'],
+            'client_signals.webdriver' => ['nullable', 'boolean'],
+            'client_signals.plugins_count' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.languages' => ['nullable', 'string', 'max:512'],
+            'client_signals.hardware_concurrency' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.device_memory' => ['nullable', 'numeric', 'min:0', 'max:1024'],
+            'client_signals.max_touch_points' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.has_chrome_runtime' => ['nullable', 'boolean'],
+            'client_signals.webgl_renderer' => ['nullable', 'string', 'max:512'],
+            'client_signals.chrome_diff_w' => ['nullable', 'integer', 'between:-10000,10000'],
+            'client_signals.chrome_diff_h' => ['nullable', 'integer', 'between:-10000,10000'],
+            'client_signals.screen_w' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.screen_h' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'events' => ['required', 'array', 'min:1', 'max:'.$maxBatch],
             'events.*.event_id' => ['nullable', 'string', 'max:100'],
             'events.*.event_type' => ['required', 'string', Rule::in(VisitorIntelligenceEventService::browserEventTypes())],
@@ -44,11 +58,15 @@ class VisitorIntelligenceIngestionController extends Controller
 
         [$visitor, $isNewVisitor] = $this->events->resolveVisitor($site, $data['visitor_uuid'], $request);
         $firstEvent = $data['events'][0];
-        $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor);
+        $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor, $data['client_signals'] ?? []);
         $this->locations->dispatchIfNeeded($session, $request->ip());
 
         foreach ($data['events'] as $event) {
             $this->events->capture($site, $session, $visitor, $event, $request);
+        }
+        if (config('visitor-intelligence.bot_detection.enabled', false) && !empty($data['client_signals'])) {
+            ScoreVisitorSessionForBotActivityJob::dispatch((string) $session->id)
+                ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.bot_detection.score_delay_seconds', 20))));
         }
 
         return response()->json([
@@ -64,6 +82,19 @@ class VisitorIntelligenceIngestionController extends Controller
         $data = $request->validate([
             'visitor_uuid' => ['required', 'uuid'],
             'session_id' => ['required', 'string', 'max:100'],
+            'client_signals' => ['nullable', 'array', 'max:20'],
+            'client_signals.webdriver' => ['nullable', 'boolean'],
+            'client_signals.plugins_count' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.languages' => ['nullable', 'string', 'max:512'],
+            'client_signals.hardware_concurrency' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.device_memory' => ['nullable', 'numeric', 'min:0', 'max:1024'],
+            'client_signals.max_touch_points' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.has_chrome_runtime' => ['nullable', 'boolean'],
+            'client_signals.webgl_renderer' => ['nullable', 'string', 'max:512'],
+            'client_signals.chrome_diff_w' => ['nullable', 'integer', 'between:-10000,10000'],
+            'client_signals.chrome_diff_h' => ['nullable', 'integer', 'between:-10000,10000'],
+            'client_signals.screen_w' => ['nullable', 'integer', 'min:0', 'max:10000'],
+            'client_signals.screen_h' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'chunk_index' => ['required', 'integer', 'between:0,1000000'],
             'rrweb_version' => ['nullable', 'string', 'max:16'],
             'occurred_at' => ['nullable', 'date'],
@@ -96,9 +127,13 @@ class VisitorIntelligenceIngestionController extends Controller
                 'viewport_height' => $data['metadata']['viewport_height'] ?? null,
             ],
         ];
-        $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor);
+        $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor, $data['client_signals'] ?? []);
         $this->locations->dispatchIfNeeded($session, $request->ip());
         $result = $this->replays->storeChunk($site, $session, $data);
+        if (config('visitor-intelligence.bot_detection.enabled', false) && (!$result['duplicate'] || !empty($data['client_signals']))) {
+            ScoreVisitorSessionForBotActivityJob::dispatch((string) $session->id)
+                ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.bot_detection.score_delay_seconds', 20))));
+        }
         if ($session->fresh()?->ended_at) {
             BuildVisitorSessionAiAnalysisJob::dispatch((string) $session->id)
                 ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.ai.analysis_delay_seconds', 20))));

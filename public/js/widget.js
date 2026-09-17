@@ -34,6 +34,7 @@
     const VISITOR_KEY = `elchat_visitor_uuid_${SITE_ID}`;
     const RRWEB_INDEX_KEY = `elchat_vi_rrweb_idx_${SITE_ID}`;
     const VISUAL_SEQUENCE_KEY = `elchat_vi_visual_seq_${SITE_ID}`;
+    const CLIENT_SIGNALS_KEY = `elchat_vi_client_signals_${SITE_ID}`;
 
     function createId() {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
@@ -93,6 +94,8 @@
     let autoOpenTimer = null;
     let isOpened = false;
     let visitorUUID = HOST_VISITOR_UUID;
+    let clientSignals = null;
+    let clientSignalsSent = false;
     let visualSequence = 0;
     let visualEvents = [];
     let visualFlushTimer = null;
@@ -152,6 +155,51 @@
     const RRWEB_CHUNK_MAX_BYTES = 180000;
     const RRWEB_FLUSH_INTERVAL = 3500;
     const PAGE_INACTIVITY_THRESHOLD_MS = 30000;
+
+    function collectClientSignals() {
+        if (clientSignals) return clientSignals;
+        try {
+            const cached = sessionStorage.getItem(CLIENT_SIGNALS_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed && typeof parsed === 'object') clientSignals = parsed;
+            }
+        } catch (_) { /* storage or cached JSON unavailable */ }
+        if (clientSignals) return clientSignals;
+
+        let webglRenderer = null;
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            const extension = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            webglRenderer = extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : null;
+        } catch (_) { /* WebGL indisponible ou bloqué : le signal est ignoré. */ }
+
+        clientSignals = {
+            webdriver: navigator.webdriver === true,
+            plugins_count: (navigator.plugins || []).length,
+            languages: (navigator.languages || []).join(','),
+            hardware_concurrency: navigator.hardwareConcurrency || null,
+            device_memory: navigator.deviceMemory || null,
+            max_touch_points: navigator.maxTouchPoints || 0,
+            has_chrome_runtime: typeof window.chrome === 'object' && !!window.chrome.runtime,
+            webgl_renderer: webglRenderer,
+            chrome_diff_w: window.outerWidth - window.innerWidth,
+            chrome_diff_h: window.outerHeight - window.innerHeight,
+            screen_w: screen.width,
+            screen_h: screen.height,
+        };
+        try { sessionStorage.setItem(CLIENT_SIGNALS_KEY, JSON.stringify(clientSignals)); } catch (_) { /* optional cache */ }
+        return clientSignals;
+    }
+
+    function addClientSignals(payload) {
+        if (!clientSignalsSent) {
+            payload.client_signals = collectClientSignals();
+            clientSignalsSent = true;
+        }
+        return payload;
+    }
 
     function nextRrwebChunkIndex() {
         const index = rrwebChunkIndex++;
@@ -277,6 +325,7 @@
         rrwebUploadInFlight = true;
         sendRrwebChunk(chunk)
             .catch(error => {
+                if (chunk.includesClientSignals) clientSignalsSent = false;
                 if (error?.permanent) {
                     console.warn('[ELChat] Visitor Intelligence rrweb chunk discarded', error);
                     return;
@@ -308,6 +357,12 @@
         // every chunk, which matters most for the large `FullSnapshot` events a
         // heavy DOM produces.
         const eventsJson = `[${entries.map(entry => entry.json).join(',')}]`;
+        const includesClientSignals = !clientSignalsSent;
+        let clientSignalsJson = '';
+        if (includesClientSignals) {
+            clientSignalsJson = `"client_signals":${JSON.stringify(collectClientSignals())},`;
+            clientSignalsSent = true;
+        }
         const body = '{'
             + `"visitor_uuid":${JSON.stringify(visitorUUID)},`
             + `"session_id":${JSON.stringify(SESSION_ID)},`
@@ -315,9 +370,10 @@
             + '"rrweb_version":"2.0.0",'
             + `"occurred_at":${JSON.stringify(bounds.first || new Date().toISOString())},`
             + `"metadata":${JSON.stringify(rrwebChunkMetadata())},`
+            + clientSignalsJson
             + `"events":${eventsJson}`
             + '}';
-        rrwebPendingChunks.push({ body });
+        rrwebPendingChunks.push({ body, includesClientSignals });
         pumpRrwebChunks();
     }
 
@@ -714,14 +770,17 @@
         } while (keepalive && visualEvents.length);
 
         batches.forEach(batch => {
+            const includesClientSignals = !clientSignalsSent;
+            const payload = addClientSignals({ visitor_uuid: visitorUUID, session_id: SESSION_ID, events: batch });
             fetch(VISUAL_EVENTS_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ visitor_uuid: visitorUUID, session_id: SESSION_ID, events: batch }),
+                body: JSON.stringify(payload),
                 keepalive,
             }).then(response => {
                 if (!response.ok) throw new Error(`visual events HTTP ${response.status}`);
             }).catch(error => {
+                if (includesClientSignals) clientSignalsSent = false;
                 // The endpoint is idempotent. Put the batch back at the front so a
                 // short network interruption does not silently remove the replay.
                 visualEvents = batch.concat(visualEvents).slice(-200);

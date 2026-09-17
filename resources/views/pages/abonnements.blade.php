@@ -380,64 +380,6 @@
             </div>
 
             {{-- ════════════════════════════════════════════════════════
-                 TOGGLE MENSUEL / ANNUEL
-                 ════════════════════════════════════════════════════════ --}}
-            <div class="elc-billing-wrap">
-                <div class="elc-toggle">
-                    <button class="elc-toggle-btn" id="elc-btn-monthly" onclick="elcSetBilling('monthly')">Mensuel</button>
-                    <button class="elc-toggle-btn active" id="elc-btn-annual"  onclick="elcSetBilling('annual')">Annuel</button>
-                </div>
-                <span class="elc-save-badge" id="elc-save-badge">Facturation annuelle disponible</span>
-            </div>
-
-            {{-- ════════════════════════════════════════════════════════
-                 SWITCHER DEVISE
-                 ════════════════════════════════════════════════════════ --}}
-            <div class="elc-currency-wrap">
-                <span class="elc-currency-label">Afficher les prix en :</span>
-                <select class="elc-currency-select" id="elc-currency" onchange="elcSetCurrency(this.value)">
-                    <option value="EUR" {{ ($currency ?? 'EUR') === 'EUR' ? 'selected' : '' }}>🇪🇺 EUR (€)</option>
-                    <option value="USD" {{ ($currency ?? 'EUR') === 'USD' ? 'selected' : '' }}>🇺🇸 USD ($)</option>
-                    <option value="GBP">🇬🇧 GBP (£)</option>
-                    <option value="CAD">🇨🇦 CAD (CA$)</option>
-                    <option value="CHF">🇨🇭 CHF</option>
-                    <option value="MAD">🇲🇦 MAD</option>
-                </select>
-                <div class="elc-live-dot-wrap">
-                    <span class="elc-live-dot"></span>
-                    Taux en temps réel
-                </div>
-            </div>
-
-            {{-- ── Banners de redirection (trial expiré, etc.) ── --}}
-            @if(request('reason'))
-                @php
-                    $elcReasons = [
-                        'trial_expired'    => ['icon' => '⏰', 'cls' => 'warning', 'msg' => 'Votre période d\'essai de ' . ($trialDays ?? 7) . ' jours est terminée. Choisissez un plan pour continuer.'],
-                        'past_due'         => ['icon' => '⚠️', 'cls' => 'error',   'msg' => 'Votre paiement est en retard. Mettez à jour votre moyen de paiement.'],
-                        'canceled'         => ['icon' => '📋', 'cls' => 'warning', 'msg' => 'Votre abonnement a expiré. Choisissez un plan pour réactiver votre accès.'],
-                        'no_subscription'  => ['icon' => '👋', 'cls' => 'info',    'msg' => 'Bienvenue ! Choisissez un plan pour accéder à ELChat.'],
-                        'inactive'         => ['icon' => '🔒', 'cls' => 'error',   'msg' => 'Votre accès est suspendu. Veuillez souscrire à un abonnement.'],
-                    ];
-                    $elcReason = $elcReasons[request('reason')] ?? null;
-                @endphp
-                @if($elcReason)
-                    <div class="elc-banner {{ $elcReason['cls'] }}">
-                        {{ $elcReason['icon'] }}&nbsp;&nbsp;{{ $elcReason['msg'] }}
-                    </div>
-                @endif
-            @endif
-            @if(session('error'))
-                <div class="elc-banner error">⚠️&nbsp;&nbsp;{{ session('error') }}</div>
-            @endif
-            @if(session('info'))
-                <div class="elc-banner info">💬&nbsp;&nbsp;{{ session('info') }}</div>
-            @endif
-            @if(request('payment') === 'canceled')
-                <div class="elc-banner warning">↩️&nbsp;&nbsp;Paiement annulé. Vous pouvez réessayer quand vous le souhaitez.</div>
-            @endif
-
-            {{-- ════════════════════════════════════════════════════════
                  PLANS GRID — structure HTML originale conservée à 100%
                  Seuls les prix et les boutons CTA sont remplacés
                  ════════════════════════════════════════════════════════ --}}
@@ -590,24 +532,6 @@
             {{-- ════════════════════════════════════════════════════════
                  BADGES MOYENS DE PAIEMENT ACCEPTÉS
                  ════════════════════════════════════════════════════════ --}}
-            <div class="elc-payment-badges">
-                <span style="font-size:12px; color:#64748b; font-weight:600;">Paiements acceptés :</span>
-                <span class="elc-payment-badge">💳 Visa / Mastercard</span>
-                <span class="elc-payment-badge">💳 American Express</span>
-                <span class="elc-payment-badge">🏦 Virement SEPA</span>
-                <span class="elc-payment-badge" style="color:#003087; font-weight:700; background:#fff9e6; border-color:#fde68a;">
-                <svg width="44" height="11" viewBox="0 0 124 33" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M46.2 6.8h-8.5c-.6 0-1.1.4-1.2 1l-3.4 21.7c-.1.4.2.8.6.8h4.1c.6 0 1.1-.4 1.2-1l.9-5.9c.1-.6.6-1 1.2-1h2.7c5.6 0 8.8-2.7 9.7-8.1.4-2.3 0-4.2-1.1-5.5-1.2-1.4-3.4-2-6.2-2zm1 8c-.5 3-2.7 3-4.9 3h-1.2l.9-5.6c0-.3.3-.6.7-.6h.6c1.5 0 2.9 0 3.6.8.4.5.5 1.3.3 2.4z" fill="#003087"/><path d="M75.8 14.7h-4.1c-.3 0-.6.2-.7.6l-.2 1-.3-.4c-.9-1.3-2.9-1.8-4.9-1.8-4.6 0-8.5 3.5-9.3 8.4-.4 2.4.2 4.8 1.6 6.4 1.3 1.5 3.1 2.1 5.3 2.1 3.7 0 5.8-2.4 5.8-2.4l-.2 1c-.1.4.2.8.6.8h3.7c.6 0 1.1-.4 1.2-1l2.2-14.1c.1-.5-.2-.6-.7-.6zm-5.7 8.2c-.4 2.3-2.3 3.9-4.7 3.9-1.2 0-2.2-.4-2.8-1.1-.6-.7-.8-1.8-.6-3 .4-2.3 2.3-3.9 4.6-3.9 1.2 0 2.1.4 2.8 1.1.7.8.9 1.8.7 3z" fill="#003087"/><path d="M99.8 14.7h-4.1c-.4 0-.7.2-.9.5l-5.4 7.9-2.3-7.6c-.1-.5-.6-.8-1-.8h-4c-.5 0-.8.5-.6.9l4.3 12.7-4.1 5.7c-.3.4 0 1 .5 1h4.1c.4 0 .7-.2.9-.5l13.1-18.9c.3-.3 0-.9-.5-.9z" fill="#003087"/><path d="M112.2 6.8h-8.5c-.6 0-1.1.4-1.2 1l-3.4 21.7c-.1.4.2.8.6.8h4.4c.4 0 .8-.3.8-.7l1-6.1c.1-.6.6-1 1.2-1h2.7c5.6 0 8.8-2.7 9.7-8.1.4-2.3 0-4.2-1.1-5.5-1.2-1.4-3.3-2-6.2-2zm1 8c-.5 3-2.7 3-4.9 3h-1.2l.9-5.6c0-.3.3-.6.7-.6h.6c1.5 0 2.9 0 3.6.8.4.5.5 1.3.3 2.4z" fill="#009cde"/><path d="M142 14.7h-4.1c-.3 0-.6.2-.7.6l-.2 1-.3-.4c-.9-1.3-2.9-1.8-4.9-1.8-4.6 0-8.5 3.5-9.3 8.4-.4 2.4.2 4.8 1.6 6.4 1.3 1.5 3.1 2.1 5.3 2.1 3.7 0 5.8-2.4 5.8-2.4l-.2 1c-.1.4.2.8.6.8h3.7c.6 0 1.1-.4 1.2-1l2.2-14.1c.1-.5-.2-.6-.7-.6zm-5.7 8.2c-.4 2.3-2.3 3.9-4.7 3.9-1.2 0-2.2-.4-2.8-1.1-.6-.7-.8-1.8-.6-3 .4-2.3 2.3-3.9 4.6-3.9 1.2 0 2.1.4 2.8 1.1.7.8.9 1.8.7 3z" fill="#009cde"/>
-                </svg>
-                PayPal
-            </span>
-                <span class="elc-payment-badge">🔒 SSL / 3D Secure</span>
-            </div>
-
-            {{-- Note trial --}}
-            <p class="text-center mt-3" style="font-size:13px; color:#94a3b8;">
-                 <strong style="color:#475569;">{{ $trialDays ?? 7 }} jours d'essai gratuit</strong> sur Core et les modules inclus dans l’essai — sans carte bancaire requise. Aucun engagement.
-            </p>
 
         </div>{{-- /container --}}
     </section>

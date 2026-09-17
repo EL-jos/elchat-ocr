@@ -5,17 +5,22 @@ namespace App\Http\Controllers\api\v1;
 use App\Enums\AnalyticsEventType;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\Site;
 use App\Models\Visitor;
 use App\Models\WidgetSetting;
 use App\Services\analytics\AnalyticsEventService;
+use App\Services\MercureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class WidgetVisitorController extends Controller
 {
-    public function __construct(private readonly AnalyticsEventService $analytics)
+    public function __construct(
+        private readonly AnalyticsEventService $analytics,
+        private readonly MercureService $mercure,
+    )
     {
     }
 
@@ -217,6 +222,80 @@ class WidgetVisitorController extends Controller
             ->get();
 
         return response()->json($conversations);
+    }
+
+    /**
+     * POST /widget/conversations/{conversationId}/{siteId}/read
+     *
+     * Marque comme lus tous les messages lorsque le visiteur ouvre la
+     * conversation. L'identité du visiteur est vérifiée avant toute mise à
+     * jour.
+     */
+    public function markMessagesRead(Request $request, string $conversationId, string $siteId): JsonResponse
+    {
+        $data = $request->validate([
+            'visitor_uuid' => ['required', 'uuid'],
+        ]);
+
+        $site = Site::findOrFail($siteId);
+        $visitor = Visitor::query()
+            ->where('site_id', $site->id)
+            ->where('uuid', $data['visitor_uuid'])
+            ->firstOrFail();
+
+        $conversation = Conversation::query()
+            ->whereKey($conversationId)
+            ->where('site_id', $site->id)
+            ->where('visitor_id', $visitor->id)
+            ->firstOrFail();
+
+        $readAt = now();
+        $readMessageIds = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->whereNull('visitor_read_at')
+            ->pluck('id')
+            ->values()
+            ->all();
+
+        if ($readMessageIds === []) {
+            return response()->json([
+                'success' => true,
+                'conversation_id' => $conversation->id,
+                'message_ids' => [],
+                'read_at' => null,
+            ]);
+        }
+
+        Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->whereIn('id', $readMessageIds)
+            ->whereNull('visitor_read_at')
+            ->update(['visitor_read_at' => $readAt]);
+
+        return $this->publishReadState($conversation, 'visitor_conversation_read', $readMessageIds, $readAt);
+    }
+
+    private function publishReadState(
+        Conversation $conversation,
+        string $eventType,
+        array $readMessageIds,
+        \Illuminate\Support\Carbon $readAt,
+    ): JsonResponse
+    {
+        $readAtIso = $readAt->toISOString();
+        $this->mercure->post("/sites/{$conversation->site_id}/conversations/{$conversation->id}", [
+            'type' => $eventType,
+            'conversation_id' => $conversation->id,
+            'message_ids' => $readMessageIds,
+            'read_at' => $readAtIso,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'conversation_id' => $conversation->id,
+            'message_ids' => $readMessageIds,
+            'read_at' => $readAtIso,
+        ]);
     }
 
     public function widgetConfig(string $site_id): JsonResponse

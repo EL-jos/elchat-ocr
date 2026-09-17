@@ -120,7 +120,11 @@ VISITOR_INTELLIGENCE_GEO_QUEUE=
 2. Positionner temporairement `ANALYTICS_ENABLED=false`, vider le cache de configuration et redémarrer les workers.
 3. Déployer backend et frontend. Sur une table `resource_events` volumineuse, planifier la migration d'élargissement dans une fenêtre contrôlée ou avec l'outil de changement de schéma en ligne utilisé par l'exploitation.
 4. Exécuter `php artisan migrate --force`.
-5. Configurer Supervisor pour consommer aussi la queue analytics, par exemple `php artisan queue:work --queue=default,analytics --tries=5`, puis relire sa configuration et redémarrer les processus.
+5. Configurer Supervisor avec des workers séparés pour `default`, `batch`,
+   `analytics`, `proactive` et `vision`. Ne pas utiliser un worker unique qui
+   mélange ces queues, afin qu'un crawl ou une indexation longue ne bloque pas
+   les traitements analytics et les parcours sensibles à la latence. Relire la
+   configuration puis redémarrer les processus.
 6. Vérifier que le cron Laravel appelle `php artisan schedule:run` chaque minute.
 7. Construire les agrégats historiques par lots maîtrisés, par exemple `php artisan analytics:aggregate --date=2026-08-14 --days=31`, puis répéter pour les mois nécessaires. Surveiller la queue avant d'envoyer le lot suivant.
 8. Positionner `ANALYTICS_ENABLED=true`, exécuter `php artisan config:cache`, puis redémarrer les workers pour qu'ils relisent la configuration.
