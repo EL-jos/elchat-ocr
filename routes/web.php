@@ -27,17 +27,10 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
-Route::get('/', function () {
-    /*foreach (\App\Models\TypeSite::all() as $type) {
-        $type->update([
-            'slug' => Str::slug($type->name),
-        ]);
-    }*/
-    return redirect()->route('home.page');
-});
+Route::get('/', [PageController::class, 'landing'])->name('landing');
 
 
-Route::controller(PageController::class)->group(function () {
+Route::middleware('site.locale')->controller(PageController::class)->group(function () {
     Route::get('/accueil', 'home')->name('home.page');
     Route::get('/a-propos', 'about')->name('about.page');
     Route::get('services', 'services')->name('services.page');
@@ -49,6 +42,20 @@ Route::controller(PageController::class)->group(function () {
     Route::get('/politique-de-confidentialite', 'politique_de_confidentialite')->name('politique_de_confidentialite.page');
     Route::get('/conditions-generales-d-utilisation', 'cgu')->name('cgu.page');
     Route::get('/mentions-legales', 'ml')->name('ml.page');
+
+    Route::prefix('{locale}')->whereIn('locale', ['en', 'de', 'pt', 'es'])->name('localized.')->group(function () {
+        Route::get('/home', 'home')->name('home.page');
+        Route::get('/about', 'about')->name('about.page');
+        Route::get('/services', 'services')->name('services.page');
+        Route::get('/service/{slug}', 'service')->name('service.single');
+        Route::get('/pricing', 'abonnements')->name('abonnements.page');
+        Route::get('/faqs', 'faqs')->name('faqs.page');
+        Route::get('/contact', 'contact')->name('contact.page');
+        Route::post('/contact/send', 'sendContact')->name('contact.send');
+        Route::get('/privacy-policy', 'politique_de_confidentialite')->name('privacy.page');
+        Route::get('/terms-of-use', 'cgu')->name('terms.page');
+        Route::get('/legal-notice', 'ml')->name('legal.page');
+    });
 });
 
 Route::get('/auth/google', [GoogleController::class, 'redirect'])->name('google.login');
@@ -234,7 +241,7 @@ Route::get('/centre-d-aide/{path?}', function ($path = null) {
     }
 
     abort(404);
-})->where('path', '.*');
+})->where('path', '.*')->name('help.center');
 
 Route::get('/paypal/checkout/return', [PaypalCheckoutReturnController::class, 'handle'])->name('paypal.checkout.return');
 Route::get('/paypal/checkout/cancel', [PaypalCheckoutReturnController::class, 'cancel'])->name('paypal.checkout.cancel');

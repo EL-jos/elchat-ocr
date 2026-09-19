@@ -30,7 +30,7 @@ class BuildVisitorSessionAiAnalysisJob implements ShouldQueue, ShouldBeUnique
         public readonly bool $force = false,
     )
     {
-        $this->onQueue(config('analytics.queue', 'analytics'));
+        $this->onQueue(config('visitor-intelligence.queue', 'visitor-intelligence'));
     }
 
     public function uniqueId(): string

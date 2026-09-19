@@ -2,6 +2,10 @@
 
 return [
     'enabled' => env('VISITOR_INTELLIGENCE_ENABLED', true),
+    // Keep event ingestion on the analytics queue, but isolate the derived
+    // Visitor Intelligence and AI work so it cannot compete with raw event
+    // recording or the latency-sensitive default queue.
+    'queue' => env('VISITOR_INTELLIGENCE_QUEUE', 'visitor-intelligence'),
     // Visitor Intelligence is intentionally ephemeral: every journey artifact
     // shares one fixed two-day retention boundary.
     'session_retention_days' => 2,
@@ -18,7 +22,7 @@ return [
     'replay_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_MAX_EVENTS', 100000),
     'bot_detection' => [
         // Enabled with a unique-per-session job so frequent browser/replay
-        // batches cannot flood the shared analytics queue.
+        // batches cannot flood the dedicated Visitor Intelligence queue.
         'enabled' => env('VISITOR_INTELLIGENCE_BOT_DETECTION_ENABLED', true),
         'score_delay_seconds' => (int) env('VISITOR_INTELLIGENCE_BOT_SCORE_DELAY_SECONDS', 20),
     ],

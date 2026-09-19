@@ -1,16 +1,15 @@
 @extends('pages.layouts.blank')
 
 @section('seo')
+    @include('pages.partials.seo', ['page' => 'about'])
+    {{--
     <!-- Primary Meta Tags -->
-    <title>À propos d'ELChat | Notre vision de l'IA opérationnelle</title>
+    <title>À propos d’ELChat | IA opérationnelle pour entreprises</title>
 
-    <meta name="title" content="À propos d'ELChat | Notre vision de l'IA opérationnelle">
+    <meta name="title" content="À propos d’ELChat | IA opérationnelle pour entreprises">
 
     <meta name="description"
-          content="Découvrez la mission d'ELChat : rendre l'IA utile aux opérations en reliant connaissances, événements, décisions, workflows, agents et outils métier.">
-
-    <meta name="keywords"
-          content="à propos ELChat, mission ELChat, vision IA opérationnelle, plateforme IA entreprise, automatisation métier, agents IA, intelligence décisionnelle">
+          content="Découvrez la vision d’ELChat : une IA opérationnelle qui relie connaissances, décisions, workflows, agents et outils métier pour les entreprises.">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -46,6 +45,7 @@
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
     
+    --}}
 @endsection
 
 @section('main-content')
@@ -56,14 +56,14 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>À propos d’ELChat</h1>
+                        <h1>{{ __('site.about.title') }}</h1>
                         <p>
-                            Notre ambition : relier la connaissance, la décision et l’action pour rendre l’IA concrètement utile aux équipes et aux dirigeants.
+                            {{ __('site.about.hero') }}
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
-                                <li class="breadcrumb-item"><a href="{{ route('home.page') }}">Accueil</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">À propos</li>
+                                <li class="breadcrumb-item"><a href="{{ \App\Support\SiteLocale::urlForPage('home') }}">{{ __('site.nav.home') }}</a></li>
+                                <li class="breadcrumb-item active" aria-current="page">{{ __('site.nav.about') }}</li>
                             </ol>
                         </div>
                         <!-- sub banner content con -->
@@ -74,7 +74,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="robot" class="">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration de l’IA opérationnelle ELChat" class="">
                         </figure>
                         <!-- sub banner img con -->
                     </div>
@@ -104,32 +104,27 @@
                     <div class="about-us-content-con">
                         <div class="heading-title-con mb-0">
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                                  data-wow-delay="0.2s">À propos d’ELChat</span>
+                                  data-wow-delay="0.2s">{{ __('site.about.label') }}</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.2s">
-                                Une IA qui connaît votre entreprise<br>
-                                et agit selon vos règles
+                                {{ __('site.about.heading') }}
                             </h2>
                             <p class="wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">
-                                ELChat est né d’un constat simple : une IA isolée de vos données et de vos outils reste un moteur de réponses.
-                                Pour devenir opérationnelle, elle doit comprendre votre contexte, détecter les événements utiles,
-                                exécuter des processus maîtrisés et rendre ses résultats lisibles.
+                                {{ __('site.about.p1') }}
                             </p>
                             <p class="wow fadeInLeft prgrph-2" data-wow-duration="2s" data-wow-delay="0.5s">
-                                La plateforme réunit donc une base de connaissances RAG, des canaux d’engagement, des connecteurs métier,
-                                des workflows et des agents spécialisés. Les permissions, validations humaines et journaux d’audit
-                                permettent d’adapter l’autonomie au niveau de risque de chaque action.
+                                {{ __('site.about.p2') }}
                             </p>
                             <ul class="list-unstyled p-0 wow fadeInRight" data-wow-duration="2s"
                                 data-wow-delay="0.6s">
                                 <li class="position-relative"><i class="fa-solid fa-check"></i>
-                                    Connaître et comprendre : exploiter les contenus, les données et les signaux propres à l’entreprise.
+                                    {{ __('site.about.bullet1') }}
                                 </li>
                                 <li class="position-relative mb-0"><i class="fa-solid fa-check"></i>
-                                    Décider, agir, mesurer et apprendre : transformer ce contexte en processus contrôlés et en améliorations continues.
+                                    {{ __('site.about.bullet2') }}
                                 </li>
                             </ul>
-                            <a href="" class="text-decoration-none primary_btn d-inline-block wow
-                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.7s">Découvrir nos capacités</a>
+                            <a href="{{ \App\Support\SiteLocale::urlForPage('services') }}" class="text-decoration-none primary_btn d-inline-block wow
+                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.7s">{{ __('site.about.capabilities') }}</a>
                             <!-- heading title con -->
                         </div>
                         <!-- about us content con -->
@@ -151,19 +146,16 @@
                     <div class="statistics-content-con">
                         <div class="heading-title-con mb-0">
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                                  data-wow-delay="0.4s">Notre approche</span>
+                                  data-wow-delay="0.4s">{{ __('site.about.approach') }}</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                                Une boucle opérationnelle,<br>
-                                du savoir au résultat
+                                {{ __('site.about.approach_title') }}
                             </h2>
                             <p class="wow fadeInLeft p-0" data-wow-duration="2s" data-wow-delay="0.6s">
-                                ELChat organise l’usage de l’IA autour d’une boucle continue : connaître, comprendre,
-                                décider, agir, mesurer et apprendre. Cette logique évite les automatisations déconnectées
-                                du terrain et permet de faire évoluer progressivement les connaissances, règles et agents.
+                                {{ __('site.about.approach_text') }}
                             </p>
 
-                            <a href="about.html" class="text-decoration-none primary_btn d-inline-block wow
-                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Échanger sur votre contexte</a>
+                            <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn d-inline-block wow
+                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">{{ __('site.about.context') }}</a>
                             <!-- heading title con -->
                         </div>
                         <!-- statistics content con -->
@@ -179,7 +171,7 @@
                                     </figure>
                                     <span class="d-inline-block black-text counter">1 </span><sup
                                         class="d-inline-block black-text"></sup>
-                                    <span class="span-text d-block">Plateforme opérationnelle unifiée</span>
+                                    <span class="span-text d-block">{{ __('site.about.stat_platform') }}</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -190,7 +182,7 @@
                                     </figure>
                                     <span class="d-inline-block black-text">3 </span>
                                     <!-- <span class="d-inline-block alphabet black-text">k</span> -->
-                                    <span class="span-text d-block">Familles de modules optionnels</span>
+                                    <span class="span-text d-block">{{ __('site.about.stat_modules') }}</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -202,7 +194,7 @@
                                     <sup class="d-inline-block black-text"></sup><span
                                         class="d-inline-block black-text counter">6 </span><sup
                                         class="d-inline-block black-text"></sup>
-                                    <span class="span-text d-block">Étapes de la boucle opérationnelle</span>
+                                    <span class="span-text d-block">{{ __('site.about.stat_steps') }}</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->
@@ -213,7 +205,7 @@
                                     </figure>
                                     <span class="d-inline-block black-text counter">29 </span><sup
                                         class="d-inline-block black-text">€</sup>
-                                    <span class="span-text d-block">Socle Core par mois</span>
+                                    <span class="span-text d-block">{{ __('site.about.stat_core') }}</span>
                                     <!-- statistics box -->
                                 </div>
                                 <!-- col -->

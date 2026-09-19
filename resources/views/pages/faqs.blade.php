@@ -1,16 +1,15 @@
 @extends('pages.layouts.blank')
 
 @section('seo')
+    @include('pages.partials.seo', ['page' => 'faqs'])
+    {{--
     <!-- Primary Meta Tags -->
-    <title>FAQ ELChat | Engagement proactif, RAG, workflows et agents IA</title>
+    <title>FAQ IA conversationnelle, RAG et agents IA | ELChat</title>
 
-    <meta name="title" content="FAQ ELChat | Engagement proactif, RAG, workflows et agents IA">
+    <meta name="title" content="FAQ IA conversationnelle, RAG et agents IA | ELChat">
 
     <meta name="description"
-          content="Réponses sur ELChat : engagement proactif, RAG, connecteurs, workflows, agents spécialisés, contrôle humain, tarification modulaire et déploiement.">
-
-    <meta name="keywords"
-          content="FAQ ELChat, engagement proactif, relance contextuelle, RAG entreprise, workflows IA, agents IA, connecteurs métier, tarification modulaire, automatisation entreprise, plateforme IA opérationnelle">
+          content="Réponses sur l’IA conversationnelle ELChat : RAG, connecteurs, workflows, agents IA, engagement proactif, données et tarification.">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -46,6 +45,75 @@
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
     
+    --}}
+@endsection
+
+@php
+    $faqItems = [
+        [
+            'question' => "ELChat est-il un chatbot ou une plateforme d’IA ?",
+            'answer' => "ELChat est une plateforme d’IA opérationnelle. Elle comprend un assistant conversationnel, mais aussi une base de connaissances RAG, des événements, des connecteurs métier, des workflows, des analyses et des agents spécialisés.",
+        ],
+        [
+            'question' => "Comment fonctionne la base de connaissances RAG ?",
+            'answer' => "Les contenus de vos sites, documents, FAQ et produits sont indexés en fragments recherchables. Lors d’une demande, ELChat sélectionne le contexte pertinent pour répondre ou analyser à partir de vos propres informations, avec les sources disponibles.",
+        ],
+        [
+            'question' => "Comment se compose l’abonnement ELChat ?",
+            'answer' => "Core est le socle obligatoire à 29 € par mois. Community, Business Automation et Agentics sont disponibles en niveaux Basic ou Pro. L’offre Agency est proposée sur devis.",
+        ],
+        [
+            'question' => "Quels canaux d’engagement sont disponibles ?",
+            'answer' => "ELChat dispose d’intégrations pour le widget web, Facebook, Instagram, YouTube, Telegram, Slack et l’e-mail. Les canaux réellement activables dépendent du module choisi et de la configuration du compte.",
+        ],
+        [
+            'question' => "ELChat peut-il reprendre une conversation avec un visiteur ?",
+            'answer' => "Oui. L’Engagement Proactif détecte un signal pertinent, puis peut proposer une reprise dans la conversation existante. Le message reste soumis aux quotas, horaires, permissions, règles d’arrêt et choix du visiteur.",
+        ],
+        [
+            'question' => "Quelles sources et quels outils peut-on connecter ?",
+            'answer' => "Vous pouvez indexer un site ou un sitemap, importer des documents et contenus, et synchroniser des données produit. Le catalogue métier couvre notamment CRM, e-commerce, agendas, stockage, collaboration, marketing et analytique.",
+        ],
+        [
+            'question' => "ELChat peut-il exécuter des actions automatiquement ?",
+            'answer' => "Oui, lorsqu’un workflow, un connecteur et les permissions nécessaires sont configurés. Selon le risque, l’action peut être autorisée, bloquée ou placée en attente d’une confirmation humaine.",
+        ],
+        [
+            'question' => "ELChat apprend-il automatiquement avec le temps ?",
+            'answer' => "ELChat ne réentraîne pas seul un modèle sur vos échanges. La qualité progresse lorsque vous mettez à jour les sources, réindexez les contenus et utilisez les indicateurs de qualité.",
+        ],
+        [
+            'question' => "Comment ELChat encadre-t-il les accès et les actions ?",
+            'answer' => "Les permissions, confirmations et journaux d’audit limitent l’accès aux outils et rendent les actions traçables. Les exigences propres à votre organisation doivent être validées lors du cadrage.",
+        ],
+        [
+            'question' => "Comment démarrer sans tout automatiser immédiatement ?",
+            'answer' => "Commencez par Core et un périmètre de connaissance précis. Ajoutez ensuite un canal, un workflow ou un agent, testez les résultats, puis élargissez l’autonomie une fois les règles et validations établies.",
+        ],
+    ];
+    $translatedFaqItems = trans('site.faq.items');
+    if (is_array($translatedFaqItems)) {
+        $faqItems = $translatedFaqItems;
+    }
+@endphp
+
+@section('structured-data')
+    <script type="application/ld+json">
+        {!! json_encode([
+            '@context' => 'https://schema.org',
+            '@type' => 'FAQPage',
+            '@id' => \App\Support\SiteLocale::urlForPage('faqs') . '#faqpage',
+            'url' => \App\Support\SiteLocale::urlForPage('faqs'),
+            'mainEntity' => array_map(static fn (array $faq): array => [
+                '@type' => 'Question',
+                'name' => $faq['question'],
+                'acceptedAnswer' => [
+                    '@type' => 'Answer',
+                    'text' => $faq['answer'],
+                ],
+            ], $faqItems),
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+    </script>
 @endsection
 
 @section('main-content')
@@ -56,14 +124,14 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Questions fréquentes</h1>
+                        <h1>{{ __('site.faq.title') }}</h1>
                         <p>
-                            Positionnement, données, intégrations, automatisations et tarifs : les réponses utiles pour évaluer ELChat dans le contexte de votre entreprise.
+                            {{ __('site.faq.hero') }}
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
-                                <li class="breadcrumb-item"><a href="{{ route('home.page') }}">Accueil</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">FAQ</li>
+                                <li class="breadcrumb-item"><a href="{{ \App\Support\SiteLocale::urlForPage('home') }}">{{ __('site.nav.home') }}</a></li>
+                                <li class="breadcrumb-item active" aria-current="page">{{ __('site.nav.faqs') }}</li>
                             </ol>
                         </div>
                         <!-- sub banner content con -->
@@ -74,7 +142,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="robot">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration de l’assistant IA ELChat">
                         </figure>
                         <!-- sub banner img con -->
                     </div>
@@ -94,15 +162,39 @@
                 <div class="col-xl-7 col-lg-10 col-12 mx-auto">
                     <div class="faq_content text-center">
                         <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                              data-wow-delay="0.2s">FAQ</span>
-                        <h2 class=" wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Comprendre ELChat<br>
-                            avant de le <span>déployer</span></h2>
+                              data-wow-delay="0.2s">{{ __('site.faq.label') }}</span>
+                        <h2 class=" wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">{{ __('site.faq.heading') }}</h2>
                     </div>
                 </div>
             </div>
             <div class="faq">
                 <div class="accordian-section-inner position-relative">
                     <div class="accordian-inner">
+                        <div id="faq_accordion1">
+                            <div class="row">
+                                @foreach ($faqItems as $index => $faq)
+                                    <div class="col-xl-6 col-lg-6 col-md-12 col-sm-12 col-12 mx-auto wow {{ $index < 5 ? 'fadeInLeft' : 'fadeInRight' }}"
+                                         data-wow-duration="2s" data-wow-delay="{{ $index < 5 ? '0.2s' : '0.4s' }}">
+                                        <div class="accordion-card">
+                                            <div class="card-header" id="headingFaq{{ $index }}">
+                                                <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
+                                                   data-target="#collapseFaq{{ $index }}" aria-expanded="false"
+                                                   aria-controls="collapseFaq{{ $index }}">
+                                                    <h5>{{ $faq['question'] }}</h5>
+                                                </a>
+                                            </div>
+                                            <div id="collapseFaq{{ $index }}" class="collapse" aria-labelledby="headingFaq{{ $index }}"
+                                                 data-parent="#faq_accordion1">
+                                                <div class="card-body">
+                                                    <p class="text-size-16 text-left mb-0">{{ $faq['answer'] }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                        {{--
                         <div id="faq_accordion1">
                             <div class="row">
                                 <div class="col-xl-6 col-lg-6 col-md-12 col-sm-12 col-12 mx-auto wow fadeInLeft"
@@ -294,6 +386,7 @@
                                 </div>
                             </div>
                         </div>
+                        --}}
                     </div>
                 </div>
             </div>
@@ -308,19 +401,16 @@
                     <div class="statistics-content-con">
                         <div class="heading-title-con mb-0">
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                                  data-wow-delay="0.4s">Déploiement progressif</span>
+                                  data-wow-delay="0.4s">{{ __('site.faq.progressive') }}</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                                Commencez par un besoin,<br>
-                                étendez selon les résultats
+                                {{ __('site.faq.progressive_title') }}
                             </h2>
                             <p class="wow fadeInLeft p-0" data-wow-duration="2s" data-wow-delay="0.6s">
-                                Cadrez d’abord les sources, les utilisateurs et les actions autorisées. Déployez ensuite
-                                les capacités par étapes, mesurez les événements utiles et enrichissez la connaissance
-                                avant d’augmenter le niveau d’autonomie.
+                                {{ __('site.faq.progressive_text') }}
                             </p>
 
                             <a href="about.html" class="text-decoration-none primary_btn d-inline-block wow
-                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">Préparer votre cadrage</a>
+                                fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">{{ __('site.faq.prepare') }}</a>
                             <!-- heading title con -->
                         </div>
                         <!-- statistics content con -->

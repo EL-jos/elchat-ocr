@@ -1,13 +1,13 @@
 @extends('pages.layouts.blank')
 
 @section('seo')
+    @include('pages.partials.seo', ['page' => 'pricing'])
+    {{--
     <!-- Primary Meta Tags -->
-    <title>Tarifs ELChat | Core et modules d'IA opérationnelle</title>
-    <meta name="title" content="Tarifs ELChat | Core et modules d'IA opérationnelle">
+    <title>Tarifs plateforme IA entreprise | ELChat</title>
+    <meta name="title" content="Tarifs plateforme IA entreprise | ELChat">
     <meta name="description"
-          content="Core à 29 € par mois, puis Community, Business Automation et Agentics en Basic ou Pro. Découvrez la tarification modulaire d'ELChat.">
-    <meta name="keywords"
-          content="tarifs ELChat, prix plateforme IA entreprise, abonnement agents IA, tarifs automatisation métier, Core ELChat, Community ELChat, Agentics, offre Agency">
+          content="Découvrez les tarifs ELChat : Core, Community, Business Automation et Agentics pour déployer une IA opérationnelle adaptée à votre entreprise.">
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://elchat.io/tarifs">
@@ -24,9 +24,38 @@
     <meta name="twitter:title" content="Tarifs ELChat">
     <meta name="twitter:description" content="Une tarification modulaire pour activer les capacités ELChat utiles à votre organisation.">
     <meta name="twitter:image" content="https://elchat.io/assets/images/sub-banner-img.png">
+    --}}
 @endsection
 
 @section('main-content')
+    @php
+        $pricingFeatureSets = [
+            'core' => [
+                __('site.services_details.knowledge_rag.name'),
+                __('site.services_details.knowledge_rag.features.0.title'),
+                __('site.services_details.knowledge_rag.features.1.title'),
+                __('site.services_details.knowledge_rag.features.2.title'),
+                __('site.services_details.knowledge_rag.features.3.title'),
+                __('site.home.pricing_core_text'),
+                __('site.pricing.start_core'),
+            ],
+            'community' => [
+                __('site.pricing.addon') . ' Core', __('site.services.community_title'),
+                __('site.services_details.engagement_proactif.name'), __('site.services_details.visitor_intelligence.name'),
+                __('site.pricing.activate_community'),
+            ],
+            'automation' => [
+                __('site.pricing.addon') . ' Core', __('site.services_details.workflows_connecteurs.name'),
+                __('site.services_details.workflows_connecteurs.features.0.title'), __('site.services_details.workflows_connecteurs.features.1.title'),
+                __('site.pricing.automate'),
+            ],
+            'agentics' => [
+                __('site.pricing.addon') . ' Core', __('site.services_details.agents_ia.name'),
+                __('site.services_details.agents_ia.features.1.title'), __('site.services_details.ai_sales_hunter.name'),
+                __('site.services_details.ai_sales_hunter.features.3.title'), __('site.pricing.evaluate_agents'),
+            ],
+        ];
+    @endphp
 
     {{-- ══════════════════════════════════════════════════════════════════
          STYLES INTERNES — uniquement pour les éléments de paiement ajoutés
@@ -341,14 +370,14 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Tarifs</h1>
+                        <h1>{{ __('site.pricing.title') }}</h1>
                         <p>
-                            Commencez avec le socle Core, puis ajoutez les capacités omnicanales, les workflows métier ou les agents spécialisés au rythme de vos besoins.
+                            {{ __('site.pricing.hero') }}
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
-                                <li class="breadcrumb-item"><a href="{{ route('home.page') }}">Accueil</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">Tarifs</li>
+                                <li class="breadcrumb-item"><a href="{{ \App\Support\SiteLocale::urlForPage('home') }}">{{ __('site.nav.home') }}</a></li>
+                                <li class="breadcrumb-item active" aria-current="page">{{ __('site.nav.pricing') }}</li>
                             </ol>
                         </div>
                     </div>
@@ -356,7 +385,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png') }}" alt="robot">
+                            <img src="{{ asset('assets/images/sub-banner-img.png') }}" alt="Illustration des tarifs et modules IA ELChat">
                         </figure>
                     </div>
                 </div>
@@ -372,11 +401,11 @@
 
             {{-- ── Heading — intact ── --}}
             <div class="heading-title-con text-center">
-                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">Tarification</span>
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">{{ __('site.home.pricing_label') }}</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
-                    Un socle commun, des modules<br> adaptés à vos priorités
+                    {{ __('site.home.pricing_title') }}
                 </h2>
-                <p>Core est la fondation de chaque abonnement. Community, Business Automation et Agentics s’ajoutent au niveau Basic ou Pro ; Agency répond aux besoins multi-clients et marque blanche sur devis.</p>
+                <p>{{ __('site.home.pricing_intro') }}</p>
             </div>
 
             {{-- ════════════════════════════════════════════════════════
@@ -392,33 +421,27 @@
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
                              <h3>Core</h3>
-                             <p>Le socle obligatoire pour connecter vos connaissances et déployer l’assistant ELChat.</p>
+                             <p>{{ __('site.home.pricing_core_text') }}</p>
                              <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">À partir de :</span>
+                                <span class="d-block starting-at">{{ __('site.home.pricing_from') }}</span>
                                 {{-- Prix dynamique --}}
                                 <div class="elc-price-val" id="elc-price-starter">
                                     <sup class="d-inline-block font-weight-normal" id="elc-sym-starter">€</sup><span
                                             class="d-inline-block price-text font-weight-600"
                                             id="elc-val-starter">29</span><span
-                                            class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
+                                            class="d-inline-block per-month mb-0 position-relative font-weight-normal">{{ __('site.home.per_month') }}</span>
                                 </div>
-                                 <span class="elc-price-note" id="elc-note-starter">Socle de la plateforme</span>
-                                <span class="elc-price-suffix" id="elc-suffix-starter">Abonnement annuel</span>
+                                 <span class="elc-price-note" id="elc-note-starter">{{ __('site.home.pricing_core_text') }}</span>
+                                <span class="elc-price-suffix" id="elc-suffix-starter">{{ __('site.pricing.annual_subscription') }}</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Base de connaissances et RAG</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Indexation de sites et sitemaps</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Import de documents et contenus</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Réponses contextualisées avec sources</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Widget conversationnel personnalisable</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Historique et analytique des interactions</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Gestion de la qualité des connaissances</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Modules optionnels activables</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> 29 € / mois</li>
+                                @foreach ($pricingFeatureSets['core'] as $feature)
+                                    <li class="position-relative"><i class="fa-solid fa-check"></i> {{ $feature }}</li>
+                                @endforeach
                             </ul>
-                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Démarrer avec Core</a>
+                             <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn">{{ __('site.pricing.start_core') }}</a>
                         </div>
                     </div>
                 </div>
@@ -430,30 +453,27 @@
                     <div class="el-default-pricing pricing-box w-100 all_boxes">
                         <div class="plan-content">
                              <h3>Community</h3>
-                             <p>Pour centraliser et automatiser l’engagement sur vos canaux clients.</p>
+                             <p>{{ __('site.pricing.community_text') }}</p>
                             <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">En complément de Core :</span>
+                                <span class="d-block starting-at">{{ __('site.pricing.addon') }}</span>
                                 <div class="elc-price-val" id="elc-price-business">
                                     <sup class="d-inline-block font-weight-normal" id="elc-sym-business">€</sup><span
                                             class="d-inline-block price-text font-weight-600"
                                              id="elc-val-business">19</span><span
-                                            class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
+                                            class="d-inline-block per-month mb-0 position-relative font-weight-normal">{{ __('site.home.per_month') }}</span>
                                 </div>
-                                 <span class="elc-price-note" id="elc-note-business">Basic +19 € · Pro +49 €</span>
-                                <span class="elc-price-suffix" id="elc-suffix-business">Abonnement annuel</span>
+                                 <span class="elc-price-note" id="elc-note-business">Basic +19 € · Pro +49 € / {{ __('site.home.per_month') }}</span>
+                                <span class="elc-price-suffix" id="elc-suffix-business">{{ __('site.pricing.annual_subscription') }}</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> En complément de Core</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Canaux sociaux connectés</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Messageries et e-mail</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Interactions centralisées</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Basic à +19 € / mois</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Pro à +49 € / mois</li>
+                                @foreach ($pricingFeatureSets['community'] as $feature)
+                                    <li class="position-relative"><i class="fa-solid fa-check"></i> {{ $feature }}</li>
+                                @endforeach
                             </ul>
 
-                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Activer l’omnicanal</a>
+                             <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn">{{ __('site.pricing.activate_community') }}</a>
                         </div>
                     </div>
                 </div>
@@ -465,30 +485,27 @@
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
                              <h3>Business Automation</h3>
-                             <p>Pour connecter vos outils et orchestrer des workflows métier contrôlés.</p>
+                             <p>{{ __('site.pricing.automation_text') }}</p>
                             <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">En complément de Core :</span>
+                                <span class="d-block starting-at">{{ __('site.pricing.addon') }}</span>
                                 <div class="elc-price-val" id="elc-price-pro">
                                     <sup class="d-inline-block font-weight-normal" id="elc-sym-pro">€</sup><span
                                             class="d-inline-block price-text font-weight-600"
                                              id="elc-val-pro">39</span><span
-                                            class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
+                                            class="d-inline-block per-month mb-0 position-relative font-weight-normal">{{ __('site.home.per_month') }}</span>
                                 </div>
-                                 <span class="elc-price-note" id="elc-note-pro">Basic +39 € · Pro +99 €</span>
-                                <span class="elc-price-suffix" id="elc-suffix-pro">Abonnement annuel</span>
+                                 <span class="elc-price-note" id="elc-note-pro">Basic +39 € · Pro +99 € / {{ __('site.home.per_month') }}</span>
+                                <span class="elc-price-suffix" id="elc-suffix-pro">{{ __('site.pricing.annual_subscription') }}</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> En complément de Core</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Workflows et connecteurs métier</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> CRM, e-commerce et agendas</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Productivité, stockage et marketing</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Basic à +39 € / mois</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Pro à +99 € / mois</li>
+                                @foreach ($pricingFeatureSets['automation'] as $feature)
+                                    <li class="position-relative"><i class="fa-solid fa-check"></i> {{ $feature }}</li>
+                                @endforeach
                             </ul>
 
-                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Automatiser vos processus</a>
+                             <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn">{{ __('site.pricing.automate') }}</a>
                         </div>
                     </div>
                 </div>
@@ -499,30 +516,25 @@
                 <div class="col-lg-4 col-md-6 all_column">
                     <div class="pricing-box w-100 all_boxes">
                         <div class="plan-content">
-                             <h3>Agentics</h3>
+                             <h3>{{ __('site.pricing.agentics') }}</h3>
                             <p>
-                                 Pour déployer des agents IA spécialisés, configurés autour de vos objectifs et de vos règles d’autonomie.
+                                 {{ __('site.home.pricing_agents_text') }}
                             </p>
                             <div class="generic-price d-inline-block">
-                                <span class="d-block starting-at">En complément de Core :</span>
+                                <span class="d-block starting-at">{{ __('site.pricing.addon') }}</span>
                                 <sup class="d-inline-block font-weight-normal">€</sup>
                                  <span class="d-inline-block price-text font-weight-600">59</span>
-                                <span class="d-inline-block per-month mb-0 position-relative font-weight-normal">/mois</span>
+                                <span class="d-inline-block per-month mb-0 position-relative font-weight-normal">{{ __('site.home.per_month') }}</span>
                             </div>
                         </div>
                         <div class="plan-listing">
                             <ul class="list-unstyled p-0">
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> En complément de Core</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Banque d’agents spécialisés</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Agent Studio et workflows associés</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> AI Sales Hunter</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Basic à +59 € / mois</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Pro à +149 € / mois</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Agency multi-clients sur devis</li>
-                                 <li class="position-relative"><i class="fa-solid fa-check"></i> Marque blanche disponible avec Agency</li>
+                                @foreach ($pricingFeatureSets['agentics'] as $feature)
+                                    <li class="position-relative"><i class="fa-solid fa-check"></i> {{ $feature }}</li>
+                                @endforeach
                             </ul>
 
-                             <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn">Évaluer Agentics ou Agency</a>
+                             <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn">{{ __('site.pricing.evaluate_agents') }}</a>
                         </div>
                     </div>
                 </div>

@@ -12,6 +12,7 @@ use App\Models\VisitorIntelligenceAction;
 use App\Models\VisitorIntelligenceRule;
 use App\Models\VisitorSessionSummary;
 use App\Services\VisitorIntelligence\VisitorIntelligenceActionService;
+use App\Services\VisitorIntelligence\VisitorIntelligenceBotScoringService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceFrameService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceQueryService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceRealtimeService;
@@ -27,6 +28,7 @@ class VisitorIntelligenceController extends Controller
     public function __construct(
         private readonly VisitorIntelligenceQueryService $query,
         private readonly VisitorIntelligenceActionService $actions,
+        private readonly VisitorIntelligenceBotScoringService $botScoring,
         private readonly VisitorIntelligenceFrameService $frames,
         private readonly VisitorIntelligenceRealtimeService $realtime,
         private readonly VisitorIntelligenceReplayService $replays,
@@ -124,6 +126,32 @@ class VisitorIntelligenceController extends Controller
                 'forced' => true,
             ],
         ], 202);
+    }
+
+    public function forceBotDetection(Request $request, Site $site, string $session): JsonResponse
+    {
+        $this->authorizeSiteAccess($request, $site);
+        $model = VisitorSession::query()
+            ->where('site_id', $site->id)
+            ->findOrFail($session);
+
+        // An explicit administrator action bypasses the automatic detection
+        // feature flag and delay for this one selected journey.
+        $result = $this->botScoring->scoreSession($model);
+        abort_unless($result !== null, 422, 'La détection bot/humain ne dispose d’aucun signal exploitable pour ce parcours.');
+
+        $model = $model->fresh();
+
+        return response()->json([
+            'message' => 'La détection bot/humain de ce parcours a été recalculée.',
+            'data' => [
+                'session_id' => (string) $model->id,
+                'bot_score' => $model->bot_score,
+                'bot_score_computed_at' => $model->bot_score_computed_at?->toISOString(),
+                'features' => $result['features'],
+                'forced' => true,
+            ],
+        ]);
     }
 
     public function journey(Request $request, Site $site): JsonResponse

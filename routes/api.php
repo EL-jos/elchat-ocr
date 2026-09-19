@@ -169,6 +169,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/sessions/{session}/replay', 'replay');
             Route::get('/sessions/{session}/replay/chunks/{chunk}', 'replayChunk');
             Route::post('/sessions/{session}/ai-analysis', 'analyzeWithAi');
+            Route::post('/sessions/{session}/bot-detection', 'forceBotDetection');
             Route::delete('/sessions/{session}', 'deleteSession');
             Route::get('/journey', 'journey');
             Route::get('/opportunities', 'opportunities');

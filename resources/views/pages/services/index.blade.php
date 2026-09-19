@@ -1,16 +1,15 @@
 @extends('pages.layouts.blank')
 
 @section('seo')
+    @include('pages.partials.seo', ['page' => 'services'])
+    {{--
     <!-- Primary Meta Tags -->
-    <title>Capacités ELChat | Visitor Intelligence, engagement proactif, RAG et agents IA</title>
+    <title>Capacités IA pour entreprises | RAG, workflows et agents | ELChat</title>
 
-    <meta name="title" content="Capacités ELChat | Visitor Intelligence, engagement proactif, RAG et agents IA">
+    <meta name="title" content="Capacités IA pour entreprises | RAG, workflows et agents | ELChat">
 
     <meta name="description"
-          content="Découvrez les capacités d'ELChat : Visitor Intelligence, engagement proactif, base de connaissances RAG, omnicanal, connecteurs métier, workflows, intelligence événementielle et agents IA.">
-
-    <meta name="keywords"
-          content="Visitor Intelligence, replay parcours visiteurs, RAG entreprise, engagement proactif, relance contextuelle, workflows IA, connecteurs MCP, agents IA spécialisés, automatisation métier, intelligence événementielle, omnicanal, AI Sales Hunter, ELChat">
+          content="Découvrez les capacités ELChat : IA conversationnelle, RAG, Visitor Intelligence, engagement proactif, workflows, connecteurs et agents IA pour les entreprises.">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -46,6 +45,81 @@
     <meta name="twitter:image"
           content="https://elchat.io/assets/images/sub-banner-img.png">
     
+    --}}
+@endsection
+
+@section('structured-data')
+    @php
+        $capabilitySlugs = ['knowledge-rag', 'workflows-connecteurs', 'intelligence-business', 'engagement-proactif', 'visitor-intelligence', 'agents-ia', 'ai-sales-hunter'];
+        $capabilities = array_map(static function (string $capabilitySlug): array {
+            $capability = trans('site.services_details.' . str_replace('-', '_', $capabilitySlug));
+
+            return [
+                '@type' => 'ListItem',
+                'position' => 0,
+                'name' => $capability['name'],
+                'description' => $capability['description'],
+            ];
+        }, $capabilitySlugs);
+        foreach ($capabilities as $index => &$capability) {
+            $capability['position'] = $index + 1;
+        }
+        unset($capability);
+    @endphp
+    <script type="application/ld+json">
+        {!! json_encode([
+            '@context' => 'https://schema.org',
+            '@type' => 'ItemList',
+            '@id' => \App\Support\SiteLocale::urlForPage('services') . '#capabilities',
+            'name' => __('site.services.title'),
+            'url' => \App\Support\SiteLocale::urlForPage('services'),
+            'itemListElement' => $capabilities,
+            /*
+                [
+                    '@type' => 'ListItem',
+                    'position' => 1,
+                    'name' => 'Knowledge Intelligence & RAG',
+                    'description' => 'Base de connaissances et réponses fondées sur les sources de l’entreprise.',
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 2,
+                    'name' => 'Workflows & connecteurs métier',
+                    'description' => 'Automatisation des processus dans les outils autorisés.',
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 3,
+                    'name' => 'Business & Executive Intelligence',
+                    'description' => 'Analyse des événements et aide à la décision opérationnelle.',
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 4,
+                    'name' => 'Engagement Proactif',
+                    'description' => 'Reprise contextualisée des conversations lorsque les signaux le justifient.',
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 5,
+                    'name' => 'Visitor Intelligence',
+                    'description' => 'Lecture des parcours visiteurs, événements et replays terminés.',
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 6,
+                    'name' => 'Agents IA spécialisés',
+                    'description' => 'Agents orientés vers des objectifs précis avec autonomie configurable.',
+                ],
+                [
+                    '@type' => 'ListItem',
+                    'position' => 7,
+                    'name' => 'AI Sales Hunter',
+                    'description' => 'Prospection et qualification encadrées par des règles configurables.',
+                ],
+            ],*/
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}
+    </script>
 @endsection
 
 @section('main-content')
@@ -55,14 +129,14 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Capacités de la plateforme</h1>
+                        <h1>{{ __('site.services.title') }}</h1>
                         <p>
-                            Donnez à vos équipes une IA qui connaît votre activité, comprend les événements, recommande la prochaine décision et agit dans les outils autorisés.
+                            {{ __('site.services.hero') }}
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
-                                <li class="breadcrumb-item"><a href="{{ route('home.page') }}">Accueil</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">Capacités</li>
+                                <li class="breadcrumb-item"><a href="{{ \App\Support\SiteLocale::urlForPage('home') }}">{{ __('site.nav.home') }}</a></li>
+                                <li class="breadcrumb-item active" aria-current="page">{{ __('site.nav.services') }}</li>
                             </ol>
                         </div>
                         <!-- sub banner content con -->
@@ -73,7 +147,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="robot">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration des capacités IA d’ELChat">
                         </figure>
                         <!-- sub banner img con -->
                     </div>
@@ -91,28 +165,27 @@
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                      data-wow-delay="0.2s">Fondations opérationnelles</span>
+                      data-wow-delay="0.2s">{{ __('site.services.label') }}</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Reliez la connaissance, les canaux<br> et les systèmes métier
+                    {{ __('site.services.heading') }}
                 </h2>
                 <!-- heading title con -->
             </div>
             <div class="row all_row wow fadeIn" data-wow-duration="2s" data-wow-delay="0.4s">
                 <div class="col-lg-4 col-md-6 all_column wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="feature-box position-relative all_boxes">
-                        <h4>Knowledge Intelligence & RAG</h4>
+                        <h4>{{ __('site.services.rag_title') }}</h4>
                         <p class="mb-0">
-                            Importez ou indexez vos sources, puis retrouvez le contexte utile grâce à la recherche hybride et aux embeddings.
-                            Les réponses peuvent s’appuyer sur vos propres contenus et leurs sources.
+                            {{ __('site.services.rag_text') }}
                         </p>
-                        <img src="{{ asset('assets/images/feature-img1-icon1.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/feature-img1-icon1.png')}}" alt="Icône de base de connaissances RAG"
                              class="img-fluid position-absolute feature-icon1  wow fadeInUp" data-wow-duration="2s"
                              data-wow-delay="0.6s">
 
-                        <figure><img src="{{ asset('assets/images/feature-img1.png')}}" alt="feature image"
+                        <figure><img src="{{ asset('assets/images/feature-img1.png')}}" alt="Illustration de la base de connaissances ELChat"
                                      class="img-fluid  wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.7s">
                         </figure>
-                        <a href="{{ route('services.page') }}"><img src="{{ asset('assets/images/up-right-arrow.png')}}" alt="arrow"
+                        <a href="{{ \App\Support\SiteLocale::urlForPage('service', app()->getLocale(), 'knowledge-rag') }}" aria-label="{{ __('site.services.detail') }} {{ __('site.services_details.knowledge_rag.name') }}"><img src="{{ asset('assets/images/up-right-arrow.png')}}" alt=""
                                                                     class="img-fluid"></a>
                         <!-- feature box -->
                     </div>
@@ -120,27 +193,26 @@
                 </div>
                 <div class="col-lg-4 col-md-6 all_column wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="feature-box position-relative all_boxes bg-green">
-                        <h4>Community & omnicanal</h4>
+                        <h4>{{ __('site.services.community_title') }}</h4>
                         <p class="mb-0">
-                            Centralisez le site, les réseaux sociaux, les messageries et l’e-mail autour d’une même connaissance.
-                            Les équipes gardent une vision cohérente des interactions, quel que soit le canal.
+                            {{ __('site.services.community_text') }}
                         </p>
-                        <img src="{{ asset('assets/images/feature-img2-icon1.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/feature-img2-icon1.png')}}" alt=""
                              class="img-fluid position-absolute feature-icon2  wow fadeInLeft" data-wow-duration="2s"
                              data-wow-delay="0.8s">
-                        <img src="{{ asset('assets/images/feature-img2-icon2.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/feature-img2-icon2.png')}}" alt=""
                              class="img-fluid position-absolute feature-icon3  wow fadeInRight" data-wow-duration="2s"
                              data-wow-delay="0.9s">
-                        <img src="{{ asset('assets/images/feature-img2-icon3.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/feature-img2-icon3.png')}}" alt=""
                              class="img-fluid position-absolute feature-icon4  wow fadeInLeft" data-wow-duration="2s"
                              data-wow-delay="1.0s">
-                        <img src="{{ asset('assets/images/feature-img2-icon4.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/feature-img2-icon4.png')}}" alt=""
                              class="img-fluid position-absolute feature-icon5 wow fadeInRight" data-wow-duration="2s"
                              data-wow-delay="1.1s">
-                        <figure><img src="{{ asset('assets/images/feature-img2.png')}}" alt="feature image"
+                        <figure><img src="{{ asset('assets/images/feature-img2.png')}}" alt="Illustration des workflows et connecteurs métier ELChat"
                                      class="img-fluid wow fadeInDown" data-wow-duration="2s" data-wow-delay="1.2s">
                         </figure>
-                        <a href="{{ route('services.page')}}"><img src="{{ asset('assets/images/up-right-arrow.png')}}" alt="arrow"
+                        <a href="{{ \App\Support\SiteLocale::urlForPage('service', app()->getLocale(), 'workflows-connecteurs') }}" aria-label="{{ __('site.services.detail') }} {{ __('site.services.automation_title') }}"><img src="{{ asset('assets/images/up-right-arrow.png')}}" alt=""
                                                                    class="img-fluid"></a>
                         <!-- feature box -->
                     </div>
@@ -148,21 +220,20 @@
                 </div>
                 <div class="col-lg-4 col-md-6 all_column  wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="feature-box position-relative all_boxes">
-                        <h4>Business Automation & connecteurs</h4>
+                        <h4>{{ __('site.services.automation_title') }}</h4>
                         <p class="mb-0">
-                            Connectez CRM, e-commerce, agenda, stockage, marketing et productivité.
-                            Les workflows coordonnent les étapes, tandis que les permissions encadrent les actions exécutées.
+                            {{ __('site.services.automation_text') }}
                         </p>
-                        <img src="{{ asset('assets/images/feature-img3-icon1.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/feature-img3-icon1.png')}}" alt="Icône d’analyse des événements métier"
                              class="img-fluid position-absolute feature-icon6 wow fadeInUp" data-wow-duration="2s"
                              data-wow-delay="0.6s">
-                        <img src="{{ asset('assets/images/elipse-blue.png')}}" alt="feature image"
+                        <img src="{{ asset('assets/images/elipse-blue.png')}}" alt=""
                              class="img-fluid position-absolute blue-elipse wow fadeInDown" data-wow-duration="2s"
                              data-wow-delay="0.7s">
-                        <figure><img src="{{ asset('assets/images/feature-img3.png')}}" alt="feature image"
+                        <figure><img src="{{ asset('assets/images/feature-img3.png')}}" alt="Illustration de l’intelligence business et executive"
                                      class="img-fluid feature-img3 wow fadeIn" data-wow-duration="2s" data-wow-delay="0.8s">
                         </figure>
-                        <a href="{{ route('services.page')}}"><img src="{{ asset('assets/images/up-right-arrow.png')}}" alt="arrow"
+                        <a href="{{ \App\Support\SiteLocale::urlForPage('service', app()->getLocale(), 'intelligence-business') }}" aria-label="{{ __('site.services.detail') }} {{ __('site.services_details.intelligence_business.name') }}"><img src="{{ asset('assets/images/up-right-arrow.png')}}" alt=""
                                                                    class="img-fluid"></a>
                         <!-- feature box -->
                     </div>
@@ -178,36 +249,37 @@
     <section class="float-left w-100 position-relative why-choose-us-con padding-top padding-bottom main-box">
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
-                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">Nouvelle capacité</span>
-                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Engagement Proactif</h2>
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">{{ __('site.services.proactive_title') }}</span>
+                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">{{ __('site.services.proactive_title') }}</h2>
                 <p class="mx-auto" style="max-width: 760px;">
-                    ELChat peut reprendre une conversation avec un visiteur lorsqu’un événement métier indique qu’une aide est utile : demande de devis inachevée, forte intention, panier abandonné ou rendez-vous non finalisé.
+                    {{ __('site.services.proactive_text') }}
                 </p>
             </div>
             <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
                 <div class="choose-box">
-                    <h6>Observer le bon signal</h6>
-                    <p class="mb-0">Les événements conversationnels, commerciaux et connectés déclenchent une opportunité vérifiable.</p>
+                    <h6>{{ __('site.services_details.engagement_proactif.features.0.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.engagement_proactif.features.0.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Décider avec le contexte</h6>
-                    <p class="mb-0">L’agent utilise mémoire, résumé, historique, profil visiteur et RAG sans inventer d’information.</p>
+                    <h6>{{ __('site.services_details.engagement_proactif.features.1.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.engagement_proactif.features.1.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Choisir le bon canal</h6>
-                    <p class="mb-0">Le message est orienté vers le canal autorisé et le moment défini pour rester utile et pertinent.</p>
+                    <h6>{{ __('site.services_details.engagement_proactif.features.2.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.engagement_proactif.features.2.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Agir sous contrôle</h6>
-                    <p class="mb-0">Permissions, quotas, cooldowns, horaires et validations humaines encadrent chaque canal.</p>
+                    <h6>{{ __('site.services_details.engagement_proactif.features.3.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.engagement_proactif.features.3.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Mesurer le résultat</h6>
-                    <p class="mb-0">Réponses, leads, rendez-vous, opportunités et ventes sont attribués selon les données réellement observées.</p>
+                    <h6>{{ __('site.home.proactive_3_title') }}</h6>
+                    <p class="mb-0">{{ __('site.home.proactive_3_text') }}</p>
                 </div>
             </div>
             <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
-                <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Découvrir cette capacité</a>
+                <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn d-inline-block">{{ __('site.services.detail') }}</a>
+                <a href="{{ \App\Support\SiteLocale::urlForPage('service', app()->getLocale(), 'engagement-proactif') }}" class="text-decoration-none secondary_btn d-inline-block ml-2">{{ __('site.services.detail') }}</a>
             </div>
         </div>
     </section>
@@ -216,34 +288,35 @@
     <section class="float-left w-100 position-relative why-choose-us-con padding-top padding-bottom main-box">
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
-                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">Visitor Intelligence</span>
-                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">Voir ce que fait réellement<br>un visiteur sur votre site</h2>
-                <p class="mx-auto" style="max-width: 760px;">Visitor Intelligence relie le comportement visible sur le site du tenant aux interactions ELChat. Les événements, scrolls, captures du viewport et replays terminés donnent aux équipes une lecture concrète du parcours, sans confondre observation et intention certaine.</p>
+                <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.2s">{{ __('site.services.visitor_title') }}</span>
+                <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">{{ __('site.services.visitor_heading') }}</h2>
+                <p class="mx-auto" style="max-width: 760px;">{{ __('site.services.visitor_text') }}</p>
             </div>
             <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
                 <div class="choose-box">
-                    <h6>Capturer le bon périmètre</h6>
-                    <p class="mb-0">Le système observe la zone visible du site hôte, pas le scroll interne du widget et pas une capture de page entière.</p>
+                    <h6>{{ __('site.services_details.visitor_intelligence.features.0.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.visitor_intelligence.features.0.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Respecter le périphérique</h6>
-                    <p class="mb-0">Le replay restitue le contexte desktop, mobile ou tablette pour interpréter chaque parcours avec le bon affichage.</p>
+                    <h6>{{ __('site.services_details.visitor_intelligence.features.1.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.visitor_intelligence.features.1.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Relier les signaux</h6>
-                    <p class="mb-0">Navigation, clics, scrolls, inactivité, widget, CTA, conversations et conversions sont replacés dans l’ordre du parcours.</p>
+                    <h6>{{ __('site.services_details.visitor_intelligence.features.2.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.visitor_intelligence.features.2.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Repérer les points de friction</h6>
-                    <p class="mb-0">Les événements du parcours aident les équipes à comprendre où l’attention baisse, où une aide manque ou où une conversion bloque.</p>
+                    <h6>{{ __('site.services_details.visitor_intelligence.features.3.title') }}</h6>
+                    <p class="mb-0">{{ __('site.services_details.visitor_intelligence.features.3.text') }}</p>
                 </div>
                 <div class="choose-box">
-                    <h6>Analyser avec contrôle</h6>
-                    <p class="mb-0">Le dashboard propose un lecteur d’événements, un replay adapté au device et un export vidéo WebM du parcours terminé.</p>
+                    <h6>{{ __('site.home.visitor_5_title') }}</h6>
+                    <p class="mb-0">{{ __('site.home.visitor_5_text') }}</p>
                 </div>
             </div>
             <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
-                <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">Parler de vos parcours visiteurs</a>
+                <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn d-inline-block">{{ __('site.services.detail') }}</a>
+                <a href="{{ \App\Support\SiteLocale::urlForPage('service', app()->getLocale(), 'visitor-intelligence') }}" class="text-decoration-none secondary_btn d-inline-block ml-2">{{ __('site.services.detail') }}</a>
             </div>
         </div>
     </section>
@@ -256,8 +329,8 @@
             <div class="row all_row">
                 <div class="col-lg-7 col-md-12 wow fadeInLeft" data-wow-duration="2s" data-wow-delay="0.4s">
                     <div class="work-img-con position-relative">
-                        <figure><img src="{{ asset('assets/images/work-img.png')}}" alt="image" class="img-fluid"></figure>
-                        <figure><img src="{{ asset('assets/images/robot.png')}}" alt="robot"
+                        <figure><img src="{{ asset('assets/images/work-img.png')}}" alt="Illustration du fonctionnement des capacités ELChat" class="img-fluid"></figure>
+                        <figure><img src="{{ asset('assets/images/robot.png')}}" alt="Assistant IA ELChat"
                                      class="img-fluid position-absolute robot-img animated-robot">
                         </figure>
                     </div>
@@ -267,9 +340,9 @@
                     <div class="work-content-con">
                         <div class="heading-title-con">
                             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                                  data-wow-delay="0.5s">Comment ça fonctionne</span>
+                                  data-wow-delay="0.5s">{{ __('site.services.how_label') }}</span>
                             <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.6s">
-                                Des événements aux actions utiles
+                                {{ __('site.services.how_title') }}
                             </h2>
                             <!-- heading title con -->
                         </div>
@@ -277,36 +350,30 @@
                             <li class="position-relative d-flex align-items-center">
                                 <span class="d-block color-blue">01</span>
                                 <div class="work-content-inner-con">
-                                    <h5>Détectez les signaux métier</h5>
-                                    <p class="mb-0">
-                                        Intentions, conversions, demandes support, opportunités, rendez-vous et exécutions de workflows deviennent des événements exploitables.
-                                    </p>
+                                    <h5>{{ __('site.services.step1') }}</h5>
+                                    <p class="mb-0">{{ __('site.home.step1_text') }}</p>
                                     <!-- work content inner con -->
                                 </div>
                             </li>
                             <li class="position-relative d-flex align-items-center">
                                 <span class="d-block color-blue">02</span>
                                 <div class="work-content-inner-con">
-                                    <h5>Éclairez la décision</h5>
-                                    <p class="mb-0">
-                                        Les analyses croisent connaissances et données connectées pour produire diagnostics, synthèses, rapports et plans d’action priorisés.
-                                    </p>
+                                    <h5>{{ __('site.services.step2') }}</h5>
+                                    <p class="mb-0">{{ __('site.home.step2_text') }}</p>
                                     <!-- work content inner con -->
                                 </div>
                             </li>
                             <li class="position-relative d-flex align-items-center">
                                 <span class="d-block color-blue">03</span>
                                 <div class="work-content-inner-con">
-                                    <h5>Exécutez et tracez</h5>
-                                    <p class="mb-0">
-                                        Un workflow ou un agent peut préparer puis réaliser l’action permise. Les confirmations et journaux d’audit maintiennent l’humain dans la boucle.
-                                    </p>
+                                    <h5>{{ __('site.services.step3') }}</h5>
+                                    <p class="mb-0">{{ __('site.home.step3_text') }}</p>
                                     <!-- work content inner con -->
                                 </div>
                             </li>
                         </ul>
-                        <a href="{{ route('contact.page') }}" class="text-decoration-none primary_btn d-inline-block">
-                            Cartographier vos cas d’usage
+                        <a href="{{ \App\Support\SiteLocale::urlForPage('contact') }}" class="text-decoration-none primary_btn d-inline-block">
+                            {{ __('site.services.use_case') }}
                         </a>
                         <!-- work content con -->
                     </div>
@@ -324,57 +391,27 @@
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                      data-wow-delay="0.2s">Pourquoi ELChat</span>
+                      data-wow-delay="0.2s">{{ __('site.services.why_label') }}</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                    Des capacités spécialisées,<br> un même environnement de travail
+                    {{ __('site.services.why_title') }}
                 </h2>
                 <!-- heading title con -->
             </div>
+            @php
+                $whySlugs = ['knowledge_rag', 'intelligence_business', 'agents_ia', 'ai_sales_hunter', 'workflows_connecteurs'];
+            @endphp
             <div class="choose-outer-con wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
-                <div class="choose-box">
-                    <figure><img src="{{ asset('assets/images/choose-icon1.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Knowledge Intelligence</h6>
-                    <p class="mb-0">
-                        Structurez la mémoire opérationnelle de l’entreprise, mesurez sa qualité et repérez les questions encore sans réponse fiable.
-                    </p>
-                    <!-- choose box -->
-                </div>
-                <div class="choose-box">
-                    <figure><img src="{{ asset('assets/images/choose-icon2.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Event & Business Intelligence</h6>
-                    <p class="mb-0">
-                        Suivez les événements conversationnels, commerciaux et opérationnels pour comprendre les parcours et relier les actions aux résultats.
-                    </p>
-                    <!-- choose box -->
-                </div>
-                <div class="choose-box">
-                    <figure><img src="{{ asset('assets/images/choose-icon3.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Executive Intelligence</h6>
-                    <p class="mb-0">
-                        Générez briefings, diagnostics transverses et plans d’action à partir des sources et outils connectés à ELChat.
-                    </p>
-                    <!-- choose box -->
-                </div>
-                <div class="choose-box">
-                    <figure><img src="{{ asset('assets/images/choose-icon4.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>Agents IA spécialisés</h6>
-                    <p class="mb-0">
-                        Installez des agents orientés vers un rôle précis, associez-leur des compétences et choisissez leur niveau d’autonomie.
-                    </p>
-                    <!-- choose box -->
-                </div>
-                <div class="choose-box">
-                    <figure><img src="{{ asset('assets/images/choose-icon5.png')}}" alt="icon" class="img-fluid"></figure>
-                    <h6>AI Sales Hunter</h6>
-                    <p class="mb-0">
-                        Identifiez et qualifiez des prospects, préparez les prises de contact et pilotez les campagnes selon des limites et validations configurables.
-                    </p>
-                    <!-- choose box -->
-                </div>
-                <!-- choose outer con -->
+                @foreach ($whySlugs as $index => $whySlug)
+                    @php $whyCapability = trans('site.services_details.' . $whySlug); @endphp
+                    <div class="choose-box">
+                        <figure><img src="{{ asset('assets/images/choose-icon' . ($index + 1) . '.png')}}" alt="" class="img-fluid"></figure>
+                        <h6>{{ $whyCapability['name'] }}</h6>
+                        <p class="mb-0">{{ $whyCapability['intro'] }}</p>
+                    </div>
+                @endforeach
             </div>
             <div class="float-left w-100 m-auto text-center wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.4s">
-                <a href="{{ route('about.page')}}" class="text-decoration-none primary_btn d-inline-block">Voir la vision produit</a>
+                <a href="{{ \App\Support\SiteLocale::urlForPage('about')}}" class="text-decoration-none primary_btn d-inline-block">{{ __('site.services.vision') }}</a>
             </div>
             <!-- container -->
         </div>
@@ -386,14 +423,15 @@
         <figure><img src="{{ asset('assets/images/vector1.png')}}" alt="vector"
                      class="img-fluid position-absolute vector1 animated-plane"></figure>
         <figure><img src="{{ asset('assets/images/vector2.png')}}" alt="vector" class="img-fluid position-absolute vector2"></figure>
+        @php $serviceFaqItems = array_slice(trans('site.faq.items'), 0, 4); @endphp
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="row ">
                 <div class="col-xl-7 col-lg-10 col-12 mx-auto">
                     <div class="faq_content text-center">
                         <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                              data-wow-delay="0.2s">Questions fréquentes</span>
+                              data-wow-delay="0.2s">{{ __('site.faq.label') }}</span>
                         <h2 class=" wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                            Ce qu’il faut savoir sur<br> l’exécution par l’IA
+                            {{ __('site.faq.heading') }}
                         </h2>
                     </div>
                 </div>
@@ -409,17 +447,13 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseOne" aria-expanded="false"
                                                aria-controls="collapseOne">
-                                                <h6>
-                                                    Quels outils métier peut-on connecter ?
-                                                </h6>
+                                                <h6>{{ $serviceFaqItems[0]['question'] }}</h6>
                                             </a>
                                         </div>
                                         <div id="collapseOne" class="collapse" aria-labelledby="headingOne"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
-                                                <p class="text-size-16 text-left mb-0">
-                                                    Le catalogue comprend notamment HubSpot, Odoo, Shopify, WooCommerce, Google Calendar, Google Drive, OneDrive, Slack, Teams, Notion, Asana, ClickUp, Trello et plusieurs outils marketing. La disponibilité dépend du connecteur et de sa configuration.
-                                                </p>
+                                                <p class="text-size-16 text-left mb-0">{{ $serviceFaqItems[0]['answer'] }}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -428,17 +462,13 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseTwo" aria-expanded="false"
                                                aria-controls="collapseTwo">
-                                                <h6>
-                                                    Quelle différence entre un workflow et un agent ?
-                                                </h6>
+                                                <h6>{{ $serviceFaqItems[1]['question'] }}</h6>
                                             </a>
                                         </div>
                                         <div id="collapseTwo" class="show collapse" aria-labelledby="headingTwo"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
-                                                <p class="text-size-16 text-left mb-0">
-                                                    Un workflow enchaîne des étapes définies pour un processus récurrent. Un agent poursuit un objectif avec les compétences, connecteurs et workflows qui lui sont attribués, dans les limites de son autonomie.
-                                                </p>
+                                                <p class="text-size-16 text-left mb-0">{{ $serviceFaqItems[1]['answer'] }}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -447,15 +477,13 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseThree" aria-expanded="false"
                                                aria-controls="collapseThree">
-                                                <h6>Comment les actions sensibles sont-elles contrôlées ?</h6>
+                                                <h6>{{ $serviceFaqItems[2]['question'] }}</h6>
                                             </a>
                                         </div>
                                         <div id="collapseThree" class="collapse" aria-labelledby="headingThree"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
-                                                <p class="text-size-16 text-left mb-0">
-                                                    Les permissions déterminent si une action est autorisée, bloquée ou soumise à confirmation. Une file d’actions en attente et un journal d’audit permettent aux équipes de garder le contrôle.
-                                                </p>
+                                                <p class="text-size-16 text-left mb-0">{{ $serviceFaqItems[2]['answer'] }}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -464,15 +492,13 @@
                                             <a href="#" class="btn btn-link collapsed" data-toggle="collapse"
                                                data-target="#collapseFour" aria-expanded="false"
                                                aria-controls="collapseFour">
-                                                <h6>Que fait concrètement l’AI Sales Hunter ?</h6>
+                                                <h6>{{ $serviceFaqItems[3]['question'] }}</h6>
                                             </a>
                                         </div>
                                         <div id="collapseFour" class="collapse" aria-labelledby="headingFour"
                                              data-parent="#faq_accordion1">
                                             <div class="card-body">
-                                                <p class="text-size-16 text-left mb-0">
-                                                    Il aide à découvrir et qualifier des prospects, analyser leur site, rédiger une approche et suivre leur progression. L’envoi peut rester en suggestion, exiger une validation humaine ou être automatisé selon la configuration choisie.
-                                                </p>
+                                                <p class="text-size-16 text-left mb-0">{{ $serviceFaqItems[3]['answer'] }}</p>
                                             </div>
                                         </div>
                                     </div>

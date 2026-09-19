@@ -22,7 +22,7 @@
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
                                 <li class="breadcrumb-item">
-                                    <a href="{{ route('home.page') }}">Accueil</a>
+                                    <a href="{{ \App\Support\SiteLocale::urlForPage('home') }}">{{ __('site.nav.home') }}</a>
                                 </li>
                                 <li class="breadcrumb-item active" aria-current="page">
                                     Conditions générales d'utilisation

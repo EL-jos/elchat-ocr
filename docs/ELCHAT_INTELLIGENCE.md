@@ -40,6 +40,7 @@ ELChat Intelligence mesure la valeur métier réellement observée dans ELChat. 
 - `AnalyticsEventType` centralise les types extensibles. Ajouter un type ne nécessite pas de migration de schéma.
 - `AnalyticsEventService` normalise, expurge les métadonnées sensibles et applique l'idempotence par site.
 - `RecordAnalyticsEventJob` écrit sur la queue `analytics`. Une panne analytics est journalisée mais ne fait échouer ni conversation, ni agent, ni action MCP.
+- `HandleVisitorIntelligenceEvent` et les jobs dérivés de parcours, de détection de bots, d'opportunités et d'analyse IA écrivent sur la queue dédiée `visitor-intelligence`, afin de limiter leur concurrence séparément de l'ingestion analytics.
 - `analytics_daily_metrics` contient les agrégats non personnels. `analytics_daily_aggregate_runs` certifie les journées complètement reconstruites.
 - `AggregateAnalyticsDayJob` reconstruit une journée de façon idempotente. Le graphique historique utilise un agrégat uniquement pour une journée close et certifiée ; le jour courant reste lu en temps réel.
 - `analytics:prune` supprime uniquement le brut non critique déjà agrégé. Leads, contacts, opportunités, rendez-vous et achats ne sont jamais supprimés par cette commande.
@@ -101,6 +102,7 @@ Variables facultatives :
 ANALYTICS_ENABLED=true
 ANALYTICS_ASYNC=true
 ANALYTICS_QUEUE=analytics
+VISITOR_INTELLIGENCE_QUEUE=visitor-intelligence
 ANALYTICS_RAW_RETENTION_DAYS=180
 ANALYTICS_DAILY_AGGREGATION_ENABLED=true
 ANALYTICS_DEFAULT_PERIOD_DAYS=30
@@ -121,7 +123,7 @@ VISITOR_INTELLIGENCE_GEO_QUEUE=
 3. Déployer backend et frontend. Sur une table `resource_events` volumineuse, planifier la migration d'élargissement dans une fenêtre contrôlée ou avec l'outil de changement de schéma en ligne utilisé par l'exploitation.
 4. Exécuter `php artisan migrate --force`.
 5. Configurer Supervisor avec des workers séparés pour `default`, `batch`,
-   `analytics`, `proactive` et `vision`. Ne pas utiliser un worker unique qui
+   `analytics`, `visitor-intelligence`, `proactive` et `vision`. Ne pas utiliser un worker unique qui
    mélange ces queues, afin qu'un crawl ou une indexation longue ne bloque pas
    les traitements analytics et les parcours sensibles à la latence. Relire la
    configuration puis redémarrer les processus.
@@ -132,7 +134,7 @@ VISITOR_INTELLIGENCE_GEO_QUEUE=
 
 ## Retour arrière
 
-Le retour arrière le plus sûr est applicatif : désactiver `ANALYTICS_ENABLED`, arrêter la consommation de la queue `analytics`, redéployer la version précédente et laisser les colonnes/tables additives en place. L'ancien code les ignore et les données restent récupérables.
+Le retour arrière le plus sûr est applicatif : désactiver `ANALYTICS_ENABLED`, arrêter la consommation des queues `analytics` et `visitor-intelligence`, redéployer la version précédente et laisser les colonnes/tables additives en place. L'ancien code les ignore et les données restent récupérables.
 
 Ne supprimer le schéma qu'après export et validation explicite : le rollback de `2026_08_15_000003` supprime les agrégats ; celui de `2026_08_15_000002` retire les dimensions d'attribution du brut. Les colonnes historiques restent élargies pour conserver les lignes, mais les dimensions retirées seraient perdues.
 

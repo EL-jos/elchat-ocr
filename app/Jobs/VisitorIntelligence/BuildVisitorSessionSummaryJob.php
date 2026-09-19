@@ -25,7 +25,7 @@ class BuildVisitorSessionSummaryJob implements ShouldQueue
 
     public function __construct(public readonly string $sessionId)
     {
-        $this->onQueue(config('analytics.queue', 'analytics'));
+        $this->onQueue(config('visitor-intelligence.queue', 'visitor-intelligence'));
     }
 
     public function handle(VisitorIntelligenceSummaryService $summaries, VisitorIntelligenceRealtimeService $realtime): void

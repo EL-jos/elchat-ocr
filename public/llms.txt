@@ -1,0 +1,46 @@
+# ELChat
+
+> ELChat est une plateforme d’IA opérationnelle pour entreprises. Elle relie les connaissances, les conversations, les événements et les outils métier afin d’aider les équipes à comprendre, décider, agir et mesurer les résultats.
+
+Les informations publiques de référence sont disponibles sur les pages ci-dessous. Utilisez les pages tarifaires pour les prix affichés et la FAQ pour les réponses détaillées. Les capacités et intégrations peuvent dépendre du module et de la configuration du compte.
+
+## Présentation
+
+- [Accueil ELChat](https://elchat.io/accueil): Présentation de la plateforme d’IA conversationnelle et opérationnelle.
+- [À propos d’ELChat](https://elchat.io/a-propos): Mission, vision et approche de l’intelligence opérationnelle.
+- [Capacités ELChat](https://elchat.io/services): RAG, workflows, connecteurs métier, Visitor Intelligence, engagement proactif et agents IA.
+
+## Capacités principales
+
+- [Knowledge Intelligence & RAG](https://elchat.io/services): Indexation des sites, documents, FAQ et produits pour produire des réponses reliées aux sources.
+- [Workflows et connecteurs métier](https://elchat.io/services): Connexion aux outils autorisés et exécution d’actions selon les permissions et validations.
+- [Engagement Proactif](https://elchat.io/services): Reprise contextualisée d’une conversation lorsqu’un signal pertinent est détecté.
+- [Visitor Intelligence](https://elchat.io/services): Observation des parcours visiteurs, événements, captures du viewport et replays terminés.
+- [Agents IA spécialisés](https://elchat.io/services): Agents orientés vers des objectifs commerciaux ou opérationnels avec autonomie configurable.
+
+## Pages détaillées
+
+- [Base de connaissances RAG](https://elchat.io/service/knowledge-rag): Fonctionnement de Knowledge Intelligence et des réponses fondées sur les sources.
+- [Workflows et connecteurs métier](https://elchat.io/service/workflows-connecteurs): Automatisation des processus et intégration des outils autorisés.
+- [Intelligence business et executive](https://elchat.io/service/intelligence-business): Analyse des événements, diagnostics et plans d’action.
+- [Engagement Proactif](https://elchat.io/service/engagement-proactif): Relance conversationnelle contextualisée et contrôlée.
+- [Visitor Intelligence](https://elchat.io/service/visitor-intelligence): Analyse des parcours visiteurs et replays terminés.
+- [Agents IA spécialisés](https://elchat.io/service/agents-ia): Déploiement d’agents avec compétences, permissions et autonomie configurables.
+- [AI Sales Hunter](https://elchat.io/service/ai-sales-hunter): Prospection et qualification encadrées par les règles commerciales.
+
+## Informations commerciales
+
+- [Tarifs ELChat](https://elchat.io/tarifs): Plans, modules et prix publics affichés.
+- [Demander une démonstration](https://elchat.io/contact): Contacter l’équipe ELChat pour cadrer un cas d’usage.
+
+## Questions et aide
+
+- [FAQ ELChat](https://elchat.io/faqs): Questions sur l’IA conversationnelle, le RAG, les canaux, les workflows et les agents.
+- [Centre d’aide ELChat](https://elchat.io/centre-d-aide): Documentation d’utilisation et guides pratiques.
+
+## Versions linguistiques
+
+- [English](https://elchat.io/en/home): English version of the ELChat platform pages.
+- [Deutsch](https://elchat.io/de/home): Deutsche Version der ELChat-Plattformseiten.
+- [Português](https://elchat.io/pt/home): Versão portuguesa das páginas da plataforma ELChat.
+- [Español](https://elchat.io/es/home): Versión española de las páginas de la plataforma ELChat.

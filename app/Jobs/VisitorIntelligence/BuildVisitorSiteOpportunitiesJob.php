@@ -24,7 +24,7 @@ class BuildVisitorSiteOpportunitiesJob implements ShouldQueue, ShouldBeUnique
 
     public function __construct(public string $siteId)
     {
-        $this->onQueue(config('analytics.queue', 'analytics'));
+        $this->onQueue(config('visitor-intelligence.queue', 'visitor-intelligence'));
     }
 
     public function handle(VisitorIntelligenceAggregateOpportunityService $opportunities, VisitorIntelligenceRealtimeService $realtime): void

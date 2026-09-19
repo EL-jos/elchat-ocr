@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ContactRequest;
 use App\Mail\ContactMail;
 use App\Services\ContactService;
+use App\Support\SiteLocale;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -17,6 +19,16 @@ class PageController extends Controller
     public function __construct(
         private ContactService $contactService
     ) {}
+
+    public function landing(Request $request): RedirectResponse
+    {
+        $locale = SiteLocale::detect($request);
+
+        return redirect()
+            ->to(SiteLocale::urlForPage('home', $locale), 302)
+            ->header('Vary', 'Accept-Language, Cookie')
+            ->header('Cache-Control', 'private, no-store');
+    }
 
     public function home(){
         return view('pages.home');
@@ -30,8 +42,10 @@ class PageController extends Controller
         return view('pages.services.index');
     }
 
-    public function service(string $slug){
-        return view('pages.services.show');
+    public function service(Request $request){
+        $slug = (string) $request->route('slug');
+
+        return view('pages.services.show', compact('slug'));
     }
 
     public function abonnements(){
@@ -61,7 +75,7 @@ class PageController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Votre message a été envoyé avec succès. Nous vous répondrons dans les meilleurs délais.'
+                'message' => __('site.contact.success')
             ]);
 
         } catch (\Throwable $e) {
@@ -73,7 +87,7 @@ class PageController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => "Une erreur est survenue lors de l'envoi du message."
+                'message' => __('site.contact.error')
             ], 500);
 
         }

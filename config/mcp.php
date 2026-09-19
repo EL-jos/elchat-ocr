@@ -23,6 +23,7 @@ use App\Domain\MCP\Connectors\MondayConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\ProfessionalEmailImapConnector;
 use App\Domain\MCP\Connectors\SalesHunterConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
@@ -183,6 +184,11 @@ return [
         'mailchimp' => ['class' => MailchimpConnector::class],
         // Clé API privée statique.
         'klaviyo' => ['class' => KlaviyoConnector::class],
+
+        // Boîte professionnelle générique : IMAP pour la lecture/classement,
+        // SMTP pour les brouillons et envois. Ce connecteur MCP est distinct
+        // des intégrations SocialChannels (Gmail/Outlook/IMAP historique).
+        'imap_professional_email' => ['class' => ProfessionalEmailImapConnector::class],
 
         // Clé API statique.
         'brevo' => ['class' => BrevoConnector::class],

@@ -57,19 +57,19 @@ class ContactRequest extends FormRequest
     {
         return [
 
-            'fname.required' => 'Veuillez renseigner votre nom.',
-            'fname.min'      => 'Le nom est trop court.',
-            'fname.max'      => 'Le nom est trop long.',
+            'fname.required' => __('site.contact.validation.name_required'),
+            'fname.min'      => __('site.contact.validation.name_min'),
+            'fname.max'      => __('site.contact.validation.name_min'),
 
-            'phone.min'      => 'Le numéro de téléphone est invalide.',
-            'phone.max'      => 'Le numéro de téléphone est invalide.',
+            'phone.min'      => __('site.contact.validation.phone_min'),
+            'phone.max'      => __('site.contact.validation.phone_min'),
 
-            'email.required' => 'Veuillez renseigner votre adresse email.',
-            'email.email'    => "L'adresse email est invalide.",
+            'email.required' => __('site.contact.validation.email_required'),
+            'email.email'    => __('site.contact.validation.email_invalid'),
 
-            'msg.required'   => 'Veuillez saisir votre message.',
-            'msg.min'        => 'Votre message est trop court.',
-            'msg.max'        => 'Votre message est trop long.',
+            'msg.required'   => __('site.contact.validation.message_required'),
+            'msg.min'        => __('site.contact.validation.message_min'),
+            'msg.max'        => __('site.contact.validation.message_min'),
 
         ];
     }

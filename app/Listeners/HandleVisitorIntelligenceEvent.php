@@ -23,7 +23,10 @@ class HandleVisitorIntelligenceEvent implements ShouldQueue
         private readonly VisitorIntelligenceRuleService $rules,
     ) {}
 
-    public function viaQueue(): string { return config('analytics.queue', 'analytics'); }
+    public function viaQueue(): string
+    {
+        return config('visitor-intelligence.queue', 'visitor-intelligence');
+    }
 
     public function handle(AnalyticsEventRecorded $notification): void
     {

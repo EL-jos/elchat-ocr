@@ -1,16 +1,15 @@
 @extends('pages.layouts.blank')
 
 @section('seo')
+    @include('pages.partials.seo', ['page' => 'contact'])
+    {{--
     <!-- Primary Meta Tags -->
-    <title>Contact ELChat | Demander une démo de la plateforme IA</title>
+    <title>Demander une démo d’IA conversationnelle | ELChat</title>
 
-    <meta name="title" content="Contact ELChat | Demander une démo de la plateforme IA">
+    <meta name="title" content="Demander une démo d’IA conversationnelle | ELChat">
 
     <meta name="description"
-          content="Demandez une démonstration d'ELChat et échangez sur vos cas d'usage : connaissance RAG, workflows, connecteurs métier, agents IA et pilotage des résultats.">
-
-    <meta name="keywords"
-          content="contact ELChat, démo ELChat, plateforme IA entreprise, devis automatisation métier, agents IA, workflows IA, RAG entreprise, cadrage IA">
+          content="Demandez une démo d’ELChat, plateforme d’IA conversationnelle pour entreprises : RAG, workflows, agents, connecteurs et automatisation des échanges.">
 
     <meta name="author" content="ELChat">
     <meta name="robots" content="index, follow">
@@ -47,6 +46,7 @@
           content="https://elchat.io/assets/images/sub-banner-img.png">
     
 
+    --}}
 @endsection
 
 @section('main-content')
@@ -56,15 +56,14 @@
             <div class="row align-items-center">
                 <div class="col-lg-7 col-md-7">
                     <div class="sub-banner-content-con">
-                        <h1>Demandez une démo d’ELChat</h1>
+                        <h1>{{ __('site.contact.title') }}</h1>
                         <p>
-                            Expliquez-nous votre objectif, vos sources de connaissance et les outils concernés.<br>
-                            Nous vous aiderons à identifier un premier périmètre utile, mesurable et maîtrisé.
+                            {{ __('site.contact.hero') }}
                         </p>
                         <div class="breadcrumb-con d-inline-block">
                             <ol class="breadcrumb mb-0">
-                                <li class="breadcrumb-item"><a href="{{ route('home.page')}}">Accueil</a></li>
-                                <li class="breadcrumb-item active" aria-current="page">Contact</li>
+                                <li class="breadcrumb-item"><a href="{{ \App\Support\SiteLocale::urlForPage('home')}}">{{ __('site.nav.home') }}</a></li>
+                                <li class="breadcrumb-item active" aria-current="page">{{ __('site.nav.contact') }}</li>
                             </ol>
                         </div>
                         <!-- sub banner content con -->
@@ -75,7 +74,7 @@
                 <div class="col-lg-5 col-md-5">
                     <div class="sub-banner-img-con">
                         <figure>
-                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="robot" class="">
+                            <img src="{{ asset('assets/images/sub-banner-img.png')}}" alt="Illustration pour contacter ELChat" class="">
                         </figure>
                         <!-- sub banner img con -->
                     </div>
@@ -93,10 +92,9 @@
         <div class="container">
             <div class="heading-title-con text-center">
                 <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                      data-wow-delay="0.2s">Contact ELChat</span>
+                      data-wow-delay="0.2s">{{ __('site.contact.label') }}</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                     Partons de vos priorités<br>
-                     et de vos processus réels
+                     {{ __('site.contact.heading') }}
                 </h2>
                 <!-- heading title con -->
             </div>
@@ -104,9 +102,9 @@
                 <div class="col-lg-3 col-md-6 all_column wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.4s">
                     <div class="contact-info-box all_boxes">
                         <figure><img src="{{ asset('assets/images/location-icon.png')}}" alt="location" class="img-fluid"></figure>
-                        <h6>Localisation:</h6>
+                        <h6>{{ __('site.contact.location') }}</h6>
                         <p class="mb-0">
-                            Casablanca, Maroc
+                            {{ __('site.footer.city') }}
                         </p>
                         <!-- contact info box -->
                     </div>
@@ -115,7 +113,7 @@
                 <div class="col-lg-3 col-md-6 all_column wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.5s">
                     <div class="contact-info-box all_boxes">
                         <figure><img src="{{ asset('assets/images/email-icon.png')}}" alt="email" class="img-fluid"></figure>
-                        <h6>Email:</h6>
+                        <h6>{{ __('site.contact.email') }}</h6>
                         <a href="mailto:contact@elchat.io" class="d-inline-block">
                             contact@elchat.io
                         </a>
@@ -128,7 +126,7 @@
                 <div class="col-lg-3 col-md-6 all_column wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.6s">
                     <div class="contact-info-box all_boxes">
                         <figure><img src="{{ asset('assets/images/phone-icon.png')}}" alt="phone" class="img-fluid"></figure>
-                        <h6>Téléphones:</h6>
+                        <h6>{{ __('site.contact.phones') }}</h6>
                         <a href="tel:+33652233359" class="d-inline-block">+33 652 233 359
                         </a>
                         <div class="clearfix"></div>
@@ -141,10 +139,10 @@
                 <div class="col-lg-3 col-md-6 all_column wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.7s">
                     <div class="contact-info-box all_boxes">
                         <figure><img src="{{ asset('assets/images/busines-hours.png')}}" alt="hours" class="img-fluid"></figure>
-                        <h6>Disponibilité:</h6>
+                        <h6>{{ __('site.contact.availability') }}</h6>
                         <p class="mb-0">
-                            Support et démonstrations<br>
-                            du lundi au vendredi
+                            {{ __('site.contact.support') }}<br>
+                            {{ __('site.footer.weekdays') }}
                         </p>
                         <!-- contact info box -->
                     </div>
@@ -162,33 +160,33 @@
         <div class="container wow fadeInUp" data-wow-duration="2s" data-wow-delay="0.2s">
             <div class="heading-title-con text-center">
             <span class="special-text color-blue d-block wow fadeInLeft" data-wow-duration="2s"
-                  data-wow-delay="0.2s">Votre contexte</span>
+                  data-wow-delay="0.2s">{{ __('site.contact.context') }}</span>
                 <h2 class="wow fadeInRight" data-wow-duration="2s" data-wow-delay="0.4s">
-                     Quel résultat souhaitez-vous<br>
-                     obtenir avec l’IA ?
+                     {{ __('site.contact.form_heading') }}
                 </h2>
             </div>
             <div class="row wow fadeInDown" data-wow-duration="2s" data-wow-delay="0.4s">
                 <div class="col-xl-12 col-lg-12 mr-auto ml-auto">
-                    <form class="main-form text-center" method="post" id="contactpage">
+                    <form class="main-form text-center" method="post" id="contactpage"
+                          data-contact-url="{{ \App\Support\SiteLocale::urlForPage('contact') }}/send">
                         @csrf
                         <ul class="list-unstyled p-0 float-left w-100 mb-0">
                             <li>
-                                <input type="text" placeholder="Nom et entreprise" name="fname" id="fname">
+                                <input type="text" placeholder="{{ __('site.contact.name') }}" name="fname" id="fname">
                             </li>
                             <li>
-                                <input type="tel" placeholder="Téléphone" name="phone" id="phone">
+                                <input type="tel" placeholder="{{ __('site.contact.phone') }}" name="phone" id="phone">
                             </li>
                             <li>
-                                <input type="email" placeholder="Email" name="email" id="email">
+                                <input type="email" placeholder="{{ __('site.contact.email_field') }}" name="email" id="email">
                             </li>
                             <li>
-                                <textarea placeholder="Décrivez votre objectif, les outils concernés et le processus à améliorer" rows="6" name="msg" id="msg"></textarea>
+                                <textarea placeholder="{{ __('site.contact.message') }}" rows="6" name="msg" id="msg"></textarea>
                             </li>
                         </ul>
                         <div id="form_result" style="display:none;margin-bottom:20px;"></div>
                         <div class="d-inline-block">
-                            <button type="submit" id="submitBtn" class="primary_btn">Envoyer ma demande <i
+                            <button type="submit" id="submitBtn" class="primary_btn">{{ __('site.contact.send') }} <i
                                         class="fas fa-arrow-right ml-2"></i></button>
                         </div>
                     </form>
@@ -213,6 +211,9 @@
 
 @section('scripts')
     @parent
+    <script>
+        window.elchatContactI18n = @json(__('site.contact'));
+    </script>
     <script src="{{ asset('assets/js/contact-validate.js')}}"></script>
     <script src="{{ asset('assets/js/contact-form.js')}}"></script>
 @endsection

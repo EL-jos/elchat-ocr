@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureAttemptToken;
 use App\Http\Middleware\EnsureUserIsVerified;
 use App\Http\Middleware\JwtAuthenticate;
+use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\VerifyWidgetOrigin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -31,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'verified' => EnsureUserIsVerified::class,
             'jwt.auth' => JwtAuthenticate::class,
             'widget.origin' => VerifyWidgetOrigin::class,
+            'site.locale' => SetLocale::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

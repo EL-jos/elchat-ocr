@@ -25,6 +25,7 @@ use App\Domain\MCP\Connectors\MondayConnector;
 use App\Domain\MCP\Connectors\NotionConnector;
 use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
+use App\Domain\MCP\Connectors\ProfessionalEmailImapConnector;
 use App\Domain\MCP\Connectors\SalesHunterConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
@@ -197,6 +198,13 @@ class McpConnectorSeeder extends Seeder
             'adapter_class' => KlaviyoConnector::class,
             'description' => "Listes, campagnes et inscription à vos listes Klaviyo.",
             'icon_url' => 'https://cdn.simpleicons.org/klaviyo/222222', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'imap_professional_email'], [
+            'name' => 'Email professionnel (IMAP)', 'category' => 'communication', 'auth_type' => 'api_key',
+            'adapter_class' => ProfessionalEmailImapConnector::class,
+            'description' => 'Lecture, recherche, classement, brouillons et envoi depuis une adresse professionnelle via IMAP/SMTP.',
+            'icon_url' => 'https://cdn.simpleicons.org/maildotru/4A90E2', 'is_active' => true,
         ]);
 
         McpConnector::updateOrCreate(['slug' => 'brevo'], [

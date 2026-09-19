@@ -1,4 +1,7 @@
 $(function () {
+	const i18n = window.elchatContactI18n || {};
+	const validation = i18n.validation || {};
+
 	$("#contactpage").validate({
 		rules: {
 			fname: { required: true, minlength: 2 },
@@ -8,20 +11,20 @@ $(function () {
 		},
 		messages: {
 			fname: {
-				required: "Veuillez saisir votre nom.",
-				minlength: "Le nom doit contenir au moins 2 caractères."
+				required: validation.name_required || "Please enter your name.",
+				minlength: validation.name_min || "Your name is too short."
 			},
 			phone: {
-				required: "Veuillez saisir votre téléphone.",
-				minlength: "Numéro de téléphone invalide."
+				required: validation.phone_required || "Please enter your phone number.",
+				minlength: validation.phone_min || "Invalid phone number."
 			},
 			email: {
-				required: "Veuillez saisir votre email.",
-				email: "Adresse email invalide."
+				required: validation.email_required || "Please enter your email.",
+				email: validation.email_invalid || "Invalid email address."
 			},
 			msg: {
-				required: "Veuillez saisir votre message.",
-				minlength: "Votre message doit contenir au moins 10 caractères."
+				required: validation.message_required || "Please enter your message.",
+				minlength: validation.message_min || "Your message must contain at least 10 characters."
 			}
 		},
 		errorElement: "span",
@@ -46,11 +49,11 @@ $(function () {
 			|| $form.find('input[name="_token"]').val();
 
 		$button.prop("disabled", true);
-		$button.html('<i class="fas fa-spinner fa-spin"></i> Envoi...');
+		$button.html('<i class="fas fa-spinner fa-spin"></i> ' + (i18n.sending || 'Sending...'));
 		$result.hide().html("");
 
 		$.ajax({
-			url: "/contact/send",
+			url: $form.data("contact-url") || "/contact/send",
 			method: "POST",
 			data: $form.serialize(),
 			dataType: "json",
@@ -73,11 +76,11 @@ $(function () {
 						html += "<div>" + value[0] + "</div>";
 					});
 				} else if (xhr.status === 419) {
-					html = "Votre session a expiré. Veuillez recharger la page.";
+					html = i18n.expired || "Your session has expired. Please reload the page.";
 				} else if (xhr.responseJSON && xhr.responseJSON.message) {
 					html = xhr.responseJSON.message;
 				} else {
-					html = "Une erreur est survenue. Veuillez réessayer.";
+					html = i18n.error || "Something went wrong. Please try again.";
 				}
 
 				$result.html(
@@ -86,7 +89,7 @@ $(function () {
 			},
 			complete: function () {
 				$button.prop("disabled", false);
-				$button.html('Envoyer <i class="fas fa-arrow-right ml-2"></i>');
+				$button.html((i18n.send || 'Send') + ' <i class="fas fa-arrow-right ml-2"></i>');
 			}
 		});
 	}
