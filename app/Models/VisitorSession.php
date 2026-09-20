@@ -14,6 +14,7 @@ class VisitorSession extends BaseModel
         'converted' => 'boolean', 'metadata' => 'array', 'client_signals' => 'array',
         'bot_score' => 'integer',
         'location_resolved_at' => 'datetime', 'bot_score_computed_at' => 'datetime',
+        'acquisition_attributed_at' => 'datetime',
     ];
 
     public function site(): BelongsTo { return $this->belongsTo(Site::class); }

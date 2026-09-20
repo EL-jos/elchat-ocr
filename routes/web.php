@@ -43,7 +43,7 @@ Route::middleware('site.locale')->controller(PageController::class)->group(funct
     Route::get('/conditions-generales-d-utilisation', 'cgu')->name('cgu.page');
     Route::get('/mentions-legales', 'ml')->name('ml.page');
 
-    Route::prefix('{locale}')->whereIn('locale', ['en', 'de', 'pt', 'es'])->name('localized.')->group(function () {
+    Route::prefix('{locale}')->whereIn('locale', ['en', 'pt', 'es'])->name('localized.')->group(function () {
         Route::get('/home', 'home')->name('home.page');
         Route::get('/about', 'about')->name('about.page');
         Route::get('/services', 'services')->name('services.page');

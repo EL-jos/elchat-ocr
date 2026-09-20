@@ -8,7 +8,7 @@ class SiteLocale
 {
     public const DEFAULT = 'fr';
 
-    public const SUPPORTED = ['fr', 'en', 'de', 'pt', 'es'];
+    public const SUPPORTED = ['fr', 'en', 'pt', 'es'];
 
     private const FRENCH_ROUTES = [
         'home' => 'home.page',
@@ -64,7 +64,6 @@ class SiteLocale
         return [
             'fr' => ['label' => 'Français', 'native' => 'Français', 'flag' => 'fr', 'hreflang' => 'fr-FR'],
             'en' => ['label' => 'English', 'native' => 'English', 'flag' => 'gb', 'hreflang' => 'en'],
-            'de' => ['label' => 'Deutsch', 'native' => 'Deutsch', 'flag' => 'de', 'hreflang' => 'de'],
             'pt' => ['label' => 'Português', 'native' => 'Português', 'flag' => 'pt', 'hreflang' => 'pt'],
             'es' => ['label' => 'Español', 'native' => 'Español', 'flag' => 'es', 'hreflang' => 'es'],
         ];

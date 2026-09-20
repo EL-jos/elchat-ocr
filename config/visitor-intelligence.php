@@ -20,6 +20,33 @@ return [
     'replay_chunk_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_EVENTS', 500),
     'replay_chunk_max_bytes' => (int) env('VISITOR_INTELLIGENCE_REPLAY_CHUNK_MAX_BYTES', 1572864),
     'replay_max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_MAX_EVENTS', 100000),
+    'attribution' => [
+        // These registries are deliberately configuration-driven: new AI
+        // assistants and search engines can be added without changing the
+        // attribution algorithm or the database contract.
+        'ai_domains' => [
+            'chatgpt.com', 'chat.openai.com', 'openai.com',
+            'perplexity.ai', 'claude.ai', 'anthropic.com',
+            'gemini.google.com', 'copilot.microsoft.com', 'copilot.com',
+            'you.com', 'phind.com', 'poe.com', 'grok.com',
+            'meta.ai', 'mistral.ai', 'deepseek.com', 'character.ai',
+        ],
+        'search_domains' => [
+            'google.', 'bing.com', 'search.yahoo.', 'duckduckgo.com',
+            'ecosia.org', 'yandex.', 'baidu.com', 'brave.com',
+        ],
+        'social_domains' => [
+            'facebook.com', 'instagram.com', 'linkedin.com', 'twitter.com',
+            'x.com', 't.co', 'youtube.com', 'youtu.be', 'tiktok.com',
+            'pinterest.com', 'reddit.com', 'threads.net',
+        ],
+        'paid_click_parameters' => [
+            'gclid' => 'google', 'dclid' => 'google', 'gbraid' => 'google',
+            'wbraid' => 'google', 'msclkid' => 'microsoft',
+            'fbclid' => 'meta', 'ttclid' => 'tiktok', 'li_fat_id' => 'linkedin',
+            'twclid' => 'x',
+        ],
+    ],
     'bot_detection' => [
         // Enabled with a unique-per-session job so frequent browser/replay
         // batches cannot flood the dedicated Visitor Intelligence queue.

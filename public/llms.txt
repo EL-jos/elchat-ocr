@@ -41,6 +41,5 @@ Les informations publiques de référence sont disponibles sur les pages ci-dess
 ## Versions linguistiques
 
 - [English](https://elchat.io/en/home): English version of the ELChat platform pages.
-- [Deutsch](https://elchat.io/de/home): Deutsche Version der ELChat-Plattformseiten.
 - [Português](https://elchat.io/pt/home): Versão portuguesa das páginas da plataforma ELChat.
 - [Español](https://elchat.io/es/home): Versión española de las páginas de la plataforma ELChat.

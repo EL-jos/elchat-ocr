@@ -50,6 +50,7 @@ class VisitorIntelligenceEventService
 
     public function __construct(
         private readonly AnalyticsEventService $analytics,
+        private readonly VisitorAcquisitionAttributionService $attribution,
     )
     {
     }
@@ -87,6 +88,7 @@ class VisitorIntelligenceEventService
         $occurredAt = $this->occurredAt($event['occurred_at'] ?? null);
         $metadata = $this->sanitizeBrowserMetadata($event['metadata'] ?? [], $event);
         $clientSignals = $this->sanitizeClientSignals($clientSignals);
+        $acquisition = $this->attribution->resolve($metadata);
 
         $session = VisitorSession::query()->firstOrCreate(
             ['site_id' => $site->id, 'session_key' => $sessionKey],
@@ -97,9 +99,19 @@ class VisitorIntelligenceEventService
                 'last_seen_at' => $occurredAt,
                 'entry_url' => $metadata['page_url'] ?? null,
                 'device' => $metadata['device'] ?? $visitor->device,
-                'source' => $metadata['source'] ?? 'website',
+                'source' => $acquisition['source'],
+                'acquisition_source' => $acquisition['source'],
+                'acquisition_medium' => $acquisition['medium'],
+                'acquisition_source_type' => $acquisition['source_type'],
+                'acquisition_campaign' => $acquisition['campaign'],
+                'acquisition_term' => $acquisition['term'],
+                'acquisition_content' => $acquisition['content'],
+                'acquisition_platform' => $acquisition['platform'],
+                'acquisition_referrer' => $acquisition['referrer'],
+                'acquisition_confidence' => $acquisition['confidence'],
+                'acquisition_attributed_at' => $occurredAt,
                 'is_new_visitor' => $isNewVisitor,
-                'metadata' => $metadata,
+                'metadata' => [...$metadata, 'attribution' => $acquisition],
                 'client_signals' => $clientSignals ?: null,
             ],
         );
@@ -108,14 +120,34 @@ class VisitorIntelligenceEventService
 
         $startedAt = $session->started_at;
         $lastSeenAt = $session->last_seen_at;
+        $metadataUpdates = array_replace($session->metadata ?? [], $metadata);
         $updates = [
             // Browser batches and frame uploads can arrive out of order. Keep
             // the session bounds chronological instead of letting the first
             // HTTP request define the journey start forever.
             'started_at' => $startedAt && $startedAt->lessThan($occurredAt) ? $startedAt : $occurredAt,
             'last_seen_at' => $lastSeenAt && $lastSeenAt->greaterThan($occurredAt) ? $lastSeenAt : $occurredAt,
-            'metadata' => array_slice(array_replace($session->metadata ?? [], $metadata), 0, 30, true),
+            'metadata' => array_slice($metadataUpdates, 0, 30, true),
         ];
+        // Attribution is a first-touch session property. A later event must
+        // not turn an AI/search/referral visit into direct traffic merely
+        // because the SPA URL no longer carries the original campaign data.
+        if (!$session->acquisition_source || $session->source === 'website') {
+            $updates += [
+                'source' => $acquisition['source'],
+                'acquisition_source' => $acquisition['source'],
+                'acquisition_medium' => $acquisition['medium'],
+                'acquisition_source_type' => $acquisition['source_type'],
+                'acquisition_campaign' => $acquisition['campaign'],
+                'acquisition_term' => $acquisition['term'],
+                'acquisition_content' => $acquisition['content'],
+                'acquisition_platform' => $acquisition['platform'],
+                'acquisition_referrer' => $acquisition['referrer'],
+                'acquisition_confidence' => $acquisition['confidence'],
+                'acquisition_attributed_at' => $occurredAt,
+            ];
+            $updates['metadata']['attribution'] = $acquisition;
+        }
         if (!$session->client_signals && $clientSignals) $updates['client_signals'] = $clientSignals;
         $session->forceFill($updates)->save();
 
@@ -269,6 +301,8 @@ class VisitorIntelligenceEventService
     {
         $allowed = [
             'page_url', 'path', 'referrer', 'title', 'device', 'source', 'medium', 'campaign',
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id',
+            'utm_source_platform', 'source_platform', 'term', 'content', 'ad_click_network',
             'target', 'selector_hash', 'x', 'y', 'depth', 'duration_ms', 'form_id',
             'idle_duration_ms', 'active_duration_ms', 'inactivity_count', 'inactivity_threshold_ms',
             'session_duration_ms', 'reason', 'end_reason', 'visibility_state',
@@ -305,6 +339,13 @@ class VisitorIntelligenceEventService
                 $value = Str::limit($this->safeUrl((string) $value), 2048, '');
             } elseif (in_array($key, ['path', 'title', 'target'], true)) {
                 $value = Str::limit((string) $value, 255, '');
+            } elseif (in_array($key, [
+                'source', 'medium', 'campaign', 'utm_source', 'utm_medium', 'utm_campaign',
+                'utm_term', 'utm_content', 'utm_id', 'utm_source_platform', 'source_platform',
+                'term', 'content', 'ad_click_network',
+            ], true)) {
+                $value = Str::limit((string) $value, in_array($key, ['campaign', 'utm_campaign', 'term', 'utm_term', 'content', 'utm_content'], true) ? 255 : 64, '');
+                if ($value === '') continue;
             } elseif ($key === 'scroll_positions') {
                 $value = $this->sanitizeScrollPositions($value);
                 if ($value === null) continue;

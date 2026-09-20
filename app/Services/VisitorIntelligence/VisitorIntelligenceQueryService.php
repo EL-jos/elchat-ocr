@@ -63,6 +63,7 @@ class VisitorIntelligenceQueryService
             'period' => ['from' => $from->toISOString(), 'to' => $to->toISOString()],
             'kpis' => $kpis,
             'trend' => $this->trend($site, $from, $to, $filters),
+            'acquisition' => $this->acquisitionBreakdown($sessions),
             'anomalies' => $this->anomalies($site, $from, $to, $filters),
             'recommendations' => $this->recommendations($site, $sessions, $events),
             'data_quality' => ['has_observations' => $total > 0, 'note' => $total > 0 ? 'Les métriques sont limitées aux événements et sessions réellement observés.' : 'Aucune donnée fiable sur cette période.'],
@@ -324,6 +325,30 @@ class VisitorIntelligenceQueryService
         return VisitorIntelligenceRule::query()->where('site_id', $site->id)->withCount('actions')->latest()->get()->all();
     }
 
+    /** @return array<int, array{source_type: string, source: string, sessions: int, conversions: int}> */
+    private function acquisitionBreakdown(Builder $sessions): array
+    {
+        return (clone $sessions)
+            ->select([
+                DB::raw("COALESCE(acquisition_source_type, 'other') as acquisition_source_type"),
+                DB::raw("COALESCE(acquisition_source, source, 'unknown') as acquisition_source"),
+                DB::raw('COUNT(*) as sessions'),
+                DB::raw('SUM(CASE WHEN converted = 1 THEN 1 ELSE 0 END) as conversions'),
+            ])
+            ->groupBy('acquisition_source_type', 'acquisition_source', 'source')
+            ->orderByDesc('sessions')
+            ->limit(12)
+            ->get()
+            ->map(fn ($row) => [
+                'source_type' => (string) $row->acquisition_source_type,
+                'source' => (string) $row->acquisition_source,
+                'sessions' => (int) $row->sessions,
+                'conversions' => (int) $row->conversions,
+            ])
+            ->values()
+            ->all();
+    }
+
     private function sessionQuery(Site $site, Carbon $from, Carbon $to, array $filters): Builder
     {
         // A replay is a finished journey, not a live activity feed. Keeping
@@ -332,7 +357,16 @@ class VisitorIntelligenceQueryService
         // the tenant site.
         return VisitorSession::query()->where('site_id', $site->id)->whereNotNull('ended_at')->whereBetween('started_at', [$from, $to])
             ->when($filters['device'] ?? null, fn ($q, $value) => $q->where('device', $value))
-            ->when($filters['source'] ?? null, fn ($q, $value) => $q->where('source', $value))
+            ->when($filters['source'] ?? null, fn ($q, $value) => $q->where(function ($q) use ($value) {
+                // New sessions have normalized acquisition columns. The
+                // legacy source/metadata fallbacks keep historical journeys
+                // searchable while the migration is rolled out.
+                $q->where('acquisition_source', $value)
+                    ->orWhere('acquisition_source_type', $value)
+                    ->orWhere('acquisition_medium', $value)
+                    ->orWhere('source', $value)
+                    ->orWhereJsonContains('metadata->source', $value);
+            }))
             ->when($filters['intent'] ?? null, fn ($q, $value) => $q->where('intent_level', $value))
             ->when($filters['visitor_type'] ?? null, fn ($q, $value) => $q->where('is_new_visitor', $value === 'new'))
             ->when(array_key_exists('with_elchat', $filters) && $filters['with_elchat'] !== null, fn ($q) => $q->where('has_widget_interaction', (bool) $filters['with_elchat']))

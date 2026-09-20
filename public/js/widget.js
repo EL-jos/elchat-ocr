@@ -269,6 +269,7 @@
     function rrwebChunkMetadata() {
         const viewport = pageViewportState();
         return {
+            ...acquisitionContext(),
             page_url: window.location.href,
             path: window.location.pathname || '/',
             title: document.title || '',
@@ -701,10 +702,54 @@
         return new Promise(resolve => setTimeout(resolve, milliseconds));
     }
 
+    function acquisitionContext() {
+        let params = null;
+        try {
+            params = new URL(window.location.href).searchParams;
+        } catch (_) {
+            params = null;
+        }
+
+        const read = (...keys) => {
+            if (!params) return null;
+            for (const key of keys) {
+                const value = params.get(key);
+                if (value && value.trim()) return value.trim().slice(0, 255);
+            }
+            return null;
+        };
+        const clickParameters = {
+            gclid: 'google', dclid: 'google', gbraid: 'google', wbraid: 'google',
+            msclkid: 'microsoft', fbclid: 'meta', ttclid: 'tiktok',
+            li_fat_id: 'linkedin', twclid: 'x',
+        };
+        let adClickNetwork = null;
+        if (params) {
+            for (const [parameter, network] of Object.entries(clickParameters)) {
+                if (params.has(parameter)) {
+                    adClickNetwork = network;
+                    break;
+                }
+            }
+        }
+
+        return {
+            ...(read('utm_source', 'source') ? { utm_source: read('utm_source', 'source') } : {}),
+            ...(read('utm_medium', 'medium') ? { utm_medium: read('utm_medium', 'medium') } : {}),
+            ...(read('utm_campaign', 'campaign') ? { utm_campaign: read('utm_campaign', 'campaign') } : {}),
+            ...(read('utm_term', 'term') ? { utm_term: read('utm_term', 'term') } : {}),
+            ...(read('utm_content', 'content') ? { utm_content: read('utm_content', 'content') } : {}),
+            ...(read('utm_id', 'campaign_id') ? { utm_id: read('utm_id', 'campaign_id') } : {}),
+            ...(read('utm_source_platform', 'source_platform') ? { utm_source_platform: read('utm_source_platform', 'source_platform') } : {}),
+            ...(adClickNetwork ? { ad_click_network: adClickNetwork } : {}),
+        };
+    }
+
     function pageContext(extra = {}) {
         const viewport = pageViewportState();
         return {
             ...extra,
+            ...acquisitionContext(),
             page_url: window.location.href,
             path: window.location.pathname || '/',
             title: document.title || '',
