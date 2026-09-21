@@ -33,8 +33,9 @@ class DatabaseSeeder extends Seeder
             //ChatbotCtaSeeder::class,
             //TypeSiteSeeder::class,
             McpConnectorSeeder::class,
+            McpAgentTemplateSeeder::class,
             McpCapabilityPlaybookSeeder::class,
-            McpMicrosoft365Seeder::class,
+            //McpMicrosoft365Seeder::class,
         ]);
     }
 }

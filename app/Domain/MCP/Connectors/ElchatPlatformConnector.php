@@ -10,6 +10,7 @@ use App\Models\{Conversation, Message, Site, UnansweredQuestion, User, Visitor};
 use App\Models\Mcp\{McpAgent, McpConnector, McpWorkflow};
 use App\Models\Proactive\{ProactiveAuditLog, ProactiveCampaign, ProactiveSequence};
 use App\Models\Social\SocialConversationLink; // ⚠️ suppose le nom conventionnel du modèle, non vu directement
+use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -73,6 +74,7 @@ class ElchatPlatformConnector extends AbstractConnector
             'channels_usage' => $this->channelsUsage($site),
             'active_visitors' => $this->activeVisitors($params, $site),
             'new_leads' => $this->newLeads($params, $site),
+            'website_growth_snapshot' => $this->websiteGrowthSnapshot($params, $site),
 
             'search_knowledge_base' => $this->searchKnowledgeBase($params, $site), // 🆕
 
@@ -341,7 +343,37 @@ class ElchatPlatformConnector extends AbstractConnector
             new ToolSchema('elchat_platform', 'new_leads', "Nombre de nouveaux visiteurs identifiés (transformés en clients) sur une période.", [
                 'type' => 'object', 'properties' => ['since' => ['type' => 'string', 'description' => 'ISO 8601, défaut: 7 jours']],
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
+
+            new ToolSchema('elchat_platform', 'website_growth_snapshot',
+                "Produit une photographie déterministe et en lecture seule des signaux de croissance du site : Visitor Intelligence, parcours agrégés, sources d’acquisition, conversations reliées, recherche documentaire et, si demandé, GA4/Search Console déjà connectés. Les replays bruts ne sont jamais retournés au modèle; seuls quelques éléments représentatifs sont sélectionnés. Utilise cet outil pour répondre à une demande de diagnostic de croissance, sans jamais modifier le site.", [
+                    'type' => 'object', 'properties' => [
+                        'date_from' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: 28 jours'],
+                        'date_to' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: aujourd’hui'],
+                        'include_external' => ['type' => 'boolean', 'description' => 'Interroger GA4 et Search Console lorsqu’ils sont connectés, défaut false'],
+                    ],
+                ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
+    }
+
+    private function websiteGrowthSnapshot(array $params, Site $site): ToolResult
+    {
+        try {
+            return ToolResult::ok(
+                app(WebsiteGrowthAdvisorService::class)->collectSnapshot(
+                    $site,
+                    ['from' => $params['date_from'] ?? null, 'to' => $params['date_to'] ?? null],
+                    (bool) ($params['include_external'] ?? false),
+                ),
+                'Photographie Growth Advisor générée à partir des sources disponibles.',
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('ELChat Platform: Website Growth Advisor snapshot failed.', [
+                'site_id' => $site->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return ToolResult::fail('growth_snapshot_unavailable', 'La photographie Growth Advisor n’a pas pu être générée.');
+        }
     }
 
     private function countConversationsToday(Site $site): ToolResult

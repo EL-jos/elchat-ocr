@@ -21,6 +21,7 @@ use App\Http\Controllers\api\v1\SitemapController;
 use App\Http\Controllers\api\v1\TypeSiteController;
 use App\Http\Controllers\api\v1\UserController;
 use App\Http\Controllers\api\v1\VisitorIntelligenceController;
+use App\Http\Controllers\api\v5\WebsiteGrowthAdvisorController;
 use App\Http\Controllers\api\v1\VisitorIntelligenceIngestionController;
 use App\Http\Controllers\api\v1\WidgetSettingController;
 use App\Http\Controllers\api\v1\WidgetVisitorController;
@@ -273,6 +274,12 @@ Route::prefix('v1')->group(function () {
 
                 Route::get('/prospects/{prospect}', 'showProspect');
                 Route::post('/prospects/{prospect}/sync-crm', 'syncProspectToCrm');
+            });
+
+            Route::prefix('/website-growth-advisor/analyses')->controller(WebsiteGrowthAdvisorController::class)->group(function () {
+                Route::get('/', 'index');
+                Route::post('/', 'store');
+                Route::get('/{analysis}', 'show');
             });
 
         });

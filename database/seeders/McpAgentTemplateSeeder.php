@@ -7,7 +7,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
 /**
- * Premier template de la Banque d'Agents. `required_module_slug` reste
+ * Templates de la Banque d'Agents. `required_module_slug` reste
  * renseigné pour le futur mais N'EST VÉRIFIÉ NULLE PART pour l'instant
  * (gratuit pendant la phase de test sur données réelles, sur consigne).
  *
@@ -41,6 +41,25 @@ class McpAgentTemplateSeeder extends Seeder
                     ],
                 ],
                 'bootstrap_workflow_slugs' => ['sales-pipeline-analysis', 'sales-meeting-preparation'],
+                'is_active' => true,
+            ],
+        );
+
+        McpAgentTemplate::updateOrCreate(
+            ['key' => 'website_growth_advisor'],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Website Growth Advisor',
+                'category' => 'growth',
+                'description' => 'Relie les parcours Visitor Intelligence, les conversations, la base de connaissances, GA4 et Search Console pour identifier des opportunités de croissance vérifiables, les prioriser et proposer des tests sans modifier automatiquement le site.',
+                'icon_url' => null,
+                'required_module_slug' => null,
+                'default_config' => [
+                    'objective' => 'diagnose_and_prioritize_website_growth_opportunities',
+                    'tone' => 'professional',
+                    'skills' => ['elchat_platform__website_growth_snapshot'],
+                ],
+                'bootstrap_workflow_slugs' => [],
                 'is_active' => true,
             ],
         );

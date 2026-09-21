@@ -5,6 +5,9 @@ namespace App\Domain\Sales;
 use App\Models\Mcp\McpAgent;
 use App\Models\Mcp\McpAgentTemplate;
 use App\Models\Mcp\McpWorkflow;
+use App\Models\Mcp\McpPermission;
+use App\Models\Mcp\McpConnector;
+use App\Models\Mcp\McpSiteConnector;
 use App\Models\Sales\ProspectingConfig;
 use App\Models\Site;
 use App\Services\mcp\WorkflowProvisioningService;
@@ -45,7 +48,9 @@ class AgentTemplateInstaller
                 }
             }
 
-            if ($template->key === 'sales_hunter') {
+            $normalizedTemplateKey = str_replace('-', '_', strtolower((string) $template->key));
+
+            if ($normalizedTemplateKey === 'sales_hunter') {
                 ProspectingConfig::create([
                     'id' => (string) Str::uuid(), 'site_id' => $site->id, 'agent_id' => $agent->id,
                     'icp' => [], 'sources' => ['openstreetmap'], 'objective' => $config['objective'] ?? 'generate_meetings',
@@ -59,6 +64,37 @@ class AgentTemplateInstaller
                     'autonomy_mode' => 'suggestion',
                     'is_active' => false,
                 ]);
+            }
+
+            if ($normalizedTemplateKey === 'website_growth_advisor') {
+                // ELChat Platform is an internal, credential-less connector.
+                // Make the installed agent immediately usable while preserving
+                // an explicit prior revoke by the tenant.
+                $platform = McpConnector::where('slug', 'elchat_platform')->first();
+                if ($platform) {
+                    McpSiteConnector::firstOrCreate(
+                        ['site_id' => $site->id, 'mcp_connector_id' => $platform->id],
+                        ['status' => 'connected', 'connected_at' => now()],
+                    );
+                }
+
+                // The background pipeline uses these same read-only MCP
+                // permissions. Missing external connectors remain unavailable
+                // in the result instead of being guessed or auto-connected.
+                foreach ([
+                    ['elchat_platform', 'website_growth_snapshot'],
+                    ['google_analytics', 'get_traffic_overview'],
+                    ['google_analytics', 'get_top_pages'],
+                    ['google_analytics', 'get_traffic_sources'],
+                    ['google_analytics', 'get_conversions'],
+                    ['google_search_console', 'get_search_analytics'],
+                    ['google_search_console', 'list_sitemaps'],
+                ] as [$connectorSlug, $toolName]) {
+                    McpPermission::firstOrCreate(
+                        ['site_id' => $site->id, 'connector_slug' => $connectorSlug, 'tool_name' => $toolName],
+                        ['mode' => 'auto', 'actor_scope' => 'admin', 'confirm_actor' => 'admin'],
+                    );
+                }
             }
 
             return $agent;
