@@ -4,15 +4,11 @@ use App\Jobs\Proactive\SendProactiveMessageJob;
 use App\Jobs\RunProspectingCampaignJob;
 use App\Jobs\SyncProspectToCrmJob;
 use App\Jobs\Microsoft365SyncJob;
-use App\Jobs\WebsiteGrowthAdvisor\RunWebsiteGrowthAdvisorAnalysisJob;
 use App\Models\Mcp\McpSiteConnector;
 use App\Models\Site;
-use App\Models\WebsiteGrowthAdvisorAnalysis;
-use App\Models\WebsiteGrowthAdvisorConfiguration;
 use App\Models\Proactive\ProactiveMessage;
 use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
-use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorConfigurationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -121,71 +117,6 @@ Schedule::call(function () {
             }
         });
 })->everyMinute()->name('sales-hunter-campaign-scheduler')->withoutOverlapping()->onOneServer();
-
-// Website Growth Advisor — la planification réutilise le scheduler Laravel
-// existant et le même job dédié. Le verrou DB évite qu'un même tenant crée
-// deux analyses si plusieurs instances du scheduler se réveillent ensemble.
-Schedule::call(function () {
-    $configurations = WebsiteGrowthAdvisorConfiguration::query()
-        ->where('is_active', true)
-        ->where('execution_mode', 'scheduled')
-        ->whereNotNull('next_run_at')
-        ->where('next_run_at', '<=', now())
-        ->pluck('id');
-
-    foreach ($configurations as $configurationId) {
-        $analysisId = DB::transaction(function () use ($configurationId): ?string {
-            $configuration = WebsiteGrowthAdvisorConfiguration::query()
-                ->whereKey($configurationId)
-                ->lockForUpdate()
-                ->first();
-            if (! $configuration || ! $configuration->is_active || $configuration->execution_mode !== 'scheduled' || ! $configuration->next_run_at?->isPast()) {
-                return null;
-            }
-
-            $running = WebsiteGrowthAdvisorAnalysis::query()
-                ->where('site_id', $configuration->site_id)
-                ->whereIn('status', ['queued', 'running'])
-                ->exists();
-            if ($running) {
-                return null;
-            }
-
-            $settings = app(WebsiteGrowthAdvisorConfigurationService::class)->effective($configuration);
-            $period = app(WebsiteGrowthAdvisorConfigurationService::class)->resolvePeriod($settings);
-            $analysis = WebsiteGrowthAdvisorAnalysis::query()->create([
-                'id' => (string) \Illuminate\Support\Str::uuid(),
-                'account_id' => $configuration->account_id,
-                'site_id' => $configuration->site_id,
-                'agent_id' => $configuration->agent_id,
-                'period_from' => $period['from'],
-                'period_to' => $period['to'],
-                'include_external' => true,
-                'configuration_snapshot' => array_merge($settings, [
-                    'configuration_id' => (string) $configuration->id,
-                    'configuration_version' => (int) $configuration->version,
-                    'run_include_external' => true,
-                    'trigger' => 'scheduled',
-                ]),
-                'status' => 'queued',
-                'progress' => 0,
-                'phase' => 'queued',
-                'progress_message' => 'Analyse planifiée placée dans la file d’attente.',
-                'source_status' => [],
-                'representative_sessions_count' => 0,
-                'visual_moments_count' => 0,
-            ]);
-            $configuration->next_run_at = app(WebsiteGrowthAdvisorConfigurationService::class)->scheduleNextRun($settings);
-            $configuration->save();
-
-            return (string) $analysis->id;
-        });
-
-        if ($analysisId) {
-            RunWebsiteGrowthAdvisorAnalysisJob::dispatch($analysisId);
-        }
-    }
-})->everyMinute()->name('website-growth-advisor-scheduler')->withoutOverlapping()->onOneServer();
 
 // Reprend les prospects conservés localement lorsqu'un CRM était absent,
 // temporairement indisponible ou lorsqu'une adresse email a été complétée.

@@ -10,6 +10,7 @@ use App\Domain\MCP\Exceptions\ConnectorUnavailableException;
 use App\Domain\MCP\Exceptions\ToolNotFoundException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Carbon;
 
 /**
  * Connecteur Google Search Console, lecture seule.
@@ -130,8 +131,19 @@ class GoogleSearchConsoleConnector extends AbstractConnector
             return ToolResult::fail('not_configured', "Aucune propriété Search Console configurée pour ce site.");
         }
 
-        $from = $p['date_from'] ?? now()->subDays(28)->toDateString();
-        $to = $p['date_to'] ?? now()->subDays(3)->toDateString();
+        try {
+            $from = Carbon::parse($p['date_from'] ?? now()->subDays(28))->toDateString();
+            $to = Carbon::parse($p['date_to'] ?? now()->subDays(3))->toDateString();
+        } catch (\Throwable $exception) {
+            return ToolResult::fail('invalid_date_range', 'La période Search Console est invalide.');
+        }
+        if ($from > $to) {
+            Log::warning('MCP Google Search Console: période inversée normalisée.', [
+                'startDate' => $from,
+                'endDate' => $to,
+            ]);
+            [$from, $to] = [$to, $from];
+        }
         $dimension = $p['dimension'] ?? 'query';
         $limit = max(1, min(100, (int) ($p['limit'] ?? 20)));
 

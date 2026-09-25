@@ -345,11 +345,11 @@ class ElchatPlatformConnector extends AbstractConnector
             ], defaultActorScope: 'admin', defaultMode: 'auto'),
 
             new ToolSchema('elchat_platform', 'website_growth_snapshot',
-                "Produit une photographie déterministe et en lecture seule des signaux de croissance du site : Visitor Intelligence, parcours agrégés, sources d’acquisition, conversations reliées, recherche documentaire et, si demandé, GA4/Search Console déjà connectés. Les replays bruts ne sont jamais retournés au modèle; seuls quelques éléments représentatifs sont sélectionnés. Utilise cet outil pour répondre à une demande de diagnostic de croissance, sans jamais modifier le site.", [
+                "Produit une photographie déterministe et en lecture seule des signaux de croissance du site : Visitor Intelligence, parcours agrégés, sources d’acquisition, conversations reliées, Knowledge, lecture live bornée des pages publiées et GA4/Search Console déjà connectés lorsque les connecteurs sont disponibles. Les replays bruts ne sont jamais retournés au modèle; seuls quelques éléments représentatifs sont sélectionnés. Utilise cet outil pour répondre à une demande de diagnostic de croissance, sans jamais modifier le site ni indexer le crawl live dans Knowledge.", [
                     'type' => 'object', 'properties' => [
                         'date_from' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: 28 jours'],
                         'date_to' => ['type' => 'string', 'description' => 'YYYY-MM-DD, défaut: aujourd’hui'],
-                        'include_external' => ['type' => 'boolean', 'description' => 'Interroger GA4 et Search Console lorsqu’ils sont connectés, défaut false'],
+                        'include_external' => ['type' => 'boolean', 'description' => 'Interroger GA4 et Search Console lorsqu’ils sont connectés, défaut true'],
                     ],
                 ], defaultActorScope: 'admin', defaultMode: 'auto'),
         ];
@@ -362,7 +362,7 @@ class ElchatPlatformConnector extends AbstractConnector
                 app(WebsiteGrowthAdvisorService::class)->collectSnapshot(
                     $site,
                     ['from' => $params['date_from'] ?? null, 'to' => $params['date_to'] ?? null],
-                    (bool) ($params['include_external'] ?? false),
+                    (bool) ($params['include_external'] ?? true),
                 ),
                 'Photographie Growth Advisor générée à partir des sources disponibles.',
             );

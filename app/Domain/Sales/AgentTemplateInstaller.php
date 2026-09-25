@@ -10,6 +10,7 @@ use App\Models\Mcp\McpConnector;
 use App\Models\Mcp\McpSiteConnector;
 use App\Models\Sales\ProspectingConfig;
 use App\Models\Site;
+use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorConfigurationService;
 use App\Services\mcp\WorkflowProvisioningService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -26,7 +27,10 @@ use Illuminate\Support\Str;
  */
 class AgentTemplateInstaller
 {
-    public function __construct(private readonly WorkflowProvisioningService $provisioning) {}
+    public function __construct(
+        private readonly WorkflowProvisioningService $provisioning,
+        private readonly WebsiteGrowthAdvisorConfigurationService $growthAdvisorConfigurations,
+    ) {}
 
     public function install(Site $site, McpAgentTemplate $template): McpAgent
     {
@@ -67,6 +71,8 @@ class AgentTemplateInstaller
             }
 
             if ($normalizedTemplateKey === 'website_growth_advisor') {
+                $this->growthAdvisorConfigurations->forAgent($site, $agent);
+
                 // ELChat Platform is an internal, credential-less connector.
                 // Make the installed agent immediately usable while preserving
                 // an explicit prior revoke by the tenant.

@@ -19,6 +19,7 @@ final class WebsiteGrowthAdvisorRealtimeService
             $type,
             [
                 'module' => 'website_growth_advisor',
+                'refresh' => true,
                 ...$payload,
             ],
             [self::TOPIC],

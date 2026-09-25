@@ -3,6 +3,7 @@
 namespace App\Jobs\WebsiteGrowthAdvisor;
 
 use App\Models\WebsiteGrowthAdvisorAnalysis;
+use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorConfigurationService;
 use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorService;
 use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorRealtimeService;
 use Illuminate\Bus\Queueable;
@@ -38,23 +39,38 @@ class RunWebsiteGrowthAdvisorAnalysisJob implements ShouldQueue, ShouldBeUnique
         if (! $analysis || $analysis->status === 'ready') return;
 
         $siteId = (string) $analysis->site_id;
+        $this->persistProgress($analysis, 5, 'running', 'preparation', 'Préparation de l’analyse Growth Advisor.');
         $realtime->publish($siteId, 'analysis_started', [
             'analysis_id' => (string) $analysis->id,
-            'status' => 'queued',
+            'status' => 'running',
+            'progress' => 5,
+            'phase' => 'preparation',
+            'message' => 'Préparation de l’analyse Growth Advisor.',
             'analysis' => $this->analysisPayload($analysis),
         ]);
 
         $updated = $advisor->analyze($analysis, function (array $progress) use ($realtime, $siteId, $analysis): void {
+            $progressValue = (int) ($progress['progress'] ?? 0);
+            $progressStatus = $progressValue >= 100 ? 'ready' : 'running';
+            $this->persistProgress(
+                $analysis,
+                $progressValue,
+                $progressStatus,
+                (string) ($progress['phase'] ?? 'processing'),
+                (string) ($progress['message'] ?? 'Analyse en cours.'),
+            );
             $realtime->publish($siteId, 'analysis_progress', [
                 'analysis_id' => (string) $analysis->id,
-                'status' => 'running',
+                'status' => $progressStatus,
                 ...$progress,
             ]);
         });
 
+        // Keep the terminal state even if a final progress callback was
+        // emitted immediately before this notification.
         $realtime->publish($siteId, 'analysis_ready', [
             'analysis_id' => (string) $updated->id,
-            'status' => (string) $updated->status,
+            'status' => 'ready',
             'analysis' => $this->analysisPayload($updated),
             'progress' => 100,
             'phase' => 'completed',
@@ -70,6 +86,8 @@ class RunWebsiteGrowthAdvisorAnalysisJob implements ShouldQueue, ShouldBeUnique
 
         $analysis->update([
             'status' => 'failed',
+            'phase' => 'failed',
+            'progress_message' => 'L’analyse Growth Advisor a échoué.',
             'error_message' => $exception?->getMessage() ?: 'website_growth_advisor_job_failed',
             'completed_at' => now(),
         ]);
@@ -90,6 +108,36 @@ class RunWebsiteGrowthAdvisorAnalysisJob implements ShouldQueue, ShouldBeUnique
     /** @return array<string, mixed> */
     private function analysisPayload(WebsiteGrowthAdvisorAnalysis $analysis): array
     {
-        return $analysis->makeHidden(['data_snapshot'])->toArray();
+        $payload = $analysis->makeHidden(['data_snapshot'])->toArray();
+        $snapshot = is_array($analysis->configuration_snapshot) ? $analysis->configuration_snapshot : [];
+        $mode = $snapshot['configuration_mode'] ?? null;
+        $presetKey = $mode === 'custom'
+            ? null
+            : (is_string($snapshot['preset_key'] ?? null) ? $snapshot['preset_key'] : ($snapshot['primary_objective'] ?? null));
+        $preset = is_string($presetKey)
+            ? (app(WebsiteGrowthAdvisorConfigurationService::class)->presets()[$presetKey] ?? null)
+            : null;
+        $payload['configuration_mode'] = $mode;
+        $payload['configuration_preset_key'] = $preset ? $presetKey : null;
+        $payload['configuration_preset_label'] = $mode === 'custom'
+            ? 'Configuration personnalisée'
+            : ($preset['label'] ?? 'Configuration précédente');
+        $payload['visualization'] = $analysis->visualizationData();
+        return $payload;
+    }
+
+    private function persistProgress(
+        WebsiteGrowthAdvisorAnalysis $analysis,
+        int $progress,
+        string $status,
+        string $phase,
+        string $message,
+    ): void {
+        $analysis->forceFill([
+            'status' => $status,
+            'progress' => max(0, min(100, $progress)),
+            'phase' => $phase,
+            'progress_message' => $message,
+        ])->save();
     }
 }

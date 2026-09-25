@@ -7,6 +7,7 @@ use App\Enums\AnalyticsEventType;
 use App\Events\AnalyticsEventRecorded;
 use App\Jobs\RecordAnalyticsEventJob;
 use App\Models\AnalyticsEvent;
+use App\Models\Conversation;
 use App\Models\Site;
 use App\Services\DashboardRealtimeService;
 use Illuminate\Support\Arr;
@@ -81,6 +82,23 @@ class AnalyticsEventService
         $eventType = (string) ($payload['event_type'] ?? '');
         if (!preg_match('/^[a-z][a-z0-9_]{1,63}$/', $eventType)) {
             throw new \InvalidArgumentException("Invalid analytics event type: {$eventType}");
+        }
+
+        // Analytics events are queued, while temporary MCP conversations can
+        // be cleaned up before their queued event is persisted. The FK is
+        // intentionally nullable; detach a stale reference instead of
+        // turning a diagnostic or connector call into a failed queue job.
+        $conversationId = $payload['conversation_id'] ?? null;
+        if ($conversationId !== null && ! Conversation::query()
+            ->where('id', $conversationId)
+            ->where('site_id', $payload['site_id'] ?? null)
+            ->exists()) {
+            Log::notice('Analytics event conversation reference was detached because the conversation no longer exists.', [
+                'site_id' => $payload['site_id'] ?? null,
+                'conversation_id' => $conversationId,
+                'event_type' => $eventType,
+            ]);
+            $payload['conversation_id'] = null;
         }
 
         $siteId = (string) ($payload['site_id'] ?? '');

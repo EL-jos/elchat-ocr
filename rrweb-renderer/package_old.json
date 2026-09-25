@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@rrweb/replay": "2.0.0",
-    "ws": "^8.18.3"
+    "@rrweb/replay": "2.0.0"
   }
 }

@@ -9,6 +9,7 @@ use App\Models\VisitorSession;
 use App\Models\VisitorSessionSummary;
 use App\Models\WidgetSetting;
 use App\Services\hops\LLMService;
+use App\Services\vision\TargetedReplayVisualInspectionTool;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Throwable;
@@ -17,8 +18,8 @@ class VisitorIntelligenceAiAnalysisService
 {
     public function __construct(
         private readonly LLMService $llm,
-        private readonly VisitorIntelligenceMomentDetector $moments,
-        private readonly VisitorIntelligenceReplayContextService $replayContext,
+        private readonly VisitorIntelligenceSessionEvidenceService $sessionEvidence,
+        private readonly TargetedReplayVisualInspectionTool $replayVision,
     ) {
     }
 
@@ -79,10 +80,13 @@ class VisitorIntelligenceAiAnalysisService
         }
 
         $this->reportProgress($progress, 32, 'moments', 'Détection des moments importants du parcours.');
-        $selectedMoments = $this->moments->detect($rows);
+        $investigation = $this->sessionEvidence->investigate($session, $rows);
+        $selectedMoments = $investigation['moments'];
         $this->reportProgress($progress, 55, 'replay_context', 'Reconstruction ciblée du contexte visuel rrweb.');
-        $visualContext = $this->replayContext->build($session, $selectedMoments);
+        $visualContext = $investigation['visual_context'];
         $visualMoments = $this->visualMoments($visualContext['moments'] ?? []);
+        $visualEvidence = $this->visualEvidenceForLlm($session, $visualContext['moments'] ?? []);
+        $visualInspection = $this->replayVision->inspect($visualEvidence);
         $validEventIds = $rows->pluck('id')->map(fn ($id): string => (string) $id)->all();
         $validMomentIds = collect($selectedMoments)->pluck('id')->map(fn ($id): string => (string) $id)->all();
         $eventTimestamps = $rows->mapWithKeys(fn (AnalyticsEvent $row): array => [
@@ -98,6 +102,15 @@ class VisitorIntelligenceAiAnalysisService
             'timeline' => $this->timelineContext($rows),
             'important_moments' => array_values($selectedMoments),
             'visual_context' => $visualMoments,
+            'visual_evidence_analysis' => [
+                'tool' => $visualInspection['tool'],
+                'status' => $visualInspection['status'],
+                'model' => $visualInspection['model'],
+                'observation_count' => count($visualInspection['observations']),
+                'observations' => $visualInspection['observations'],
+                'error' => $visualInspection['error'],
+                'contract' => 'Ces observations proviennent uniquement des captures ciblées. Elles décrivent un état visible à un instant et ne prouvent ni lecture, ni clic, ni intention.',
+            ],
             'conversations' => $this->conversationContext($rows),
             'evidence_contract' => [
                 'event_ids' => $validEventIds,
@@ -109,11 +122,13 @@ class VisitorIntelligenceAiAnalysisService
         $messages = [
             [
                 'role' => 'system',
-                'content' => 'Tu es l’analyste de Visitor Intelligence d’ELChat. Analyse un parcours web à partir d’événements structurés, de quelques états visuels rrweb ciblés et, si disponible, de la conversation ELChat. Tu dois distinguer strictement les faits observés des inférences. Ne dis jamais qu’un visiteur a lu un contenu uniquement parce qu’il était visible : dis élément visible, probablement consulté ou formulation équivalente. N’invente aucune preuve, aucun événement, aucun élément visuel et aucune causalité. Réponds uniquement avec un objet JSON valide dans le format demandé.',
+                'content' => 'Tu es l’analyste de Visitor Intelligence d’ELChat. Analyse un parcours web à partir d’événements structurés, des observations visuelles produites par le modèle de vision pour quelques moments rrweb ciblés et, si disponible, de la conversation ELChat. Tu dois distinguer strictement les faits observés des inférences. Ne dis jamais qu’un visiteur a lu un contenu uniquement parce qu’il était visible : dis élément visible, probablement consulté ou formulation équivalente. N’invente aucune preuve, aucun événement, aucun élément visuel et aucune causalité. Réponds uniquement avec un objet JSON valide dans le format demandé.',
             ],
             [
                 'role' => 'user',
-                'content' => $this->multimodalContent($context, $visualContext['moments'] ?? []),
+                // The reasoning model receives Qwen's visual observations as
+                // text. It never receives the screenshots or raw rrweb data.
+                'content' => $this->multimodalContent($context, []),
             ],
         ];
 
@@ -121,7 +136,9 @@ class VisitorIntelligenceAiAnalysisService
             $this->reportProgress($progress, 72, 'llm', 'Interprétation du parcours par le modèle IA.');
             $raw = $this->llm->chatJson($messages, [
                 'task' => 'visitor_intelligence_analysis',
-                'fallback_models' => $this->fallbackModels($visualContext['moments'] ?? []),
+                // Visual inspection is a separate call; do not send image
+                // blocks to the text reasoning fallback.
+                'fallback_models' => [config('llm.tasks.visitor_intelligence_analysis.fallback_model', 'deepseek/deepseek-v3.2')],
                 'temperature' => 0.1,
                 'max_tokens' => 1800,
                 'max_tokens_cap' => 3000,
@@ -134,6 +151,13 @@ class VisitorIntelligenceAiAnalysisService
             if ($analysis === []) {
                 throw new \RuntimeException('visitor_intelligence_ai_empty_json');
             }
+            $analysis['visual_evidence_analysis'] = [
+                'tool' => $visualInspection['tool'],
+                'status' => $visualInspection['status'],
+                'model' => $visualInspection['model'],
+                'observation_count' => count($visualInspection['observations']),
+                'error' => $visualInspection['error'],
+            ];
 
             return $summary->forceFill([
                 'ai_status' => 'ready',
@@ -305,19 +329,38 @@ class VisitorIntelligenceAiAnalysisService
         return $content;
     }
 
-    private function fallbackModels(array $rawVisualMoments): array
+    /**
+     * Convert the bounded rrweb captures into explicit visual evidence. Raw
+     * rrweb chunks never leave the reconstruction service.
+     *
+     * @param array<int, array<string, mixed>> $moments
+     * @return array<int, array<string, mixed>>
+     */
+    private function visualEvidenceForLlm(VisitorSession $session, array $moments): array
     {
-        $hasCapture = collect($rawVisualMoments)->contains(fn (array $moment): bool => !empty($moment['capture']));
-        if (!$hasCapture) {
-            return [config('llm.tasks.visitor_intelligence_analysis.fallback_model', 'deepseek/deepseek-v3.2')];
-        }
+        $evidence = collect($moments)->map(function (array $moment) use ($session): ?array {
+            if (empty($moment['capture'])) return null;
 
-        // Keep the fallback multimodal when targeted rrweb captures are
-        // present; a text-only fallback would reject the same request shape.
-        return [
-            config('llm.tasks.vision.model', 'qwen/qwen3.6-plus'),
-            config('llm.tasks.visitor_intelligence_analysis.fallback_model', 'deepseek/deepseek-v3.2'),
-        ];
+            $momentId = (string) ($moment['id'] ?? $moment['moment_id'] ?? '');
+            if ($momentId === '') return null;
+
+            return [
+                'visual_evidence_id' => 'replay_visual:'.(string) $session->id.':'.$momentId,
+                'session_id' => (string) $session->id,
+                'moment_id' => $momentId,
+                'reason' => $moment['reason'] ?? null,
+                'replay_timestamp' => $moment['replay_timestamp'] ?? null,
+                'page' => $moment['page'] ?? null,
+                'scroll' => $moment['scroll'] ?? null,
+                'visible_text' => $this->safeText($moment['visible_text'] ?? null, 1200),
+                'visible_elements' => array_slice((array) ($moment['visible_elements'] ?? []), 0, 25),
+                'capture' => (string) $moment['capture'],
+            ];
+        })->filter()->values();
+
+        $limit = max(1, (int) config('visitor-intelligence.ai.max_visual_captures', 3));
+
+        return $evidence->take($limit)->all();
     }
 
     private function normalizeAnalysis(array $raw, array $validEventIds, array $validMomentIds, array $eventTimestamps, array $momentTimestamps, array $visualMoments): array

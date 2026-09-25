@@ -26,6 +26,7 @@ use App\Services\payment\CouponService;
 use App\Services\payment\ModuleCatalogService;
 use App\Services\payment\PricingCalculator;
 use App\Services\payment\SubscriptionOrchestrator;
+use App\Services\vision\TargetedReplayVisualInspectionTool;
 use Aws\Ses\SesClient;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -46,6 +47,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CouponService::class);
         $this->app->singleton(ModuleCatalogService::class);
         $this->app->singleton(SubscriptionOrchestrator::class);
+        // One reusable named tool consumed by Visitor Intelligence, Website
+        // Growth Advisor and any future agent that receives its tool name.
+        $this->app->singleton(TargetedReplayVisualInspectionTool::class);
+        $this->app->alias(
+            TargetedReplayVisualInspectionTool::class,
+            TargetedReplayVisualInspectionTool::NAME,
+        );
         $this->app->singleton(OpenStreetMapQueryBuilder::class);
         $this->app->singleton(ProspectingLocationResolver::class);
         $this->app->singleton(ProspectingSourceRegistry::class, fn ($app) => new ProspectingSourceRegistry([

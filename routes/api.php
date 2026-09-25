@@ -276,10 +276,15 @@ Route::prefix('v1')->group(function () {
                 Route::post('/prospects/{prospect}/sync-crm', 'syncProspectToCrm');
             });
 
-            Route::prefix('/website-growth-advisor/analyses')->controller(WebsiteGrowthAdvisorController::class)->group(function () {
-                Route::get('/', 'index');
-                Route::post('/', 'store');
-                Route::get('/{analysis}', 'show');
+              Route::prefix('/website-growth-advisor/analyses')->controller(WebsiteGrowthAdvisorController::class)->group(function () {
+                  Route::get('/', 'index');
+                  Route::post('/', 'store');
+                  Route::get('/{analysis}', 'show');
+                  Route::delete('/{analysis}', 'destroy');
+              });
+            Route::controller(WebsiteGrowthAdvisorController::class)->group(function () {
+                Route::get('/agents/{agent}/website-growth-advisor-config', 'configuration');
+                Route::put('/agents/{agent}/website-growth-advisor-config', 'updateConfiguration');
             });
 
         });

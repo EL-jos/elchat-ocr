@@ -82,6 +82,10 @@ return [
                 ? base_path('rrweb-renderer'.DIRECTORY_SEPARATOR.'node_modules'.DIRECTORY_SEPARATOR.'@rrweb'.DIRECTORY_SEPARATOR.'replay'.DIRECTORY_SEPARATOR.'dist'.DIRECTORY_SEPARATOR.'replay.umd.cjs')
                 : dirname(base_path()).DIRECTORY_SEPARATOR.'frontend'.DIRECTORY_SEPARATOR.'dashboard'.DIRECTORY_SEPARATOR.'node_modules'.DIRECTORY_SEPARATOR.'@rrweb'.DIRECTORY_SEPARATOR.'replay'.DIRECTORY_SEPARATOR.'dist'.DIRECTORY_SEPARATOR.'replay.umd.cjs',
         ),
+        // Keep the legacy path untouched for existing deployments. The
+        // dedicated binary path takes precedence when a distribution command
+        // (for example a Snap launcher) differs from the real executable.
+        'chromium_binary_path' => env('VISITOR_INTELLIGENCE_RRWEB_CHROMIUM_BINARY_PATH'),
         'chromium_path' => env('VISITOR_INTELLIGENCE_RRWEB_CHROMIUM_PATH'),
         'timeout' => (int) env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_TIMEOUT', 90),
         'max_payload_bytes' => (int) env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_MAX_PAYLOAD_BYTES', 33554432),

@@ -369,6 +369,19 @@ class VisitorIntelligenceQueryService
             }))
             ->when($filters['intent'] ?? null, fn ($q, $value) => $q->where('intent_level', $value))
             ->when($filters['visitor_type'] ?? null, fn ($q, $value) => $q->where('is_new_visitor', $value === 'new'))
+            ->when(! empty($filters['visitor_segments']) && ! in_array('all', (array) $filters['visitor_segments'], true), function ($q) use ($filters): void {
+                $segments = array_values(array_unique((array) $filters['visitor_segments']));
+                $q->where(function ($segmentQuery) use ($segments): void {
+                    foreach ($segments as $segment) {
+                        match ($segment) {
+                            'new' => $segmentQuery->orWhere('is_new_visitor', true),
+                            'returning' => $segmentQuery->orWhere('is_new_visitor', false),
+                            'organic', 'paid', 'direct', 'referral' => $segmentQuery->orWhere('acquisition_source_type', $segment),
+                            default => null,
+                        };
+                    }
+                });
+            })
             ->when(array_key_exists('with_elchat', $filters) && $filters['with_elchat'] !== null, fn ($q) => $q->where('has_widget_interaction', (bool) $filters['with_elchat']))
             ->when(array_key_exists('converted', $filters) && $filters['converted'] !== null, fn ($q) => $q->where('converted', (bool) $filters['converted']))
             ->when($filters['visitor_id'] ?? null, fn ($q, $value) => $q->where('visitor_id', $value))

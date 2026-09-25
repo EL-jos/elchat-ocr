@@ -3,11 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { randomInt } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
-
-const require = createRequire(import.meta.url);
 
 const input = await readStdin();
 
@@ -47,101 +44,29 @@ function redact(value) {
     .slice(0, 240);
 }
 
-function isSnapChromiumWrapper(candidate) {
-  try {
-    const source = fs.readFileSync(candidate, 'utf8').slice(0, 8192);
-    return source.includes('/snap/bin/snap')
-      || /snap\s+(run|exec)\s+chromium/.test(source)
-      || source.includes('snap.chromium.chromium');
-  } catch {
-    return false;
-  }
-}
-
-function isSnapPath(candidate) {
-  try {
-    const real = fs.realpathSync(candidate);
-    return real.startsWith('/snap/') || real === '/usr/bin/snap';
-  } catch {
-    return false;
-  }
-}
-
 function chromiumCandidates(explicit) {
-  const configured = explicit ? [explicit] : [];
-  const directCandidates = [
-    ...configured,
-    // Native packages and direct binaries are preferred over distribution
-    // launcher scripts. In particular, /usr/bin/chromium may be a Snap
-    // wrapper that cannot run from Supervisor's cgroup.
+  const candidates = [];
+  if (explicit) candidates.push(explicit);
+  candidates.push(
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
-    '/usr/local/bin/chromium',
-    '/usr/lib/chromium/chromium',
-    '/usr/lib/chromium/chrome',
-    '/snap/chromium/current/usr/lib/chromium-browser/chrome',
-    '/snap/chromium/current/usr/lib/chromium/chromium',
-    '/snap/chromium/current/usr/lib/chromium/chrome',
-    // Ubuntu Chromium Snap revisions commonly use chromium-browser rather
-    // than chromium for the directory containing the real executable.
-    '/snap/chromium/current/usr/lib/chromium-browser/chromium',
-    '/snap/chromium/current/usr/lib/chromium-browser/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
     process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
     process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
     process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
     process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
-  ];
-  const launcherCandidates = [
-    ...configured,
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/snap/bin/chromium',
-  ];
-  const existing = [...directCandidates, ...launcherCandidates]
-    .filter(candidate => candidate && fs.existsSync(candidate))
-    .filter((candidate, index, all) => all.indexOf(candidate) === index);
-  const direct = existing.filter(candidate =>
-    !isSnapPath(candidate) && !isSnapChromiumWrapper(candidate),
   );
-  // Never fall back to a Snap launcher under Supervisor. A wrapper such as
-  // /usr/bin/chromium-browser calls "snap run chromium" and will fail before
-  // CDP starts because Supervisor is not a Snap cgroup.
-  return direct;
+  return candidates.filter(candidate => candidate && fs.existsSync(candidate));
 }
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function webSocketConstructor(bundlePath) {
-  if (typeof globalThis.WebSocket === 'function') return globalThis.WebSocket;
-
-  const candidates = [
-    path.resolve(path.dirname(bundlePath), '../../../ws'),
-    path.resolve(process.cwd(), 'node_modules/ws'),
-    path.resolve(process.cwd(), '../frontend/dashboard/node_modules/ws'),
-  ];
-  for (const candidate of candidates) {
-    try {
-      const loaded = require(candidate);
-      const WebSocketImpl = loaded?.WebSocket || loaded?.default || loaded;
-      if (typeof WebSocketImpl === 'function') return WebSocketImpl;
-    } catch {
-      // Try the next deployment location.
-    }
-  }
-  return null;
-}
-
-async function waitForJsonVersion(port, child = null, stderrState = null, spawnState = null, timeoutMs = 15000) {
+async function waitForJsonVersion(port, timeoutMs = 15000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    if (spawnState?.error) {
-      throw new Error(`chromium_spawn_failed:${processDiagnostic(child, stderrState?.value, spawnState.error)}`);
-    }
-    if (child?.exitCode !== null && child?.exitCode !== undefined) {
-      throw new Error(`chromium_process_exit:${processDiagnostic(child, stderrState?.value)}`);
-    }
     try {
       const response = await fetch('http://127.0.0.1:' + port + '/json/version');
       if (response.ok) return await response.json();
@@ -150,73 +75,7 @@ async function waitForJsonVersion(port, child = null, stderrState = null, spawnS
     }
     await wait(100);
   }
-  const detail = processDiagnostic(child, stderrState?.value, spawnState?.error);
-  throw new Error(`chromium_debug_endpoint_timeout${detail ? `:${detail}` : ''}`);
-}
-
-function processDiagnostic(child, stderr, spawnError = null) {
-  if (spawnError) return String(spawnError.message || spawnError).replace(/\s+/g, ' ').slice(0, 600);
-  const detail = String(stderr || '').replace(/\s+/g, ' ').trim();
-  if (child?.exitCode !== null && child?.exitCode !== undefined) {
-    return detail
-      ? `${detail.slice(-520)} (exit_code_${child.exitCode})`
-      : `exit_code_${child.exitCode}`;
-  }
-  return detail ? detail.slice(-600) : null;
-}
-
-async function findFreePort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen({ host: '127.0.0.1', port: 0 }, () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : null;
-      server.close(error => {
-        if (error) return reject(error);
-        if (!Number.isInteger(port) || port <= 0) return reject(new Error('chromium_debug_port_unavailable'));
-        resolve(port);
-      });
-    });
-  });
-}
-
-async function launchChromium(chrome) {
-  let lastError = null;
-  // Chrome versions differ in their support for the newer headless mode.
-  // Retry once with the compatibility flag, while keeping the same CDP path.
-  for (const headlessFlag of ['--headless=new', '--headless']) {
-    const profile = await mkdtemp(path.join(os.tmpdir(), 'elchat-rrweb-'));
-    const stderrState = { value: '' };
-    const spawnState = { error: null };
-    const port = await findFreePort();
-    const child = spawn(chrome, [
-      headlessFlag,
-      '--disable-gpu', '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-      '--disable-extensions', '--disable-background-networking', '--disable-crash-reporter',
-      '--no-first-run', '--no-default-browser-check',
-      '--remote-allow-origins=*', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=' + port,
-      '--user-data-dir=' + profile, 'about:blank',
-    ], {
-      stdio: ['ignore', 'ignore', 'pipe'],
-      windowsHide: true,
-    });
-    child.stderr?.on('data', chunk => {
-      stderrState.value = (stderrState.value + String(chunk)).slice(-4000);
-    });
-    child.once('error', error => { spawnState.error = error; });
-
-    try {
-      const version = await waitForJsonVersion(port, child, stderrState, spawnState);
-      return { child, profile, port, version };
-    } catch (error) {
-      lastError = error;
-      try { child.kill(); } catch {}
-      await rm(profile, { recursive: true, force: true }).catch(() => {});
-      await wait(150);
-    }
-  }
-  throw lastError || new Error('chromium_debug_endpoint_timeout');
+  throw new Error('chromium_debug_endpoint_timeout');
 }
 
 function compactText(document) {
@@ -260,7 +119,7 @@ function buildExtractionScript(timestamp, capture) {
     '  while ((textNode = walker.nextNode()) && texts.length < 30) { var textValue = redactText(textNode.nodeValue); if (textValue.length >= 3) texts.push(textValue.slice(0, 240)); }',
     '  return { viewport: viewport, page: page, scroll: scroll, visible_elements: elements, visible_text: texts.join(" ").slice(0, 1200) };',
     '})()',
-  ].join('\n');
+  ].join('\\n');
 }
 
 async function main() {
@@ -278,16 +137,20 @@ async function main() {
     return { available: false, error: 'rrweb_replay_bundle_missing', moments: [] };
   }
   const chrome = chromiumCandidates(payload.chromium_path)[0];
-  if (!chrome) return { available: false, error: 'chromium_direct_binary_missing', moments: [] };
+  if (!chrome) return { available: false, error: 'chromium_missing', moments: [] };
 
-  let launched;
+  const profile = await mkdtemp(path.join(os.tmpdir(), 'elchat-rrweb-'));
+  const port = randomInt(10000, 40000);
+  const child = spawn(chrome, [
+    '--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
+    '--remote-allow-origins=*', '--remote-debugging-port=' + port,
+    '--user-data-dir=' + profile, 'about:blank',
+  ], { stdio: 'ignore', windowsHide: true });
+
   let ws;
   try {
-    launched = await launchChromium(chrome);
-    const { child, version } = launched;
-    const WebSocketImpl = webSocketConstructor(bundlePath);
-    if (!WebSocketImpl) return { available: false, error: 'websocket_runtime_missing', moments: [] };
-    ws = new WebSocketImpl(version.webSocketDebuggerUrl);
+    const version = await waitForJsonVersion(port);
+    ws = new WebSocket(version.webSocketDebuggerUrl);
     const client = await CdpClient.connect(ws);
     const target = await client.call('Target.createTarget', { url: 'about:blank' });
     const attached = await client.call('Target.attachToTarget', { targetId: target.result.targetId, flatten: true });
@@ -301,7 +164,7 @@ async function main() {
       'globalThis.__elchatReplay = globalThis.rrwebReplay || globalThis.rrweb || globalThis.__elchatReplay;',
       'globalThis.__elchatEvents = ' + JSON.stringify(events) + ';',
       'void 0;',
-    ].join('\n');
+    ].join('\\n');
     await client.evaluate(bootstrap, sessionId);
     const setup = [
       '(function () {',
@@ -312,18 +175,10 @@ async function main() {
       '  globalThis.__elchatReplayer.pause(0);',
       '  return "ok";',
       '})()',
-    ].join('\n');
+    ].join('\\n');
     const setupResult = await client.evaluate(setup, sessionId);
     if (setupResult.result?.result?.value !== 'ok') {
-      const exception = setupResult.result?.exceptionDetails;
-      return {
-        available: false,
-        error: setupResult.result?.result?.value
-          || exception?.exception?.description
-          || exception?.text
-          || 'replayer_setup_failed',
-        moments: [],
-      };
+      return { available: false, error: setupResult.result?.result?.value || 'replayer_setup_failed', moments: [] };
     }
     const moments = [];
     const maxCaptures = Math.max(0, Number(payload.max_visual_captures || 0));
@@ -335,18 +190,7 @@ async function main() {
       const wantsCapture = Boolean(moment.capture_candidate) && captures < maxCaptures;
       const extraction = await client.evaluate(buildExtractionScript(relative, wantsCapture), sessionId, true);
       const value = extraction.result?.result?.value;
-      if (!value || value.error) {
-        if (value?.error) {
-          return { available: false, error: value.error, moments };
-        }
-
-        const exception = extraction.result?.exceptionDetails;
-        return {
-          available: false,
-          error: exception?.exception?.description || exception?.text || 'replay_extraction_failed',
-          moments,
-        };
-      }
+      if (!value || value.error) continue;
       if (wantsCapture) {
         const shot = await client.call('Page.captureScreenshot', { format: 'jpeg', quality: 55 }, sessionId);
         if (shot.result?.data) {
@@ -359,8 +203,8 @@ async function main() {
     return { available: true, moments };
   } finally {
     try { ws?.close(); } catch {}
-    try { launched?.child?.kill(); } catch {}
-    if (launched?.profile) await rm(launched.profile, { recursive: true, force: true }).catch(() => {});
+    try { child.kill(); } catch {}
+    await rm(profile, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -370,32 +214,22 @@ class CdpClient {
     this.nextId = 0;
     this.pending = new Map();
     this.referenceName = '__elchatCdp';
-    const handleMessage = event => {
+    ws.onmessage = event => {
       let message;
-      try { message = JSON.parse(String(event?.data ?? event)); } catch { return; }
+      try { message = JSON.parse(String(event.data)); } catch { return; }
       if (!message.id || !this.pending.has(message.id)) return;
       const pending = this.pending.get(message.id);
       this.pending.delete(message.id);
       if (message.error) pending.reject(new Error(message.error.message || 'cdp_error'));
       else pending.resolve(message);
     };
-    if (typeof ws.on === 'function') {
-      ws.on('message', data => handleMessage(data));
-    } else {
-      ws.onmessage = handleMessage;
-    }
   }
 
   static connect(ws) {
     return new Promise((resolve, reject) => {
       const fail = error => reject(error instanceof Error ? error : new Error('cdp_connect_failed'));
-      if (typeof ws.on === 'function') {
-        ws.once('error', fail);
-        ws.once('open', () => resolve(new CdpClient(ws)));
-      } else {
-        ws.onerror = fail;
-        ws.onopen = () => resolve(new CdpClient(ws));
-      }
+      ws.onerror = fail;
+      ws.onopen = () => resolve(new CdpClient(ws));
     });
   }
 

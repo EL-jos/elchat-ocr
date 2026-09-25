@@ -36,6 +36,16 @@ return [
         'seed_parallelism' => min(8, max(1, (int) env('LLM_MULTI_HOP_SEED_PARALLELISM', 4))),
     ],
 
+    // Reusable visual tool shared by Visitor Intelligence, Website Growth
+    // Advisor and future agents. It is deliberately separate from the
+    // reasoning model configured for each task.
+    'tools' => [
+        'targeted_replay_visual_inspection' => [
+            'model' => env('LLM_TARGETED_REPLAY_VISION_MODEL', 'qwen/qwen3.6-plus'),
+            'request_timeout' => (int) env('LLM_TARGETED_REPLAY_VISION_REQUEST_TIMEOUT', 45),
+        ],
+    ],
+
     'tasks' => [
         // Conversation principale du widget.
         'chat' => [

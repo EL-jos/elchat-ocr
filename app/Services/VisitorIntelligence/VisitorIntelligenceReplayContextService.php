@@ -4,6 +4,7 @@ namespace App\Services\VisitorIntelligence;
 
 use App\Models\VisitorSession;
 use App\Models\VisitorSessionReplayChunk;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 
 class VisitorIntelligenceReplayContextService
@@ -23,7 +24,7 @@ class VisitorIntelligenceReplayContextService
 
         $script = (string) config('visitor-intelligence.rrweb_context.worker_script');
         if ($script === '' || !is_file($script)) {
-            return ['available' => false, 'moments' => [], 'error' => 'rrweb_renderer_script_missing'];
+            return $this->unavailable($session, 'rrweb_renderer_script_missing');
         }
 
         $chunks = VisitorSessionReplayChunk::query()
@@ -33,7 +34,7 @@ class VisitorIntelligenceReplayContextService
             ->get(['chunk_index', 'format', 'payload', 'rrweb_version']);
 
         if ($chunks->isEmpty()) {
-            return ['available' => false, 'moments' => [], 'error' => 'rrweb_chunks_missing'];
+            return $this->unavailable($session, 'rrweb_chunks_missing');
         }
 
         $payload = [
@@ -44,13 +45,16 @@ class VisitorIntelligenceReplayContextService
             ])->values()->all(),
             'moments' => array_values($moments),
             'replay_umd_path' => (string) config('visitor-intelligence.rrweb_context.replay_umd_path'),
-            'chromium_path' => config('visitor-intelligence.rrweb_context.chromium_path'),
+            // Prefer the explicit executable path while keeping the existing
+            // chromium_path variable as a backwards-compatible fallback.
+            'chromium_path' => config('visitor-intelligence.rrweb_context.chromium_binary_path')
+                ?: config('visitor-intelligence.rrweb_context.chromium_path'),
             'max_visual_captures' => max(0, (int) config('visitor-intelligence.ai.max_visual_captures', 3)),
         ];
         $encoded = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $maxPayload = max(1048576, (int) config('visitor-intelligence.rrweb_context.max_payload_bytes', 33554432));
         if (strlen($encoded) > $maxPayload) {
-            return ['available' => false, 'moments' => [], 'error' => 'rrweb_context_payload_too_large'];
+            return $this->unavailable($session, 'rrweb_context_payload_too_large');
         }
 
         try {
@@ -63,16 +67,23 @@ class VisitorIntelligenceReplayContextService
             $process->run();
 
             if (!$process->isSuccessful()) {
-                return [
-                    'available' => false,
-                    'moments' => [],
-                    'error' => trim($process->getErrorOutput()) ?: 'rrweb_renderer_failed',
-                ];
+                return $this->unavailable(
+                    $session,
+                    trim($process->getErrorOutput()) ?: 'rrweb_renderer_failed',
+                );
             }
 
             $result = json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
             if (!is_array($result)) {
-                return ['available' => false, 'moments' => [], 'error' => 'rrweb_renderer_invalid_output'];
+                return $this->unavailable($session, 'rrweb_renderer_invalid_output');
+            }
+
+            if (!($result['available'] ?? false) && !empty($result['error'])) {
+                Log::warning('Visitor Intelligence rrweb replay reconstruction unavailable.', [
+                    'site_id' => (string) $session->site_id,
+                    'session_id' => (string) $session->id,
+                    'error' => mb_substr((string) $result['error'], 0, 1000),
+                ]);
             }
 
             return [
@@ -81,7 +92,20 @@ class VisitorIntelligenceReplayContextService
                 ...(!empty($result['error']) ? ['error' => (string) $result['error']] : []),
             ];
         } catch (\Throwable $exception) {
-            return ['available' => false, 'moments' => [], 'error' => $exception->getMessage()];
+            return $this->unavailable($session, $exception->getMessage());
         }
+    }
+
+    /** @return array{available: bool, moments: array<int, array<string, mixed>>, error: string} */
+    private function unavailable(VisitorSession $session, string $error): array
+    {
+        $error = mb_substr(trim($error) !== '' ? trim($error) : 'rrweb_renderer_failed', 0, 1000);
+        Log::warning('Visitor Intelligence rrweb replay reconstruction unavailable.', [
+            'site_id' => (string) $session->site_id,
+            'session_id' => (string) $session->id,
+            'error' => $error,
+        ]);
+
+        return ['available' => false, 'moments' => [], 'error' => $error];
     }
 }
