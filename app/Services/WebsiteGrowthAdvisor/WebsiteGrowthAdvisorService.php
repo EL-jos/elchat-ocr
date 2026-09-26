@@ -349,10 +349,10 @@ final class WebsiteGrowthAdvisorService
         $sourceStatus['replay'] = [
             'status' => $visualSessionsAttempted === 0
                 ? 'not_requested'
-                : ($visualMomentsCount > 0 ? 'ready' : 'unavailable'),
+                : ($visualCaptureCount > 0 ? 'ready' : 'unavailable'),
             'reason' => $visualCandidateCount === 0
                 ? 'no_visual_candidate'
-                : ($visualMomentsCount === 0 ? 'replay_unavailable_or_no_rendered_capture' : 'visual_context_rendered'),
+                : ($visualCaptureCount === 0 ? 'replay_unavailable_or_no_rendered_capture' : 'visual_context_rendered'),
             'candidate_moments' => $visualCandidateCount,
             'selected_sessions' => count($visualSessionIds),
             'attempted_sessions' => $visualSessionsAttempted,
@@ -391,7 +391,10 @@ final class WebsiteGrowthAdvisorService
                 'visual_sessions_limit' => $plan['visual']['sessions_limit'],
                 'raw_replay_sent_to_llm' => false,
                 'visual_moments_rendered' => $visualMomentsCount,
-                'visual_captures_sent_to_llm' => $visualCaptureCount,
+                'visual_captures_rendered' => $visualCaptureCount,
+                'visual_captures_sent_to_vision_tool' => 0,
+                'visual_observations_returned' => 0,
+                'visual_observations_cited' => 0,
                 'live_crawl_pages' => count($liveCrawl['pages'] ?? []),
             ],
         ];
@@ -455,9 +458,22 @@ final class WebsiteGrowthAdvisorService
         $evidenceIds = collect($snapshot['evidence'] ?? [])->pluck('id')->filter()->values()->all();
         $fallback = $this->deterministicResult($snapshot, $configuration);
 
+        $visualEvidence = [];
+        $visualInspection = [
+            'tool' => TargetedReplayVisualInspectionTool::NAME,
+            'status' => 'not_requested',
+            'model' => config('llm.tools.targeted_replay_visual_inspection.model'),
+            'observations' => [],
+            'error' => null,
+        ];
+
         if (! config('llm.provider.api_key') && ! config('mcp.llm.api_key')) {
+            $fallback = $this->finalizeGrowthResult($fallback, $snapshot, $visualInspection, $visualEvidence);
+            $visualAnalysis = $this->visualEvidenceAnalysisPayload($snapshot, $visualEvidence, $visualInspection);
+            $visualAnalysis['observations_cited'] = $this->countCitedVisualObservations($fallback, $visualAnalysis);
             return [
                 ...$fallback,
+                'visual_evidence_analysis' => $visualAnalysis,
                 'meta' => ['ai_status' => 'unavailable', 'warning' => 'llm_api_key_missing'],
             ];
         }
@@ -538,16 +554,20 @@ final class WebsiteGrowthAdvisorService
                 // already deterministic and must not disappear between the
                 // collection snapshot and the user-facing result.
                 $normalized = $this->ensureAcquisitionCoverage($normalized, $snapshot);
+                $normalized = $this->finalizeGrowthResult($normalized, $snapshot, $visualInspection, $visualEvidence);
+                $visualAnalysis = $this->visualEvidenceAnalysisPayload($snapshot, $visualEvidence, $visualInspection);
+                $visualAnalysis['observations_cited'] = $this->countCitedVisualObservations($normalized, $visualAnalysis);
                 return [
-                    ...$this->enforceExternalSourceHandling($normalized, $snapshot),
+                    ...$normalized,
+                    'visual_evidence_analysis' => $visualAnalysis,
                     'meta' => [
                         'ai_status' => 'ready',
                         'visual_tool' => $visualInspection['tool'],
                         'model' => $this->llm->lastUsedModel(),
                         'reasoning_model' => $this->llm->lastUsedModel(),
                         'vision_model' => $visualInspection['model'],
-                        'vision_status' => $visualInspection['status'],
-                        'visual_observations_count' => count($visualInspection['observations']),
+                        'vision_status' => $visualAnalysis['status'],
+                        'visual_observations_count' => $visualAnalysis['observation_count'],
                         'models_used' => array_values(array_filter(array_unique([
                             $visualInspection['model'],
                             $this->llm->lastUsedModel(),
@@ -561,15 +581,19 @@ final class WebsiteGrowthAdvisorService
             // that the optional synthesis step was unavailable.
         }
 
+        $fallback = $this->finalizeGrowthResult($fallback, $snapshot, $visualInspection, $visualEvidence);
+        $visualAnalysis = $this->visualEvidenceAnalysisPayload($snapshot, $visualEvidence, $visualInspection);
+        $visualAnalysis['observations_cited'] = $this->countCitedVisualObservations($fallback, $visualAnalysis);
         return [
             ...$fallback,
+            'visual_evidence_analysis' => $visualAnalysis,
             'meta' => [
                 'ai_status' => 'failed',
                 'warning' => 'llm_synthesis_unavailable',
                 'visual_tool' => $visualInspection['tool'],
                 'vision_model' => $visualInspection['model'],
-                'vision_status' => $visualInspection['status'],
-                'visual_observations_count' => count($visualInspection['observations']),
+                'vision_status' => $visualAnalysis['status'],
+                'visual_observations_count' => $visualAnalysis['observation_count'],
                 'models_used' => array_values(array_filter(array_unique([$visualInspection['model']]))),
                 'raw_replay_sent_to_llm' => false,
             ],
@@ -589,17 +613,17 @@ final class WebsiteGrowthAdvisorService
             $facts[] = [
                 'id' => 'fact:acquisition:'.substr(sha1((string) $pattern['evidence_id']), 0, 12),
                 'text' => sprintf(
-                    'Les parcours attribués à %s représentent %d session(s), %d conversion(s), un taux de conversion observé de %.2f %% et %d abandon(s).',
+                    'Les parcours attribués à %s représentent %d session(s), %d conversion(s), un taux de conversion observé de %.2f %% et %d session(s) terminée(s) sans conversion observée.',
                     $source,
                     (int) ($pattern['sessions'] ?? 0),
                     (int) ($pattern['conversions'] ?? 0),
                     (float) ($pattern['conversion_rate'] ?? 0),
-                    (int) ($pattern['abandoned_sessions'] ?? 0),
+                    (int) ($pattern['non_converted_sessions'] ?? $pattern['abandoned_sessions'] ?? 0),
                 ),
                 'evidence' => [(string) $pattern['evidence_id']],
             ];
         }
-        foreach (['sessions', 'conversations', 'leads', 'conversions', 'abandoned_sessions'] as $key) {
+        foreach (['sessions', 'conversations', 'leads', 'conversions', 'non_converted_sessions'] as $key) {
             if ($kpis->has($key)) {
                 $facts[] = [
                     'id' => 'fact:kpi:'.$key,
@@ -731,7 +755,7 @@ OBSERVE
 Commence par identifier uniquement les faits directement observés dans les données.
 Un fait observé doit être directement supporté par les données disponibles.
 
-Une page qui reçoit beaucoup de visites, un taux d’abandon mesuré, un CTA peu utilisé, une question récurrente, une requête Search Console avec des impressions mais peu de clics ou plusieurs parcours présentant le même comportement peuvent être des observations si les données les démontrent.
+Une page qui reçoit beaucoup de visites, des sessions terminées sans conversion observée ou un taux d’abandon explicitement mesuré, un CTA peu utilisé, une question récurrente, une requête Search Console avec des impressions mais peu de clics ou plusieurs parcours présentant le même comportement peuvent être des observations si les données les démontrent.
 
 Ne transforme jamais une observation en causalité. Une sortie après une page ne prouve pas que cette page est mauvaise ou que son formulaire est trop long.
 
@@ -815,7 +839,7 @@ Lorsqu’une limite empêche un diagnostic fiable, dis-le. Il vaut mieux retourn
 
 9. VISITOR INTELLIGENCE ET PARCOURS
 
-Lorsque Visitor Intelligence est disponible et pertinent, analyse source d’acquisition, page d’entrée, séquence des pages, durée, profondeur, clics, CTA, formulaires, conversions, abandons, retours en arrière, répétitions, interactions, événements, moments critiques et parcours complets.
+Lorsque Visitor Intelligence est disponible et pertinent, analyse source d’acquisition, page d’entrée, séquence des pages, durée, profondeur, clics, CTA, formulaires, conversions, sessions terminées sans conversion observée, sorties explicitement signalées, retours en arrière, répétitions, interactions, événements, moments critiques et parcours complets.
 
 Les replays représentent des parcours réels. Ne considère jamais un replay isolé comme la preuve d’un comportement généralisé sans indication suffisante de répétition.
 
@@ -823,11 +847,11 @@ Les replays représentent des parcours réels. Ne considère jamais un replay is
 
 Exploite toujours representative_sessions[*].acquisition et acquisition_journeys lorsque Visitor Intelligence est disponible. Chaque parcours peut citer acquisition.evidence_id ; utilise cette preuve pour relier précisément le parcours à son type de source, sa source, son medium, sa campagne, sa plateforme et son niveau de confiance d’attribution.
 
-Utilise acquisition_journeys pour comparer les groupes de parcours par source : volume, conversions, taux de conversion, abandons, intention, interaction avec le widget, profondeur, durée, pages d’entrée et pages de sortie. Utilise les parcours représentatifs pour expliquer un pattern agrégé, mais ne présente jamais un parcours individuel comme représentatif de toute sa source sans répétition suffisante.
+Utilise acquisition_journeys pour comparer les groupes de parcours par source : volume, conversions, taux de conversion, sessions terminées sans conversion observée, intention, interaction avec le widget, profondeur, durée, pages d’entrée et pages de sortie. Une session terminée sans conversion ne prouve pas un abandon : réserve ce terme à un signal explicite. Utilise les parcours représentatifs pour expliquer un pattern agrégé, mais ne présente jamais un parcours individuel comme représentatif de toute sa source sans répétition suffisante.
 
 Une différence entre sources est une association observée, pas une causalité. Ne dis jamais qu’une source « cause » la conversion ou l’abandon uniquement parce que ses taux diffèrent. Tiens compte du volume, de la confiance d’attribution, de la période, du type de visiteurs, des pages d’entrée et des parcours comparés. Si la source est inconnue ou faiblement attribuée, indique-le et limite la conclusion.
 
-Lorsque acquisition_journeys contient au moins un groupe, produis au minimum un observed_fact par groupe de source avec son evidence_id, son volume, ses conversions, son taux de conversion, ses abandons et, lorsqu’ils existent, ses principales pages d’entrée et de sortie. Lorsqu’un diagnostic ou une recommandation dépend d’une différence entre sources, indique explicitement la ou les sources concernées dans who ou journey et cite les preuves de groupe et de parcours correspondantes.
+Lorsque acquisition_journeys contient au moins un groupe, produis au minimum un observed_fact par groupe de source avec son evidence_id, son volume, ses conversions, son taux de conversion, ses sessions terminées sans conversion observée et, lorsqu’elles existent, ses principales pages d’entrée et de sortie. Lorsqu’un diagnostic ou une recommandation dépend d’une différence entre sources, indique explicitement la ou les sources concernées dans who ou journey et cite les preuves de groupe et de parcours correspondantes.
 
 10. ANALYSE DES REPLAYS
 
@@ -836,6 +860,8 @@ Ne demande jamais mentalement à analyser indistinctement tous les replays. Pour
 agrégation déterministe → patterns → problèmes candidats → parcours représentatifs → preuves ciblées → raisonnement
 
 Ne traite jamais 1000 parcours comme 1000 analyses LLM indépendantes. Lorsque les données fournissent des parcours représentatifs, utilise-les comme preuves qualitatives des comportements identifiés. Si aucun replay représentatif n’est disponible, ne prétends pas avoir observé le comportement visuel.
+
+Lorsque visual_evidence_analysis.status vaut ready et que des observations visuelles factuelles sont disponibles, utilise au moins l’une d’elles dans un diagnosis ou une recommendation lorsqu’elle est pertinente pour le problème identifié, en citant son evidence_id replay_visual:* correspondant. Ne remplace pas une observation visuelle disponible par un diagnostic uniquement quantitatif. Les champs visual_facts décrivent uniquement ce qui est visible dans la capture ; les événements associés dans event_ids, event_types et event_context sont nécessaires pour qualifier le comportement et ne doivent pas être confondus avec ce que l’image prouve.
 
 11. CONVERSATIONS
 
@@ -911,6 +937,14 @@ Dans content_proposal, indique le statut :
 - not_applicable lorsqu’aucun contenu n’est nécessaire.
 
 Un contenu prêt à utiliser peut contenir un titre, un body, des bullets, une FAQ et un CTA. N’invente jamais de prix, caractéristiques, garanties, résultats, délais ou promesses absents des extraits Knowledge. Si l’information manque, propose seulement une structure ou formule une limitation explicite. Sépare toujours le contenu confirmé par Knowledge des suggestions générales de rédaction.
+
+15 TER. VÉRIFICATION DE L’EXISTANT AVANT « AJOUTER »
+
+Avant d’utiliser le verbe ajouter pour un CTA, un formulaire, une section, un bloc ou un lien, vérifie dans live_crawl.pages[].ctas, .forms, .sections et .links de la page ciblée si un élément équivalent existe déjà.
+
+Si un élément équivalent existe : n’utilise pas ajouter. Utilise reformuler, repositionner, renforcer ou remplacer, cite le texte exact et le selector de l’élément existant comme target_locator, et explique en quoi l’élément actuel est insuffisant (position, formulation, visibilité, contraste avec le comportement observé).
+
+Si aucun élément équivalent n’existe dans live_crawl pour cette page précise : tu peux utiliser ajouter, à condition de le justifier explicitement par l’absence constatée dans live_crawl et non par une supposition. Si la page ou l’inventaire correspondant n’est pas disponible, retourne needs_input.
 
 16. RECOMMANDATION VS TEST
 
@@ -1115,8 +1149,10 @@ Avant de retourner le JSON, vérifie silencieusement :
 - chaque recommandation possède WHAT, WHERE, WHY, EVIDENCE, HOW, EXPECTED_EFFECT et MEASURE ;
 - toute recommandation de contenu, de section ou de CTA possède une proposition de contenu précise avec placement, titre, texte, CTA, destination et justification ;
 - toute recommandation possède un implementation_plan ; un plan absent, vague ou non vérifiable doit être retourné avec status=needs_input, jamais comme une action prête à exécuter ;
+- toute recommandation status=ready cite au moins une preuve live_crawl:* ou replay_visual:* ; une affirmation comportementale sur un visiteur, un clic, une visibilité, une pause, un scroll ou une sortie exige en plus une observation issue d’une capture replay et les événements associés ;
 - status=ready est interdit sans target exact, target_locator complet pour une cible DOM (page_url, selector et element_type), operation explicite, current_state, desired_state, parameters concrets, steps, acceptance_criteria, rollback et evidence pertinente ;
 - pour une cible DOM, le selector doit provenir d’une page live_crawl et target_locator.evidence doit citer l’evidence_id live_crawl de cette page ; n’invente jamais de selector ;
+- avant toute formulation « ajouter », vérifie live_crawl.pages[].ctas, .forms, .sections et .links de la page exacte ; si un équivalent existe, reformule, repositionne, renforce ou remplace au lieu d’ajouter ;
 - si le dépôt, le CMS, le composant ou le fichier source n’est pas connecté, indique needs_input même si le DOM publié est connu ;
 - chaque test possède une hypothèse, un changement, une métrique et une condition de succès ;
 - aucune connaissance générale n’est présentée comme preuve du site ;
@@ -1287,6 +1323,404 @@ PROMPT
             ->all();
 
         return $result;
+    }
+
+    /**
+     * Apply deterministic production safeguards after either LLM synthesis or
+     * the deterministic fallback. The same contract therefore applies to
+     * every execution path, including missing keys and provider failures.
+     *
+     * @param array<string, mixed> $result
+     * @param array<string, mixed> $snapshot
+     * @param array<string, mixed> $visualInspection
+     * @param array<int, array<string, mixed>> $visualEvidence
+     * @return array<string, mixed>
+     */
+    private function finalizeGrowthResult(array $result, array $snapshot, array $visualInspection, array $visualEvidence): array
+    {
+        $result = $this->enforceExternalSourceHandling($result, $snapshot);
+        $visualAnalysis = $this->visualEvidenceAnalysisPayload($snapshot, $visualEvidence, $visualInspection);
+        $result = $this->enforceRecommendationEvidencePolicy($result, $visualAnalysis, $snapshot);
+        $result = $this->enforceExistingElementCheck($result, $snapshot);
+        $visualAnalysis['observations_cited'] = $this->countCitedVisualObservations($result, $visualAnalysis);
+        $result = $this->enforceVisualGrounding($result, $visualAnalysis);
+
+        return $result;
+    }
+
+    /**
+     * Build the compact visual contract exposed to the report. Screenshots
+     * remain transient; only bounded facts and counters are returned.
+     *
+     * @param array<string, mixed> $snapshot
+     * @param array<int, array<string, mixed>> $visualEvidence
+     * @param array<string, mixed> $visualInspection
+     * @return array<string, mixed>
+     */
+    private function visualEvidenceAnalysisPayload(array $snapshot, array $visualEvidence, array $visualInspection): array
+    {
+        $capturesProduced = (int) data_get($snapshot, 'source_status.replay.rendered_captures', 0);
+        $renderedMoments = (int) data_get($snapshot, 'source_status.replay.rendered_moments', 0);
+        $visualContextRendered = (string) data_get($snapshot, 'source_status.replay.status') === 'ready'
+            && $capturesProduced > 0;
+        $observations = array_values(array_filter((array) ($visualInspection['observations'] ?? []), 'is_array'));
+        $status = (string) ($visualInspection['status'] ?? 'unavailable');
+        $error = $visualInspection['error'] ?? null;
+
+        if ($visualContextRendered && $observations === []) {
+            $status = 'incomplete';
+            $error = $error ?: 'visual_observation_missing';
+        }
+
+        return [
+            'tool' => $visualInspection['tool'] ?? TargetedReplayVisualInspectionTool::NAME,
+            'status' => $status,
+            'model' => $visualInspection['model'] ?? null,
+            'visual_context_rendered' => $visualContextRendered,
+            'candidate_moments' => (int) data_get($snapshot, 'source_status.replay.candidate_moments', 0),
+            'rendered_moments' => $renderedMoments,
+            'captures_produced' => $capturesProduced,
+            'captures_sent_to_vision_tool' => count($visualEvidence),
+            'observation_count' => count($observations),
+            'observations_cited' => 0,
+            'observations' => $observations,
+            'error' => $error,
+            'contract' => 'Les observations décrivent uniquement des faits visibles dans les captures ciblées. Les événements associés décrivent le comportement; aucune capture seule ne prouve un clic, une lecture, une intention ou une causalité.',
+        ];
+    }
+
+    /**
+     * A ready implementation plan must have a concrete crawl/replay anchor.
+     * Claims about visitor behaviour additionally require an actual visual
+     * observation, not merely the existence of a replay moment.
+     *
+     * @param array<string, mixed> $result
+     * @param array<string, mixed> $visualAnalysis
+     * @param array<string, mixed> $snapshot
+     * @return array<string, mixed>
+     */
+    private function enforceRecommendationEvidencePolicy(array $result, array $visualAnalysis, array $snapshot = []): array
+    {
+        $visualObservationIds = collect($visualAnalysis['observations'] ?? [])
+            ->flatMap(fn (mixed $observation): array => is_array($observation)
+                ? array_filter([(string) ($observation['evidence_id'] ?? ''), (string) ($observation['visual_evidence_id'] ?? '')])
+                : [])
+            ->unique()
+            ->values()
+            ->all();
+
+        $result['recommendations'] = collect($result['recommendations'] ?? [])
+            ->map(function (mixed $recommendation) use ($visualObservationIds): mixed {
+                if (! is_array($recommendation)) return $recommendation;
+                $plan = is_array($recommendation['implementation_plan'] ?? null)
+                    ? $recommendation['implementation_plan']
+                    : null;
+                if (! $plan || ($plan['status'] ?? null) !== 'ready') return $recommendation;
+
+                $evidence = $this->recommendationEvidence($recommendation);
+                $hasCrawlOrReplay = collect($evidence)->contains(fn (string $id): bool =>
+                    Str::startsWith($id, 'live_crawl:') || Str::startsWith($id, 'replay_visual:'));
+                $hasReplayObservation = collect($evidence)->intersect($visualObservationIds)->isNotEmpty();
+                $text = Str::lower(collect([
+                    $recommendation['title'] ?? null,
+                    $recommendation['what'] ?? null,
+                    $recommendation['why'] ?? null,
+                    $recommendation['how'] ?? null,
+                    $recommendation['action'] ?? null,
+                    $plan['desired_state'] ?? null,
+                ])->filter(fn (mixed $value): bool => is_string($value))->implode(' '));
+                $behavioralClaim = (bool) preg_match(
+                    '/\b(visiteur|visiteurs|session|sessions|clic|clique|cliquent|voit|voient|visible|ignor|scroll|d[eé]file|pause|sortie|abandon|parcours|attention|regard|atteint|n\x27atteint|n\x27interagit)\b/iu',
+                    $text,
+                );
+                $missing = [];
+                if (! $hasCrawlOrReplay) {
+                    $missing[] = 'une preuve live_crawl:* ou replay_visual:* directement reliée à la recommandation';
+                }
+                $locator = is_array($plan['target_locator'] ?? null) ? $plan['target_locator'] : [];
+                if (in_array($plan['change_type'] ?? null, ['content', 'ux', 'ui'], true) && ! empty($locator['page_url'])) {
+                    $page = collect(data_get($snapshot, 'live_crawl.pages', []))
+                        ->filter(fn (mixed $candidate): bool => is_array($candidate))
+                        ->first(fn (array $candidate): bool => $this->sameUrl($candidate['url'] ?? null, $locator['page_url']));
+                    $pageEvidence = is_array($page) ? (string) ($page['evidence_id'] ?? '') : '';
+                    if ($pageEvidence !== '' && ! in_array($pageEvidence, (array) ($locator['evidence'] ?? []), true)) {
+                        $missing[] = 'la preuve live_crawl exacte de la page ciblée dans target_locator.evidence';
+                    }
+                }
+                if ($behavioralClaim && ! $hasReplayObservation) {
+                    $missing[] = 'une observation issue d’une capture replay_visual:* correspondant au comportement invoqué';
+                }
+
+                if ($missing !== []) {
+                    $recommendation['implementation_plan']['status'] = 'needs_input';
+                    $recommendation['implementation_plan']['limitations'] = array_values(array_unique(array_merge(
+                        (array) ($recommendation['implementation_plan']['limitations'] ?? []),
+                        ['Plan rétrogradé automatiquement : '.implode(' et ', $missing).'.'],
+                    )));
+                }
+
+                return $recommendation;
+            })
+            ->values()
+            ->all();
+
+        return $result;
+    }
+
+    /**
+     * Prevent a generic "add" instruction from ignoring an element already
+     * present on the exact crawled page. This applies to CTA, forms, sections
+     * and links, and is intentionally conservative when the target is vague.
+     *
+     * @param array<string, mixed> $result
+     * @param array<string, mixed> $snapshot
+     * @return array<string, mixed>
+     */
+    private function enforceExistingElementCheck(array $result, array $snapshot): array
+    {
+        $pages = collect(data_get($snapshot, 'live_crawl.pages', []))
+            ->filter(fn (mixed $page): bool => is_array($page) && is_string($page['url'] ?? null))
+            ->values();
+
+        $result['recommendations'] = collect($result['recommendations'] ?? [])
+            ->map(function (mixed $recommendation) use ($pages): mixed {
+                if (! is_array($recommendation)) return $recommendation;
+                $plan = is_array($recommendation['implementation_plan'] ?? null)
+                    ? $recommendation['implementation_plan']
+                    : null;
+                if (! $plan || ($plan['status'] ?? null) !== 'ready' || ! $this->isAdditionRequest($recommendation, $plan)) {
+                    return $recommendation;
+                }
+
+                $group = $this->elementGroupForAddition($recommendation, $plan);
+                if ($group === null) return $recommendation;
+
+                $pageUrl = data_get($plan, 'target_locator.page_url');
+                if (! is_string($pageUrl) || trim($pageUrl) === '') {
+                    return $this->downgradeImplementationPlan($recommendation, 'La page exacte à contrôler avant l’ajout n’est pas fournie.');
+                }
+
+                $page = $pages->first(fn (array $candidate): bool => $this->sameUrl($candidate['url'] ?? null, $pageUrl));
+                if (! is_array($page)) {
+                    return $this->downgradeImplementationPlan($recommendation, 'La page ciblée n’apparaît pas dans live_crawl ; l’absence de l’élément ne peut pas être démontrée.');
+                }
+
+                $elements = array_values(array_filter((array) ($page[$group] ?? []), 'is_array'));
+                $locator = is_array($plan['target_locator'] ?? null) ? $plan['target_locator'] : [];
+                $equivalent = $this->findEquivalentElement($elements, $locator, $recommendation, $plan);
+                if ($equivalent !== null) {
+                    $label = $this->elementLabel($equivalent);
+                    $selector = (string) ($equivalent['selector'] ?? $equivalent['selector_hint'] ?? 'sélecteur non fourni');
+                    return $this->downgradeImplementationPlan(
+                        $recommendation,
+                        sprintf('live_crawl détecte déjà %s sur cette page : "%s" (%s). Le plan doit le reformuler, le repositionner, le renforcer ou le remplacer avant tout ajout.', $group === 'ctas' ? 'un CTA' : ($group === 'forms' ? 'un formulaire' : ($group === 'sections' ? 'une section' : 'un lien')), $label ?: 'élément sans libellé', $selector),
+                    );
+                }
+
+                if ($elements !== [] && ! $this->explainsWhyExistingElementsFail($recommendation, $plan)) {
+                    return $this->downgradeImplementationPlan(
+                        $recommendation,
+                        sprintf('live_crawl liste déjà %d élément(s) de type %s ; le rapport doit expliquer précisément pourquoi les éléments existants échouent avant de proposer un ajout.', count($elements), $group === 'ctas' ? 'CTA' : ($group === 'forms' ? 'formulaire' : ($group === 'sections' ? 'section' : 'lien'))),
+                    );
+                }
+
+                // If the page contains elements of the requested type but the
+                // recommendation has no exact locator/content, absence is not
+                // proven. Do not let an implementation agent guess.
+                if ($elements !== [] && ! ($locator['selector'] ?? null) && ! ($locator['current_text'] ?? null) && ! ($locator['current_href'] ?? null)) {
+                    return $this->downgradeImplementationPlan(
+                        $recommendation,
+                        sprintf('live_crawl liste déjà %d élément(s) de type %s sur cette page, mais le plan ne précise pas pourquoi aucun n’est adapté ni quelle absence est démontrée.', count($elements), $group === 'ctas' ? 'CTA' : ($group === 'forms' ? 'formulaire' : ($group === 'sections' ? 'section' : 'lien'))),
+                    );
+                }
+
+                $pageEvidence = (string) ($page['evidence_id'] ?? '');
+                $hasPageEvidence = collect($this->recommendationEvidence($recommendation))
+                    ->contains(fn (string $id): bool => $pageEvidence !== ''
+                        ? $id === $pageEvidence
+                        : Str::startsWith($id, 'live_crawl:'));
+                if (! $hasPageEvidence) {
+                    return $this->downgradeImplementationPlan($recommendation, 'L’absence de l’élément doit être explicitement étayée par la preuve live_crawl de cette page.');
+                }
+
+                return $recommendation;
+            })
+            ->values()
+            ->all();
+
+        return $result;
+    }
+
+    /** @param array<string, mixed> $result @param array<string, mixed> $visualAnalysis */
+    private function enforceVisualGrounding(array $result, array $visualAnalysis): array
+    {
+        if (($visualAnalysis['visual_context_rendered'] ?? false) === true) {
+            if ((int) ($visualAnalysis['observation_count'] ?? 0) === 0) {
+                $result['data_gaps'][] = 'Des captures replay ont été rendues, mais aucune observation visuelle exploitable n’a été retournée ; les recommandations comportementales restent en attente de preuve.';
+                $result['data_gaps'] = array_values(array_unique(array_filter($result['data_gaps'] ?? [])));
+            } elseif ((int) ($visualAnalysis['observations_cited'] ?? 0) === 0) {
+                $result['data_gaps'][] = 'Des observations replay sont disponibles mais aucune n’est citée dans le diagnostic final ; vérifier leur pertinence avant toute action comportementale.';
+                $result['data_gaps'] = array_values(array_unique(array_filter($result['data_gaps'] ?? [])));
+            }
+        }
+
+        return $result;
+    }
+
+    /** @param array<string, mixed> $recommendation @param array<string, mixed> $plan */
+    private function isAdditionRequest(array $recommendation, array $plan): bool
+    {
+        $text = Str::lower(collect([
+            $recommendation['title'] ?? null,
+            $recommendation['what'] ?? null,
+            $recommendation['action'] ?? null,
+            $plan['desired_state'] ?? null,
+            data_get($recommendation, 'content_proposal.purpose'),
+        ])->filter(fn (mixed $value): bool => is_string($value))->implode(' '));
+
+        return (bool) preg_match('/\b(ajouter|ajout|add|create|cr[eé]er|ins[eé]rer|introduire)\b/iu', $text)
+            && ! preg_match('/\b(ne pas ajouter|n\x27ajoute pas|sans ajouter)\b/iu', $text);
+    }
+
+    /** @param array<string, mixed> $recommendation @param array<string, mixed> $plan */
+    private function elementGroupForAddition(array $recommendation, array $plan): ?string
+    {
+        $text = Str::lower(collect([
+            $recommendation['title'] ?? null,
+            $recommendation['what'] ?? null,
+            $recommendation['where'] ?? null,
+            $plan['target'] ?? null,
+            $plan['desired_state'] ?? null,
+            data_get($recommendation, 'content_proposal.cta'),
+        ])->filter(fn (mixed $value): bool => is_string($value))->implode(' '));
+
+        return match (true) {
+            (bool) preg_match('/\b(cta|call.to.action|appel\s+[àa]\s+l.action)\b/iu', $text) => 'ctas',
+            (bool) preg_match('/\b(formulaire|form|lead form)\b/iu', $text) => 'forms',
+            (bool) preg_match('/\b(section|bloc|block|zone|hero|faq)\b/iu', $text) => 'sections',
+            (bool) preg_match('/\b(lien|link|navigation)\b/iu', $text) => 'links',
+            default => null,
+        };
+    }
+
+    /** @param array<int, array<string, mixed>> $elements @param array<string, mixed> $locator @param array<string, mixed> $recommendation @param array<string, mixed> $plan */
+    private function findEquivalentElement(array $elements, array $locator, array $recommendation, array $plan): ?array
+    {
+        $selector = Str::lower(trim((string) ($locator['selector'] ?? '')));
+        $currentText = Str::lower(trim((string) ($locator['current_text'] ?? '')));
+        $currentHref = trim((string) ($locator['current_href'] ?? ''));
+        $desired = Str::lower(collect([
+            $recommendation['title'] ?? null,
+            $recommendation['what'] ?? null,
+            $plan['target'] ?? null,
+            $plan['desired_state'] ?? null,
+            data_get($recommendation, 'content_proposal.cta'),
+        ])->filter(fn (mixed $value): bool => is_string($value))->implode(' '));
+
+        foreach ($elements as $element) {
+            $elementSelector = Str::lower(trim((string) ($element['selector'] ?? $element['selector_hint'] ?? '')));
+            $elementText = Str::lower(trim((string) ($element['text'] ?? $element['current_text'] ?? $element['heading'] ?? $element['label'] ?? '')));
+            $elementHref = trim((string) ($element['url'] ?? $element['current_href'] ?? $element['action'] ?? ''));
+            if (($selector !== '' && $elementSelector === $selector)
+                || ($currentText !== '' && $elementText !== '' && $elementText === $currentText)
+                || ($currentHref !== '' && $elementHref !== '' && $elementHref === $currentHref)) {
+                return $element;
+            }
+
+            $keywords = collect(preg_split('/\s+/u', $desired) ?: [])
+                ->map(fn (string $word): string => trim($word, " \t\n\r\0\x0B.,;:!?()[]{}\"'"))
+                ->filter(fn (string $word): bool => mb_strlen($word) >= 5)
+                ->take(8);
+            if ($elementText !== '' && $keywords->isNotEmpty() && $keywords->filter(fn (string $word): bool => Str::contains($elementText, $word))->count() >= min(2, $keywords->count())) {
+                return $element;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<string, mixed> $recommendation */
+    private function downgradeImplementationPlan(array $recommendation, string $limitation): array
+    {
+        $recommendation['implementation_plan']['status'] = 'needs_input';
+        $recommendation['implementation_plan']['limitations'] = array_values(array_unique(array_merge(
+            (array) ($recommendation['implementation_plan']['limitations'] ?? []),
+            [$limitation],
+        )));
+        return $recommendation;
+    }
+
+    /** @param array<string, mixed> $recommendation @param array<string, mixed> $plan */
+    private function explainsWhyExistingElementsFail(array $recommendation, array $plan): bool
+    {
+        $text = Str::lower(collect([
+            $recommendation['why'] ?? null,
+            $recommendation['how'] ?? null,
+            $recommendation['current_state'] ?? null,
+            $plan['current_state'] ?? null,
+            $plan['desired_state'] ?? null,
+        ])->filter(fn (mixed $value): bool => is_string($value))->implode(' '));
+
+        return Str::contains($text, [
+            'existant', 'existants', 'actuel', 'actuels', 'déjà', 'deja',
+            'insuffisant', 'inadapt', 'ne convert', 'ne fonctionne',
+            'trop peu visible', 'position', 'formulation', 'contraste',
+            'duplique', 'doublon', 'remplace', 'reposition', 'renforce',
+        ]);
+    }
+
+    /** @param array<string, mixed> $recommendation @return array<int, string> */
+    private function recommendationEvidence(array $recommendation): array
+    {
+        return collect([
+            ...((array) ($recommendation['evidence'] ?? [])),
+            ...((array) data_get($recommendation, 'implementation_plan.evidence', [])),
+            ...((array) data_get($recommendation, 'implementation_plan.target_locator.evidence', [])),
+            ...((array) data_get($recommendation, 'content_proposal.evidence', [])),
+        ])->filter(fn (mixed $id): bool => is_string($id) && $id !== '')->unique()->values()->all();
+    }
+
+    private function sameUrl(mixed $left, mixed $right): bool
+    {
+        if (! is_string($left) || ! is_string($right) || trim($left) === '' || trim($right) === '') return false;
+        $normalize = static function (string $url): string {
+            $url = trim($url);
+            $parts = parse_url($url);
+            if (is_array($parts) && isset($parts['host'])) {
+                return Str::lower((string) $parts['host']).'/'.ltrim((string) ($parts['path'] ?? '/'), '/');
+            }
+            return Str::lower(ltrim($url, '/'));
+        };
+        return rtrim($normalize($left), '/') === rtrim($normalize($right), '/');
+    }
+
+    /** @param array<string, mixed> $element */
+    private function elementLabel(array $element): string
+    {
+        return trim((string) ($element['text'] ?? $element['current_text'] ?? $element['heading'] ?? $element['label'] ?? $element['name'] ?? $element['action'] ?? ''));
+    }
+
+    /** @param array<string, mixed> $result @param array<string, mixed> $visualAnalysis */
+    private function countCitedVisualObservations(array $result, array $visualAnalysis): int
+    {
+        $ids = collect($visualAnalysis['observations'] ?? [])
+            ->flatMap(fn (mixed $item): array => is_array($item)
+                ? array_filter([(string) ($item['evidence_id'] ?? ''), (string) ($item['visual_evidence_id'] ?? '')])
+                : [])
+            ->unique()
+            ->all();
+        if ($ids === []) return 0;
+
+        $cited = [];
+        $walk = function (mixed $value) use (&$walk, &$cited, $ids): void {
+            if (is_string($value) && in_array($value, $ids, true)) {
+                $cited[$value] = true;
+                return;
+            }
+            if (is_array($value)) foreach ($value as $item) $walk($item);
+        };
+        $walk($result);
+        return count($cited);
     }
 
     /** @param array<string, mixed> $result @param array<string, mixed> $configuration */
@@ -1728,7 +2162,9 @@ PROMPT
                     'sessions' => $sessionsCount,
                     'conversions' => $conversions,
                     'conversion_rate' => $sessionsCount > 0 ? round($conversions / $sessionsCount * 100, 2) : 0,
-                    'abandoned_sessions' => $group->filter(fn (VisitorSession $session): bool => $session->ended_at !== null && ! $session->converted)->count(),
+                    // A completed non-converting session is not proof of an
+                    // abandonment. Keep the metric explicit and neutral.
+                    'non_converted_sessions' => $group->filter(fn (VisitorSession $session): bool => $session->ended_at !== null && ! $session->converted)->count(),
                     'high_intent_sessions' => $group->filter(fn (VisitorSession $session): bool => $session->intent_level === 'high')->count(),
                     'widget_interaction_sessions' => $group->filter(fn (VisitorSession $session): bool => (bool) $session->has_widget_interaction)->count(),
                     'average_page_count' => round((float) $group->avg(fn (VisitorSession $session): float => (float) $session->page_count), 2),
@@ -1780,12 +2216,12 @@ PROMPT
             $entryPages = array_values(array_filter((array) ($pattern['top_entry_pages'] ?? [])));
             $exitPages = array_values(array_filter((array) ($pattern['top_exit_pages'] ?? [])));
             $text = sprintf(
-                'Les parcours attribués à %s représentent %d session(s), %d conversion(s), un taux de conversion observé de %.2f %% et %d abandon(s). Entrées principales : %s. Sorties principales : %s.',
+                'Les parcours attribués à %s représentent %d session(s), %d conversion(s), un taux de conversion observé de %.2f %% et %d session(s) terminée(s) sans conversion observée. Entrées principales : %s. Sorties principales : %s.',
                 $label !== '' ? $label : 'une source inconnue',
                 (int) ($pattern['sessions'] ?? 0),
                 (int) ($pattern['conversions'] ?? 0),
                 (float) ($pattern['conversion_rate'] ?? 0),
-                (int) ($pattern['abandoned_sessions'] ?? 0),
+                (int) ($pattern['non_converted_sessions'] ?? $pattern['abandoned_sessions'] ?? 0),
                 $entryPages !== [] ? implode(', ', array_slice($entryPages, 0, 3)) : 'non disponibles',
                 $exitPages !== [] ? implode(', ', array_slice($exitPages, 0, 3)) : 'non disponibles',
             );
@@ -2010,9 +2446,12 @@ PROMPT
                     'evidence_id' => $evidenceId,
                     'moment_id' => $momentId,
                     'event_ids' => array_values($moment['event_ids'] ?? []),
+                    'event_types' => array_values($moment['event_types'] ?? []),
                     'reason' => $moment['reason'] ?? null,
                     'replay_timestamp' => $moment['replay_timestamp'] ?? null,
                     'relative_timestamp' => $moment['relative_timestamp'] ?? null,
+                    'pointer_moves_since_previous' => max(0, (int) ($moment['pointer_moves_since_previous'] ?? 0)),
+                    'event_context' => array_slice((array) ($moment['event_context'] ?? []), 0, 12),
                     'page' => $moment['page'] ?? null,
                     'scroll' => $moment['scroll'] ?? null,
                     'visible_text' => $this->safeText($moment['visible_text'] ?? null, 1200),
@@ -2075,6 +2514,10 @@ PROMPT
                     'moment_id' => (string) ($moment['moment_id'] ?? ''),
                     'reason' => $moment['reason'] ?? null,
                     'replay_timestamp' => $moment['replay_timestamp'] ?? null,
+                    'event_ids' => array_values((array) ($moment['event_ids'] ?? [])),
+                    'event_types' => array_values((array) ($moment['event_types'] ?? [])),
+                    'pointer_moves_since_previous' => max(0, (int) ($moment['pointer_moves_since_previous'] ?? 0)),
+                    'event_context' => array_slice((array) ($moment['event_context'] ?? []), 0, 12),
                     'page' => $moment['page'] ?? null,
                     'scroll' => $moment['scroll'] ?? null,
                     'visible_text' => $this->safeText($moment['visible_text'] ?? null, 1200),

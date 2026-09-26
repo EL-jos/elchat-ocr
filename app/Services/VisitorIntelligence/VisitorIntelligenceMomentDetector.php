@@ -55,6 +55,7 @@ class VisitorIntelligenceMomentDetector
                 'needs_visual_context' => $reason['needs_visual_context'],
                 'capture_candidate' => $reason['capture_candidate'],
                 'pointer_moves_since_previous' => $pointerCount,
+                'event_context' => [$this->eventContext($event, $metadata)],
             ];
             $pointerCount = 0;
 
@@ -65,6 +66,12 @@ class VisitorIntelligenceMomentDetector
                 $previous['reasons'][] = $reason['label'];
                 $previous['needs_visual_context'] = $previous['needs_visual_context'] || $moment['needs_visual_context'];
                 $previous['capture_candidate'] = $previous['capture_candidate'] || $moment['capture_candidate'];
+                $previous['pointer_moves_since_previous'] = (int) ($previous['pointer_moves_since_previous'] ?? 0)
+                    + (int) ($moment['pointer_moves_since_previous'] ?? 0);
+                $previous['event_context'] = array_slice(array_merge(
+                    (array) ($previous['event_context'] ?? []),
+                    (array) ($moment['event_context'] ?? []),
+                ), 0, 12);
                 $moments[count($moments) - 1] = $previous;
                 continue;
             }
@@ -93,6 +100,9 @@ class VisitorIntelligenceMomentDetector
                     'needs_visual_context' => false,
                     'capture_candidate' => false,
                     'pointer_moves_since_previous' => $pointerCount,
+                    'event_context' => $first instanceof AnalyticsEvent
+                        ? [$this->eventContext($first, is_array($first->metadata) ? $first->metadata : [])]
+                        : [],
                 ];
             }
         }
@@ -161,6 +171,46 @@ class VisitorIntelligenceMomentDetector
     private function priority(string $priority): int
     {
         return ['high' => 3, 'medium' => 2, 'low' => 1][$priority] ?? 1;
+    }
+
+    /**
+     * Keep a compact, privacy-conscious description of the semantic event
+     * surrounding a visual moment. This is context for the reasoning model;
+     * it is never presented as a fact extracted from the screenshot itself.
+     *
+     * @return array<string, mixed>
+     */
+    private function eventContext(AnalyticsEvent $event, array $metadata): array
+    {
+        $context = [
+            'event_id' => (string) $event->id,
+            'event_type' => (string) $event->event_type,
+            'path' => $this->text($metadata['path'] ?? $metadata['page_path'] ?? null, 500),
+            'page_url' => $this->text($metadata['page_url'] ?? $metadata['url'] ?? null, 800),
+            'target' => $this->text($metadata['target'] ?? $metadata['target_text'] ?? $metadata['label'] ?? null, 300),
+            'selector' => $this->text($metadata['selector'] ?? $metadata['target_selector'] ?? null, 500),
+            'scroll_y' => $this->number($metadata['scroll_y'] ?? null),
+            'depth' => $this->number($metadata['depth'] ?? null),
+            'viewport_height' => $this->number($metadata['viewport_height'] ?? null),
+            'x' => $this->number($metadata['x'] ?? $metadata['client_x'] ?? null),
+            'y' => $this->number($metadata['y'] ?? $metadata['client_y'] ?? null),
+            'duration_ms' => $this->number($metadata['duration_ms'] ?? null),
+            'idle_duration_ms' => $this->number($metadata['idle_duration_ms'] ?? null),
+        ];
+
+        return collect($context)
+            ->reject(fn (mixed $value): bool => $value === null || $value === '')
+            ->all();
+    }
+
+    private function text(mixed $value, int $limit): ?string
+    {
+        if (! is_scalar($value)) return null;
+        $text = trim((string) $value);
+        if ($text === '') return null;
+        $text = preg_replace('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu', '[email]', $text) ?? $text;
+        $text = preg_replace('/(?:\+?\d[\d .()\-]{7,}\d)/u', '[phone]', $text) ?? $text;
+        return mb_substr($text, 0, $limit);
     }
 
     private function number(mixed $value): ?int

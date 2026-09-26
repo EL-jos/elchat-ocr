@@ -156,7 +156,9 @@ class VisitorIntelligenceAiAnalysisService
                 'status' => $visualInspection['status'],
                 'model' => $visualInspection['model'],
                 'observation_count' => count($visualInspection['observations']),
+                'observations' => $visualInspection['observations'],
                 'error' => $visualInspection['error'],
+                'contract' => 'Les observations décrivent uniquement des faits visibles dans les captures ciblées; les événements associés restent la source des faits comportementaux.',
             ];
 
             return $summary->forceFill([
@@ -277,6 +279,8 @@ class VisitorIntelligenceAiAnalysisService
                 'moment_id' => $moment['id'] ?? null,
                 'event_ids' => array_values($moment['event_ids'] ?? []),
                 'event_types' => array_values($moment['event_types'] ?? []),
+                'pointer_moves_since_previous' => max(0, (int) ($moment['pointer_moves_since_previous'] ?? 0)),
+                'event_context' => array_slice((array) ($moment['event_context'] ?? []), 0, 12),
                 'reason' => $moment['reason'] ?? null,
                 'replay_timestamp' => $moment['replay_timestamp'] ?? null,
                 'relative_timestamp' => $moment['relative_timestamp'] ?? null,
@@ -350,6 +354,10 @@ class VisitorIntelligenceAiAnalysisService
                 'moment_id' => $momentId,
                 'reason' => $moment['reason'] ?? null,
                 'replay_timestamp' => $moment['replay_timestamp'] ?? null,
+                'event_ids' => array_values($moment['event_ids'] ?? []),
+                'event_types' => array_values($moment['event_types'] ?? []),
+                'pointer_moves_since_previous' => max(0, (int) ($moment['pointer_moves_since_previous'] ?? 0)),
+                'event_context' => array_slice((array) ($moment['event_context'] ?? []), 0, 12),
                 'page' => $moment['page'] ?? null,
                 'scroll' => $moment['scroll'] ?? null,
                 'visible_text' => $this->safeText($moment['visible_text'] ?? null, 1200),

@@ -54,7 +54,7 @@ class VisitorIntelligenceQueryService
             $metric('widget_open_rate', 'Taux d’ouverture widget', $total > 0 ? (int) round($this->distinctEvent($events, 'session_id', [AnalyticsEventType::WIDGET_OPENED->value]) / $total * 100, 1) : null, 'percent', $total > 0),
             $metric('conversation_rate', 'Taux de conversation', $total > 0 ? (int) round($this->distinctEvent($events, 'session_id', [AnalyticsEventType::CONVERSATION_STARTED->value]) / $total * 100, 1) : null, 'percent', $total > 0),
             $metric('elchat_conversion_rate', 'Conversion associée à ELChat', $withChat > 0 ? (int) round($convertedWithChat / $withChat * 100, 1) : null, 'percent', $withChat > 0),
-            $metric('abandoned_sessions', 'Abandons observés', (clone $sessions)->whereNotNull('ended_at')->where('converted', false)->count(), 'count', $total > 0),
+            $metric('non_converted_sessions', 'Sessions terminées sans conversion observée', (clone $sessions)->whereNotNull('ended_at')->where('converted', false)->count(), 'count', $total > 0),
             $metric('opportunities', 'Opportunités', VisitorOpportunity::query()->where('site_id', $site->id)->whereBetween('detected_at', [$from, $to])->count(), 'count', $total > 0),
             $metric('actions_executed', 'Actions exécutées', VisitorIntelligenceAction::query()->where('site_id', $site->id)->where('status', 'completed')->whereBetween('executed_at', [$from, $to])->count(), 'count', $total > 0),
         ];

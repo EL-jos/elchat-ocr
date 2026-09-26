@@ -40,14 +40,18 @@ class WebsiteGrowthAdvisorAnalysis extends BaseModel
         $snapshot = is_array($this->data_snapshot) ? $this->data_snapshot : [];
         $kpiKeys = [
             'sessions', 'sessions_with_elchat', 'conversations', 'leads',
-            'appointments', 'conversions', 'abandoned_sessions', 'engagement_rate',
+            'appointments', 'conversions', 'non_converted_sessions', 'engagement_rate',
         ];
         $kpis = collect(data_get($snapshot, 'overview.kpis', []))
-            ->filter(fn ($metric): bool => is_array($metric) && in_array($metric['key'] ?? null, $kpiKeys, true))
-            ->sortBy(fn (array $metric): int => array_search($metric['key'] ?? null, $kpiKeys, true))
+            ->filter(fn ($metric): bool => is_array($metric) && in_array($metric['key'] ?? null, [...$kpiKeys, 'abandoned_sessions'], true))
+            ->sortBy(fn (array $metric): int => array_search($metric['key'] ?? null, $kpiKeys, true) === false
+                ? array_search('non_converted_sessions', $kpiKeys, true)
+                : array_search($metric['key'] ?? null, $kpiKeys, true))
             ->map(fn (array $metric): array => [
-                'key' => (string) ($metric['key'] ?? ''),
-                'label' => (string) ($metric['label'] ?? $metric['key'] ?? ''),
+                'key' => ($metric['key'] ?? null) === 'abandoned_sessions' ? 'non_converted_sessions' : (string) ($metric['key'] ?? ''),
+                'label' => ($metric['key'] ?? null) === 'abandoned_sessions'
+                    ? 'Sessions terminées sans conversion observée'
+                    : (string) ($metric['label'] ?? $metric['key'] ?? ''),
                 'value' => is_numeric($metric['value'] ?? null) ? (float) $metric['value'] : null,
                 'unit' => (string) ($metric['unit'] ?? 'count'),
                 'available' => (bool) ($metric['available'] ?? false),

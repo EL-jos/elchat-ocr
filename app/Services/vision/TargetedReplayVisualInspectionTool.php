@@ -13,6 +13,10 @@ use Throwable;
  *
  * Consumers must provide screenshots selected by the replay investigation.
  * Raw rrweb chunks are intentionally not accepted or forwarded to the LLM.
+ *
+ * The vision model is deliberately limited to visible facts. Behavioural
+ * signals are attached from the associated event context and interpreted by
+ * the reasoning model, never invented by the screenshot model.
  */
 final class TargetedReplayVisualInspectionTool
 {
@@ -51,11 +55,12 @@ final class TargetedReplayVisualInspectionTool
             'text' => json_encode([
                 'tool' => self::NAME,
                 'task' => 'Inspecter les captures des moments ciblés d’un parcours web.',
-                'instruction' => 'Décris uniquement ce qui est réellement visible dans chaque image. Ne déduis pas qu’un élément a été lu, cliqué ou ignoré. Ne décris pas les visiteurs en général. Ne fabrique aucun sélecteur DOM, texte, lien, position ou état qui ne soit pas visible. Si une image est vide, illisible ou ambiguë, indique-le explicitement.',
+                'instruction' => 'Décris uniquement ce qui est réellement visible dans chaque image. Ne déduis pas qu’un élément a été lu, cliqué, ignoré, regardé ou abandonné. Ne produis aucun signal de friction, d’attention, d’intention ou de causalité. Ne décris pas les visiteurs en général. Ne fabrique aucun sélecteur DOM, texte, lien, position ou état qui ne soit pas visible. Si une image est vide, illisible ou ambiguë, indique-le explicitement.',
                 'output_schema' => [
                     'observations' => [[
                         'visual_evidence_id' => 'string obligatoire, repris exactement depuis les métadonnées',
                         'scene_summary' => 'string',
+                        'visual_facts' => ['string factuelle, uniquement vérifiable dans l’image'],
                         'visible_elements' => [[
                             'kind' => 'string|null',
                             'label_or_text' => 'string|null',
@@ -63,13 +68,11 @@ final class TargetedReplayVisualInspectionTool
                             'state' => 'string|null',
                         ]],
                         'visible_text' => 'string|null',
-                        'friction_signals' => ['string'],
-                        'attention_signals' => ['string'],
                         'limitations' => ['string'],
                         'confidence' => 'number 0-100',
                     ]],
                 ],
-                'contract' => 'Chaque observation doit être rattachée à un visual_evidence_id fourni. Une observation visuelle est une preuve d’état affiché à un instant, pas une preuve d’intention.',
+                'contract' => 'Chaque observation doit être rattachée à un visual_evidence_id fourni. Une observation visuelle est une preuve d’état affiché à un instant, pas une preuve de comportement, d’attention ou d’intention. Les événements associés sont fournis séparément au modèle de raisonnement.',
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
         ]];
 
@@ -84,11 +87,15 @@ final class TargetedReplayVisualInspectionTool
                     'replay_timestamp' => $visual['replay_timestamp'],
                     'page' => $visual['page'],
                     'scroll' => $visual['scroll'],
+                    'event_ids' => $visual['event_ids'],
+                    'event_types' => $visual['event_types'],
+                    'pointer_moves_since_previous' => $visual['pointer_moves_since_previous'],
+                    'event_context' => $visual['event_context'],
                     'replay_extractor_hints' => [
                         'visible_text' => $visual['visible_text'],
                         'visible_elements' => $visual['visible_elements'],
                     ],
-                    'instruction' => 'Cette image correspond exactement à cet identifiant. Analyse cette image seulement.',
+                    'instruction' => 'Cette image correspond exactement à cet identifiant. Analyse l’image seulement pour les faits visuels. Ne conclus rien sur le comportement à partir de ces métadonnées.',
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
             ];
             $content[] = [
@@ -101,7 +108,7 @@ final class TargetedReplayVisualInspectionTool
             $raw = $this->llm->chatJson([
                 [
                     'role' => 'system',
-                    'content' => 'Tu es le modèle de vision d’ELChat. Tu inspectes des captures rrweb ciblées pour fournir des observations visuelles factuelles à un autre modèle. Réponds uniquement avec un objet JSON valide. N’invente jamais un élément non visible.',
+                    'content' => 'Tu es le modèle de vision d’ELChat. Tu inspectes des captures rrweb ciblées pour fournir des observations visuelles factuelles à un autre modèle. Réponds uniquement avec un objet JSON valide. N’invente jamais un élément non visible et ne produis jamais d’inférence comportementale.',
                 ],
                 [
                     'role' => 'user',
@@ -156,12 +163,21 @@ final class TargetedReplayVisualInspectionTool
 
             return [
                 'visual_evidence_id' => $evidenceId,
+                'evidence_id' => $evidenceId,
                 'session_id' => (string) ($item['session_id'] ?? ''),
                 'moment_id' => (string) ($item['moment_id'] ?? ''),
                 'reason' => $item['reason'] ?? null,
                 'replay_timestamp' => $item['replay_timestamp'] ?? null,
                 'page' => $item['page'] ?? null,
                 'scroll' => $item['scroll'] ?? null,
+                'event_ids' => array_values((array) ($item['event_ids'] ?? [])),
+                'event_types' => array_values((array) ($item['event_types'] ?? [])),
+                'pointer_moves_since_previous' => is_numeric($item['pointer_moves_since_previous'] ?? null)
+                    ? max(0, (int) $item['pointer_moves_since_previous'])
+                    : 0,
+                'event_context' => is_array($item['event_context'] ?? null)
+                    ? array_slice($item['event_context'], 0, 12)
+                    : [],
                 'visible_text' => $this->safeText($item['visible_text'] ?? null, 1200),
                 'visible_elements' => array_slice((array) ($item['visible_elements'] ?? []), 0, 25),
                 'capture' => (string) $item['capture'],
@@ -188,16 +204,20 @@ final class TargetedReplayVisualInspectionTool
 
             return [
                 'visual_evidence_id' => $evidenceId,
+                'evidence_id' => $evidenceId,
                 'session_id' => $source['session_id'],
                 'moment_id' => $source['moment_id'],
                 'replay_timestamp' => $source['replay_timestamp'],
                 'page' => $source['page'],
                 'reason' => $source['reason'],
+                'event_ids' => $source['event_ids'],
+                'event_types' => $source['event_types'],
+                'pointer_moves_since_previous' => $source['pointer_moves_since_previous'],
+                'event_context' => $source['event_context'],
                 'scene_summary' => $this->safeText($item['scene_summary'] ?? $item['summary'] ?? null, 1200),
+                'visual_facts' => $this->boundedStringList($item['visual_facts'] ?? [], 12, 400),
                 'visible_elements' => $this->normalizeVisualElements($item['visible_elements'] ?? []),
                 'visible_text' => $this->safeText($item['visible_text'] ?? null, 1600),
-                'friction_signals' => $this->boundedStringList($item['friction_signals'] ?? [], 10, 400),
-                'attention_signals' => $this->boundedStringList($item['attention_signals'] ?? [], 10, 400),
                 'limitations' => $this->boundedStringList($item['limitations'] ?? [], 10, 400),
                 'confidence' => is_numeric($item['confidence'] ?? null)
                     ? max(0, min(100, (int) $item['confidence']))
