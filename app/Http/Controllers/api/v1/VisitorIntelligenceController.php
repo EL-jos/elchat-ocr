@@ -135,10 +135,9 @@ class VisitorIntelligenceController extends Controller
             ->where('site_id', $site->id)
             ->findOrFail($session);
 
-        // An explicit administrator action bypasses the automatic detection
-        // feature flag and delay for this one selected journey.
+        // Bot detection is deliberately manual: this endpoint is reached only
+        // after the administrator clicks the action in the back-office.
         $result = $this->botScoring->scoreSession($model);
-        abort_unless($result !== null, 422, 'La détection bot/humain ne dispose d’aucun signal exploitable pour ce parcours.');
 
         $model = $model->fresh();
 
@@ -147,8 +146,14 @@ class VisitorIntelligenceController extends Controller
             'data' => [
                 'session_id' => (string) $model->id,
                 'bot_score' => $model->bot_score,
+                'bot_classification' => $model->bot_classification,
+                'bot_reasons' => $model->bot_reasons ?? [],
+                'bot_features' => $model->bot_features ?? [],
                 'bot_score_computed_at' => $model->bot_score_computed_at?->toISOString(),
                 'features' => $result['features'],
+                'classification' => $result['classification'],
+                'reasons' => $result['reasons'],
+                'data_quality' => $result['data_quality'],
                 'forced' => true,
             ],
         ]);

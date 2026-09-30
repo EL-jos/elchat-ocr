@@ -48,10 +48,44 @@ return [
         ],
     ],
     'bot_detection' => [
-        // Enabled with a unique-per-session job so frequent browser/replay
-        // batches cannot flood the dedicated Visitor Intelligence queue.
-        'enabled' => env('VISITOR_INTELLIGENCE_BOT_DETECTION_ENABLED', true),
-        'score_delay_seconds' => (int) env('VISITOR_INTELLIGENCE_BOT_SCORE_DELAY_SECONDS', 20),
+        // Bot/human scoring is intentionally manual. It is only executed by
+        // the administrator action in VisitorIntelligenceController.
+        'thresholds' => [
+            // A score alone is never enough to call a session human. The
+            // scoring service also requires observable human activity before
+            // returning that classification.
+            'bot' => (int) env('VISITOR_INTELLIGENCE_BOT_THRESHOLD', 65),
+            'human' => (int) env('VISITOR_INTELLIGENCE_HUMAN_THRESHOLD', 20),
+            'minimum_human_evidence' => (int) env('VISITOR_INTELLIGENCE_MIN_HUMAN_EVIDENCE', 2),
+        ],
+        'weights' => [
+            'webdriver' => 70,
+            'headless_renderer' => 12,
+            'zero_plugins_desktop' => 4,
+            'empty_languages' => 4,
+            'low_hardware_concurrency' => 4,
+            'low_device_memory' => 3,
+            'zero_browser_chrome' => 3,
+            'invalid_screen_dimensions' => 5,
+            'interaction_without_pointer' => 12,
+            'instant_interaction' => 8,
+            'regular_pointer_timing' => 8,
+            'straight_pointer_path' => 8,
+            'duplicate_pointer_positions' => 8,
+            'rapid_input_burst' => 12,
+            'rapid_activity_burst' => 10,
+        ],
+        'behavior' => [
+            // These values are deliberately conservative because rrweb
+            // throttles mousemove capture in the browser.
+            'minimum_moves' => 20,
+            'regular_interval_cv' => 0.08,
+            'straightness_ratio' => 0.995,
+            'instant_interaction_ms' => 120,
+            'rapid_input_span_ms' => 800,
+            'rapid_activity_span_ms' => 1500,
+            'human_pause_ms' => 1200,
+        ],
     ],
     'geo' => [
         'enabled' => env('VISITOR_INTELLIGENCE_GEO_ENABLED', true),

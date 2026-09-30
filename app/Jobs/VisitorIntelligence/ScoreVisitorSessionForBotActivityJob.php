@@ -2,8 +2,6 @@
 
 namespace App\Jobs\VisitorIntelligence;
 
-use App\Models\VisitorSession;
-use App\Services\VisitorIntelligence\VisitorIntelligenceBotScoringService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -21,22 +19,27 @@ class ScoreVisitorSessionForBotActivityJob implements ShouldQueue, ShouldBeUniqu
     public array $backoff = [30, 120];
     public int $uniqueFor = 120;
 
-    public function __construct(public readonly string $sessionId)
+    public function __construct(
+        public readonly string $sessionId,
+        public readonly bool $final = false,
+    )
     {
         $this->onQueue(config('visitor-intelligence.queue', 'visitor-intelligence'));
     }
 
     public function uniqueId(): string
     {
-        return $this->sessionId;
+        return $this->sessionId.($this->final ? ':final' : ':rolling');
     }
 
-    public function handle(VisitorIntelligenceBotScoringService $scoring): void
+    /**
+     * Automatic bot scoring was intentionally retired. Keep the class for
+     * backwards-compatible deserialization of jobs queued by older releases,
+     * but never execute a detection from the queue.
+     */
+    public function handle(): void
     {
-        if (!config('visitor-intelligence.bot_detection.enabled', true)) return;
-
-        $session = VisitorSession::query()->find($this->sessionId);
-        if ($session) $scoring->scoreSession($session);
+        return;
     }
 
     public function failed(?Throwable $exception): void

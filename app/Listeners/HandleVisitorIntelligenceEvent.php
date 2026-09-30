@@ -53,5 +53,6 @@ class HandleVisitorIntelligenceEvent implements ShouldQueue
         ], true)) {
             BuildVisitorSessionSummaryJob::dispatch($session->id);
         }
+
     }
 }

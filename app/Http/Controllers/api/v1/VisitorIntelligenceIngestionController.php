@@ -4,7 +4,6 @@ namespace App\Http\Controllers\api\v1;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\VisitorIntelligence\BuildVisitorSessionAiAnalysisJob;
-use App\Jobs\VisitorIntelligence\ScoreVisitorSessionForBotActivityJob;
 use App\Models\Site;
 use App\Services\VisitorIntelligence\VisitorIntelligenceEventService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceReplayService;
@@ -64,11 +63,6 @@ class VisitorIntelligenceIngestionController extends Controller
         foreach ($data['events'] as $event) {
             $this->events->capture($site, $session, $visitor, $event, $request);
         }
-        if (config('visitor-intelligence.bot_detection.enabled', false) && !empty($data['client_signals'])) {
-            ScoreVisitorSessionForBotActivityJob::dispatch((string) $session->id)
-                ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.bot_detection.score_delay_seconds', 20))));
-        }
-
         return response()->json([
             'success' => true,
             'accepted' => count($data['events']),
@@ -130,10 +124,6 @@ class VisitorIntelligenceIngestionController extends Controller
         $session = $this->events->ensureSession($site, $visitor, $data['session_id'], $firstEvent, $isNewVisitor, $data['client_signals'] ?? []);
         $this->locations->dispatchIfNeeded($session, $request->ip());
         $result = $this->replays->storeChunk($site, $session, $data);
-        if (config('visitor-intelligence.bot_detection.enabled', false) && (!$result['duplicate'] || !empty($data['client_signals']))) {
-            ScoreVisitorSessionForBotActivityJob::dispatch((string) $session->id)
-                ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.bot_detection.score_delay_seconds', 20))));
-        }
         if ($session->fresh()?->ended_at) {
             BuildVisitorSessionAiAnalysisJob::dispatch((string) $session->id)
                 ->delay(now()->addSeconds(max(0, (int) config('visitor-intelligence.ai.analysis_delay_seconds', 20))));

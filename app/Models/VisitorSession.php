@@ -13,6 +13,7 @@ class VisitorSession extends BaseModel
         'is_new_visitor' => 'boolean', 'has_widget_interaction' => 'boolean',
         'converted' => 'boolean', 'metadata' => 'array', 'client_signals' => 'array',
         'bot_score' => 'integer',
+        'bot_reasons' => 'array', 'bot_features' => 'array',
         'location_resolved_at' => 'datetime', 'bot_score_computed_at' => 'datetime',
         'acquisition_attributed_at' => 'datetime',
     ];
