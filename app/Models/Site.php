@@ -86,6 +86,21 @@ class Site extends BaseModel
     public function socialAccounts(): HasMany {
         return $this->hasMany(SocialAccount::class, 'site_id');
     }
+
+    public function socialIntelligenceSetting(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(\App\Models\Social\SocialIntelligenceSetting::class, 'site_id');
+    }
+
+    public function socialContents(): HasMany
+    {
+        return $this->hasMany(\App\Models\Social\SocialContent::class, 'site_id');
+    }
+
+    public function socialAnalyses(): HasMany
+    {
+        return $this->hasMany(\App\Models\Social\SocialAnalysis::class, 'site_id');
+    }
     public function mcpSiteConnectors(){
         return $this->hasMany(McpSiteConnector::class);
     }

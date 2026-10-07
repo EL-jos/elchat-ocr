@@ -23,6 +23,7 @@ use App\Http\Controllers\api\v1\UserController;
 use App\Http\Controllers\api\v1\VisitorIntelligenceController;
 use App\Http\Controllers\api\v5\WebsiteGrowthAdvisorController;
 use App\Http\Controllers\api\v1\VisitorIntelligenceIngestionController;
+use App\Http\Controllers\api\v1\SocialIntelligenceController;
 use App\Http\Controllers\api\v1\WidgetSettingController;
 use App\Http\Controllers\api\v1\WidgetVisitorController;
 use App\Http\Controllers\api\v2\CtaController;
@@ -92,6 +93,8 @@ Route::prefix('v1')->group(function () {
             Route::post('conversations/{conversation}/convert-to-user', 'convertToUser');
         });
         Route::post('/site/{site}/manual-content', [ManualContentController::class, 'store']);
+        Route::get('/pages/{page}/manual-content', [ManualContentController::class, 'show']);
+        Route::put('/pages/{page}/manual-content', [ManualContentController::class, 'update']);
         Route::post('/site/{site}/sitemap', [SitemapController::class, 'store']);
         Route::controller(DocumentController::class)->prefix('/site/{site}/documents')->group(function () {
             Route::get('/', 'index');
@@ -169,6 +172,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/sessions/{session}', 'session');
             Route::get('/sessions/{session}/replay', 'replay');
             Route::get('/sessions/{session}/replay/chunks/{chunk}', 'replayChunk');
+            Route::post('/sessions/{session}/replay/video-export', 'createReplayVideoExport');
+            Route::get('/sessions/{session}/replay/video-export/{export}', 'replayVideoExport');
+            Route::get('/sessions/{session}/replay/video-export/{export}/download', 'downloadReplayVideoExport');
             Route::post('/sessions/{session}/ai-analysis', 'analyzeWithAi');
             Route::post('/sessions/{session}/bot-detection', 'forceBotDetection');
             Route::delete('/sessions/{session}', 'deleteSession');
@@ -181,6 +187,21 @@ Route::prefix('v1')->group(function () {
             Route::delete('/rules/{rule}', 'destroyRule');
             Route::post('/actions/{action}/approve', 'approveAction');
             Route::post('/actions/{action}/execute', 'executeAction');
+        });
+
+        Route::prefix('site/{site}/social-intelligence')->controller(SocialIntelligenceController::class)->group(function () {
+            Route::get('/capabilities', 'capabilities');
+            Route::get('/settings', 'settings');
+            Route::put('/settings', 'updateSettings');
+            Route::get('/overview', 'overview');
+            Route::get('/platforms', 'platforms');
+            Route::get('/contents', 'contents');
+            Route::get('/insights', 'insights');
+            Route::get('/insights/{insight}', 'showInsight');
+            Route::get('/analyses', 'analyses');
+            Route::post('/sync', 'sync');
+            Route::post('/analyses', 'analyze');
+            Route::get('/analyses/{analysis}', 'showAnalysis');
         });
 
         Route::prefix('/site/{site}/mcp')->group(function () {

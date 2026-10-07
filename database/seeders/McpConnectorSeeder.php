@@ -27,6 +27,7 @@ use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
 use App\Domain\MCP\Connectors\ProfessionalEmailImapConnector;
 use App\Domain\MCP\Connectors\SalesHunterConnector;
+use App\Domain\MCP\Connectors\SocialIntelligenceConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
@@ -232,6 +233,13 @@ class McpConnectorSeeder extends Seeder
             'name' => 'Sales Hunter (interne)', 'category' => 'internal', 'auth_type' => 'internal',
             'adapter_class' => SalesHunterConnector::class,
             'description' => "Outils internes de prospection (analyse de site, statut, rédaction) utilisés par l'agent AI Sales Hunter.",
+            'icon_url' => 'https://elchat.io/assets/images/logo.svg', 'is_active' => true,
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'social_intelligence'], [
+            'name' => 'Social Intelligence', 'category' => 'social_media', 'auth_type' => 'internal',
+            'adapter_class' => SocialIntelligenceConnector::class,
+            'description' => 'Tendances, signaux, diagnostics et recommandations fondés sur les comptes sociaux synchronisés dans ELChat.',
             'icon_url' => 'https://elchat.io/assets/images/logo.svg', 'is_active' => true,
         ]);
 

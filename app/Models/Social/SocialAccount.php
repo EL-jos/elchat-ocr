@@ -14,6 +14,11 @@ class SocialAccount extends Model
 {
     use HasUuid;
 
+    protected $hidden = [
+        'access_token',
+        'refresh_token',
+    ];
+
     protected $fillable = [
         'site_id',
         'provider',
@@ -45,6 +50,21 @@ class SocialAccount extends Model
 
     public function events(){
         return $this->hasMany(SocialEvent::class);
+    }
+
+    public function contents()
+    {
+        return $this->hasMany(SocialContent::class);
+    }
+
+    public function contentMetrics()
+    {
+        return $this->hasMany(SocialContentMetric::class);
+    }
+
+    public function syncRuns()
+    {
+        return $this->hasMany(SocialSyncRun::class);
     }
 
     /**

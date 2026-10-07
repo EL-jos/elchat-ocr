@@ -9,12 +9,17 @@ use App\Models\Mcp\McpSiteConnector;
 use App\Models\Site;
 use App\Models\WebsiteGrowthAdvisorAnalysis;
 use App\Models\WebsiteGrowthAdvisorConfiguration;
+use App\Models\Social\SocialAnalysis;
+use App\Models\Social\SocialIntelligenceSetting;
+use App\Jobs\SocialIntelligence\{RunSocialIntelligenceAnalysisJob, SyncSocialIntelligenceJob};
+use App\SocialIntelligence\Services\SocialIntelligenceConfigurationService;
 use App\Models\Proactive\ProactiveMessage;
 use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
 use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorConfigurationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 
@@ -40,6 +45,38 @@ Schedule::command('youtube:sync-comments')
     ->withoutOverlapping(600)   // verrou 10 min — couvre les syncs longs
     ->onOneServer()             // ✅ évite les doublons si plusieurs workers
     ->runInBackground();
+
+Schedule::command('social-intelligence:sync')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(900)
+    ->onOneServer()
+    ->runInBackground();
+
+Schedule::call(function () {
+    SocialIntelligenceSetting::query()
+        ->where('is_active', true)
+        ->whereIn('frequency', ['daily', 'weekly', 'monthly'])
+        ->whereNotNull('next_run_at')
+        ->where('next_run_at', '<=', now())
+        ->with('site')
+        ->each(function (SocialIntelligenceSetting $setting) {
+            $configurationService = app(SocialIntelligenceConfigurationService::class);
+            $configuration = $configurationService->normalize($setting->site, $setting->toArray());
+            $period = $configurationService->period($configuration);
+            $analysis = SocialAnalysis::create([
+                'account_id' => $setting->account_id, 'site_id' => $setting->site_id,
+                'period_from' => $period['from'], 'period_to' => $period['to'],
+                'comparison_from' => $period['comparisonFrom'], 'comparison_to' => $period['comparisonTo'],
+                'configuration' => $configuration, 'depth' => $configuration['depth'],
+                'status' => 'queued', 'phase' => 'queued',
+            ]);
+            $setting->update(['next_run_at' => $configurationService->nextRunAt($configuration, now())]);
+            Bus::chain([
+                new SyncSocialIntelligenceJob((string) $setting->site_id, $configuration['sources']),
+                new RunSocialIntelligenceAnalysisJob((string) $analysis->id),
+            ])->onQueue(config('social-intelligence.queue', 'analytics'))->dispatch();
+        });
+})->everyFifteenMinutes()->name('social-intelligence-analysis-scheduler')->withoutOverlapping(900)->onOneServer();
 
 Schedule::command('subscriptions:finalize-cancellations')->dailyAt('02:00');
 Schedule::command('subscriptions:check-expired-trials')->dailyAt('08:00');

@@ -1437,6 +1437,10 @@
             case 'OPEN_LINK': // 🆕
                 openExternalLink(event.data.payload);
                 break;
+            case 'OPEN_WHATSAPP':
+                if (!iframe || event.source !== iframe.contentWindow || event.origin !== IFRAME_ORIGIN) break;
+                openWhatsApp(event.data.payload);
+                break;
         }
     });
 
@@ -1593,6 +1597,21 @@
         } catch (e) {
             console.warn('[ELChat] URL invalide reçue pour OPEN_LINK:', payload.url);
         }
+    }
+
+    /**
+     * Ouvre WhatsApp depuis la page hôte pour éviter les restrictions COOP
+     * héritées par une navigation lancée depuis l'iframe sandboxée du widget.
+     * Le message ne transporte qu'un numéro, validé avant de construire l'URL.
+     */
+    function openWhatsApp(payload) {
+        const phone = payload && typeof payload.phone === 'string' ? payload.phone : '';
+        if (!/^\d{5,15}$/.test(phone)) {
+            console.warn('[ELChat] Numéro WhatsApp invalide reçu pour OPEN_WHATSAPP.');
+            return;
+        }
+
+        window.open(`https://wa.me/${phone}`, '_blank', 'noopener,noreferrer');
     }
 
     /* =========================

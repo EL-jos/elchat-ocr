@@ -11,6 +11,7 @@ use App\Models\VisitorSessionReplayChunk;
 use App\Models\VisitorSessionSummary;
 use App\Services\VisitorIntelligence\VisitorIntelligenceFrameService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceRealtimeService;
+use App\Services\VisitorIntelligence\VisitorReplayVideoExportService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -22,6 +23,7 @@ class PruneVisitorIntelligenceCommand extends Command
     public function handle(
         VisitorIntelligenceRealtimeService $realtime,
         VisitorIntelligenceFrameService $frames,
+        VisitorReplayVideoExportService $replayVideos,
     ): int
     {
         $days = 2;
@@ -49,8 +51,9 @@ class PruneVisitorIntelligenceCommand extends Command
             if ($sessions->isEmpty()) break;
             $affectedSites = array_merge($affectedSites, $sessions->pluck('site_id')->all());
 
-            DB::transaction(function () use ($sessions, &$deleted, $frames, &$conversationIds) {
+            DB::transaction(function () use ($sessions, &$deleted, $frames, $replayVideos, &$conversationIds) {
                 foreach ($sessions as $session) {
+                    $replayVideos->deleteForSession($session);
                     $eventQuery = AnalyticsEvent::query()
                         ->where('site_id', $session->site_id)
                         ->where('session_id', $session->session_key)
@@ -83,6 +86,7 @@ class PruneVisitorIntelligenceCommand extends Command
         $deleted += VisitorOpportunity::query()->where('detected_at', '<', $cutoff)->delete();
         $deleted += VisitorIntelligenceAction::query()->where('created_at', '<', $cutoff)->delete();
         $deleted += VisitorSessionReplayChunk::query()->where('created_at', '<', $cutoff)->delete();
+        $deleted += $replayVideos->pruneExpired();
         $deleted += $frames->deleteForQuery(AnalyticsEvent::query()
             ->where('source', 'visitor_intelligence')
             ->where('occurred_at', '<', $cutoff));

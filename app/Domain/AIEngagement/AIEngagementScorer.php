@@ -57,32 +57,24 @@ class AIEngagementScorer
         $hardBlock = ($history['has_active_conversation'] ?? false)
             || !empty($history['active_proactive_message_id'])
             || $fatigue['blocked'];
-        $enoughJourney = $pageCount >= (int) $settings->ai_engagement_min_pages
-            || (int) ($session['duration_seconds'] ?? 0) >= (int) $settings->ai_engagement_min_session_seconds
-            || ($intent['level'] ?? 'low') !== 'low';
-        $contextualOpportunity = in_array($pageType, ['pricing', 'product', 'contact', 'support'], true)
-            || !empty($intent['commercial'])
-            || !empty($intent['support'])
-            || !empty($intent['friction']);
+        $scoreThreshold = (int) $settings->ai_engagement_min_score;
+        $scoreThresholdMet = $score >= $scoreThreshold;
 
         if ($hardBlock) {
             $decision = 'do_not_engage';
             $reason = $fatigue['blocked'] ? $fatigue['reason'] : 'Une conversation ou un engagement existe déjà.';
-        } elseif (!$enoughJourney || !$contextualOpportunity) {
-            $decision = 'wait';
-            $reason = 'Contexte encore insuffisant pour une prise de parole pertinente.';
-        } elseif ($score >= (int) $settings->ai_engagement_min_score && ($intent['level'] ?? 'low') !== 'low') {
+        } elseif ($scoreThresholdMet) {
             $decision = 'engage_now';
-            $reason = 'Contexte qualifié : intention et interaction suffisantes pour une prise de parole ciblée.';
+            $reason = 'Seuil de score atteint : déclenchement autorisé.';
         } else {
             $decision = 'wait';
-            $reason = 'Signaux positifs présents mais opportunité encore trop faible ou incomplète.';
+            $reason = 'Le score est inférieur au seuil configuré.';
         }
 
         $signals['fatigue'] = $fatigue;
         $signals['decision_gates'] = [
-            'enough_journey' => $enoughJourney,
-            'contextual_opportunity' => $contextualOpportunity,
+            'score_threshold' => $scoreThreshold,
+            'score_threshold_met' => $scoreThresholdMet,
             'hard_block' => $hardBlock,
         ];
 

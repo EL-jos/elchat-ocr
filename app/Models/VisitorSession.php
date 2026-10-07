@@ -24,4 +24,5 @@ class VisitorSession extends BaseModel
     public function opportunities(): HasMany { return $this->hasMany(VisitorOpportunity::class); }
     public function actions(): HasMany { return $this->hasMany(VisitorIntelligenceAction::class); }
     public function replayChunks(): HasMany { return $this->hasMany(VisitorSessionReplayChunk::class, 'visitor_session_id'); }
+    public function replayVideoExports(): HasMany { return $this->hasMany(VisitorSessionReplayVideoExport::class, 'visitor_session_id'); }
 }

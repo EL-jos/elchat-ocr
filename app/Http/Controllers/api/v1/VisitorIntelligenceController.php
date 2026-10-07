@@ -17,8 +17,10 @@ use App\Services\VisitorIntelligence\VisitorIntelligenceFrameService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceQueryService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceRealtimeService;
 use App\Services\VisitorIntelligence\VisitorIntelligenceReplayService;
+use App\Services\VisitorIntelligence\VisitorReplayVideoExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class VisitorIntelligenceController extends Controller
@@ -32,6 +34,7 @@ class VisitorIntelligenceController extends Controller
         private readonly VisitorIntelligenceFrameService $frames,
         private readonly VisitorIntelligenceRealtimeService $realtime,
         private readonly VisitorIntelligenceReplayService $replays,
+        private readonly VisitorReplayVideoExportService $replayVideoExports,
     ) {}
 
     public function overview(Request $request, Site $site): JsonResponse
@@ -75,7 +78,62 @@ class VisitorIntelligenceController extends Controller
             ],
             'mode' => $rrweb['available'] ? 'rrweb_dom_replay' : 'event_replay',
             'privacy' => 'sensitive_fields_are_excluded_or_masked',
+            'video_export' => $this->replayVideoExports->latestForSession($site, $detail['session']),
         ]])->header('Cache-Control', 'private, no-store');
+    }
+
+    public function createReplayVideoExport(Request $request, Site $site, string $session): JsonResponse
+    {
+        $this->authorizeSiteAccess($request, $site);
+        $data = $request->validate([
+            'skip_inactive' => ['sometimes', 'boolean'],
+            'speed' => ['sometimes', 'numeric', 'between:0.5,4'],
+        ]);
+        $model = VisitorSession::query()
+            ->where('site_id', $site->id)
+            ->findOrFail($session);
+        abort_unless($this->replays->metadataForSession($site, $model)['available'], 422, 'Aucun replay rrweb exploitable n’est disponible pour cette session.');
+
+        $result = $this->replayVideoExports->request(
+            $site,
+            $model,
+            (bool) ($data['skip_inactive'] ?? true),
+            (float) ($data['speed'] ?? 1.0),
+        );
+
+        return response()->json([
+            'data' => $this->replayVideoExports->publicPayload($result['export']),
+            'message' => $result['created'] ? 'La génération de la vidéo MP4 a été mise en file.' : 'Une génération ou une vidéo réutilisable existe déjà.',
+        ], $result['created'] ? 202 : 200)->header('Cache-Control', 'private, no-store');
+    }
+
+    public function replayVideoExport(Request $request, Site $site, string $session, string $export): JsonResponse
+    {
+        $this->authorizeSiteAccess($request, $site);
+        $model = VisitorSession::query()->where('site_id', $site->id)->findOrFail($session);
+        $exportModel = $this->replayVideoExports->findForSession($site, $model, $export);
+
+        return response()->json(['data' => $this->replayVideoExports->publicPayload($exportModel)])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    public function downloadReplayVideoExport(Request $request, Site $site, string $session, string $export)
+    {
+        $this->authorizeSiteAccess($request, $site);
+        $model = VisitorSession::query()->where('site_id', $site->id)->findOrFail($session);
+        $exportModel = $this->replayVideoExports->findForSession($site, $model, $export);
+        abort_unless($exportModel->status === 'ready' && $exportModel->storage_path, 409, 'La vidéo n’est pas encore prête.');
+        abort_if($exportModel->expires_at?->isPast(), 410, 'Cette vidéo a expiré.');
+        abort_if($exportModel->storage_disk === 'public' || config("filesystems.disks.{$exportModel->storage_disk}.visibility") === 'public', 404);
+
+        $disk = Storage::disk($exportModel->storage_disk);
+        abort_unless($disk->exists($exportModel->storage_path), 404, 'Le fichier vidéo est introuvable.');
+
+        return $disk->download($exportModel->storage_path, 'elchat-replay-'.$exportModel->visitor_session_id.'.mp4', [
+            'Content-Type' => 'video/mp4',
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function replayChunk(Request $request, Site $site, string $session, int $chunk): JsonResponse
@@ -248,6 +306,7 @@ class VisitorIntelligenceController extends Controller
     {
         $this->authorizeSiteAccess($request, $site);
         $model = \App\Models\VisitorSession::query()->where('site_id', $site->id)->findOrFail($session);
+        $this->replayVideoExports->deleteForSession($model);
         \Illuminate\Support\Facades\DB::transaction(function () use ($site, $model) {
             // resource_events is the shared Event Intelligence stream; delete
             // only the rows carrying this site/session boundary.

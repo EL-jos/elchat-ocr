@@ -29,6 +29,35 @@ class ManualContentController extends Controller
             'content' => 'required|string|min:20',
         ]);
 
+        return $this->saveAndIndex($site, $validated);
+    }
+
+    public function show(Page $page)
+    {
+        $this->authorizeManualPage($page);
+
+        return response()->json([
+            'id' => $page->id,
+            'title' => $page->title,
+            'content' => $this->editableContent($page),
+        ]);
+    }
+
+    public function update(Request $request, Page $page)
+    {
+        $site = $this->authorizeManualPage($page);
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'content' => 'required|string|min:20',
+        ]);
+
+        return $this->saveAndIndex($site, $validated, $page);
+    }
+
+    private function saveAndIndex(Site $site, array $validated, ?Page $page = null)
+    {
+
         $this->mercureService->post(
             "site/{$site->id}/knowledge/indexing",
             [
@@ -103,19 +132,25 @@ class ManualContentController extends Controller
 
         }
 
-        // 🧱 Création page
-        $page = Page::create([
-            'site_id' => $site->id,
-            'crawl_job_id' => null,
-            'source' => 'manual',
+        $pageData = [
             'title' => $validated['title'],
-            'url' => null,
             'content' => $processed['content'],
             'plain_text' => $processed['plain_text'],
-            //'type' => $processed['type'] ?? 'custom',
-            //'importance' => $processed['importance'] ?? 2.5,
+            'manual_source_content' => $validated['content'],
             'is_indexed' => false,
-        ]);
+        ];
+
+        if ($page) {
+            $page->update($pageData);
+        } else {
+            $page = Page::create([
+                'site_id' => $site->id,
+                'crawl_job_id' => null,
+                'source' => 'manual',
+                'url' => null,
+                ...$pageData,
+            ]);
+        }
 
         $this->mercureService->post(
             "site/{$site->id}/knowledge/indexing",
@@ -128,7 +163,7 @@ class ManualContentController extends Controller
         );
 
         // 🚀 Indexation enrichie (GROS upgrade)
-        $this->indexService->indexPage($page, [
+        $this->indexService->reindexPage($page, [
             'source' => $page->source,
             'site_id' => $site->id,
             /*'type' => $processed['type'] ?? 'custom',
@@ -149,9 +184,55 @@ class ManualContentController extends Controller
         );
 
         return response()->json([
-            'message' => 'Manual content indexed successfully',
+            'message' => $page->wasRecentlyCreated
+                ? 'Manual content indexed successfully'
+                : 'Manual content updated and reindexed successfully',
             'page_id' => $page->id,
         ]);
+    }
+
+    private function editableContent(Page $page): string
+    {
+        if (is_string($page->manual_source_content) && trim($page->manual_source_content) !== '') {
+            return $page->manual_source_content;
+        }
+
+        if (is_string($page->plain_text) && trim($page->plain_text) !== '') {
+            return $page->plain_text;
+        }
+
+        $decoded = json_decode((string) $page->content, true);
+        if (is_array($decoded) && is_array($decoded['sections'] ?? null)) {
+            $sectionText = collect($decoded['sections'])
+                ->map(function ($section): string {
+                    if (! is_array($section)) {
+                        return '';
+                    }
+
+                    return trim(implode("\n", array_filter([
+                        $section['title'] ?? null,
+                        $section['content'] ?? null,
+                    ], static fn ($value) => is_string($value) && trim($value) !== '')));
+                })
+                ->filter()
+                ->implode("\n\n");
+
+            if ($sectionText !== '') {
+                return $sectionText;
+            }
+        }
+
+        return (string) $page->content;
+    }
+
+    private function authorizeManualPage(Page $page): Site
+    {
+        $site = $page->site;
+        $this->authorizeSite($site);
+
+        abort_unless(in_array($page->source, ['manual', 'manuel'], true), 404);
+
+        return $site;
     }
 
     private function authorizeSite(Site $site)

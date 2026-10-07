@@ -142,6 +142,28 @@ class IndexService
             throw $e; // laisse le job gérer le retry
         }
     }
+
+    public function reindexPage(Page $page, array $context = []): void
+    {
+        $chunkIds = $page->chunks()->pluck('id')->all();
+
+        if (! empty($chunkIds)) {
+            $this->vectorIndexService->deleteChunksBatch(
+                $chunkIds,
+                collection: "chunks_{$page->site_id}"
+            );
+            $this->lexicalIndexService->deleteChunksBatch(
+                $chunkIds,
+                siteId: $page->site_id
+            );
+            $page->chunks()->whereIn('id', $chunkIds)->delete();
+        }
+
+        $page->update(['is_indexed' => false]);
+
+        $this->indexPage($page->fresh(), $context);
+    }
+
     /**
      * Indexe le résultat d'analyse vision d'une image dans le pipeline RAG.
      *

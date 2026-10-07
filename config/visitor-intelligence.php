@@ -124,4 +124,23 @@ return [
         'timeout' => (int) env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_TIMEOUT', 90),
         'max_payload_bytes' => (int) env('VISITOR_INTELLIGENCE_RRWEB_CONTEXT_MAX_PAYLOAD_BYTES', 33554432),
     ],
+    'replay_video' => [
+        'renderer_version' => 4,
+        'queue' => env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_QUEUE', 'visitor-replay-export'),
+        'node_binary' => env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_NODE_BINARY', env('VISITOR_INTELLIGENCE_RRWEB_NODE_BINARY', 'node')),
+        'worker_script' => env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_WORKER_SCRIPT', base_path('rrweb-renderer/video.mjs')),
+        'ffmpeg_binary' => env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_FFMPEG_BINARY', 'ffmpeg'),
+        'storage_disk' => env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_STORAGE_DISK', 'local'),
+        'timeout' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_TIMEOUT', 900),
+        'idle_timeout' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_IDLE_TIMEOUT', 180),
+        'max_input_bytes' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_MAX_INPUT_BYTES', 67108864),
+        'max_decoded_bytes' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_MAX_DECODED_BYTES', 268435456),
+        'max_events' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_MAX_EVENTS', 100000),
+        'max_duration_seconds' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_MAX_DURATION_SECONDS', 600),
+        'fps' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_FPS', 12),
+        // Viewports are never rescaled for export; this value is a safety cap.
+        'max_output_dimension' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_MAX_OUTPUT_DIMENSION', 4320),
+        'max_widget_frames' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_MAX_WIDGET_FRAMES', 120),
+        'retention_days' => (int) env('VISITOR_INTELLIGENCE_REPLAY_VIDEO_RETENTION_DAYS', 2),
+    ],
 ];

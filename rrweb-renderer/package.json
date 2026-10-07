@@ -2,8 +2,11 @@
   "name": "elchat-visitor-intelligence-rrweb-renderer",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "@rrweb/replay": "2.0.0",
-    "ws": "^8.18.3"
+    "ws": "8.18.3"
   }
 }

@@ -25,6 +25,7 @@ use App\Domain\MCP\Connectors\OdooConnector;
 use App\Domain\MCP\Connectors\OneDriveConnector;
 use App\Domain\MCP\Connectors\ProfessionalEmailImapConnector;
 use App\Domain\MCP\Connectors\SalesHunterConnector;
+use App\Domain\MCP\Connectors\SocialIntelligenceConnector;
 use App\Domain\MCP\Connectors\SemrushConnector;
 use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
@@ -212,6 +213,8 @@ return [
         ],
 
         'sales_hunter' => ['class' => SalesHunterConnector::class], // connecteur interne, pas de credentials
+
+        'social_intelligence' => ['class' => SocialIntelligenceConnector::class],
 
         'clickup' => ['class' => ClickUpConnector::class],
         'trello' => ['class' => TrelloConnector::class],
