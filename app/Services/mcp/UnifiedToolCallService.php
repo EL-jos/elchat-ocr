@@ -49,6 +49,7 @@ class UnifiedToolCallService
         string $question,
         array $history = [],
         ?string $intent = null,
+        ?string $responseLanguage = null,
     ): ?UnifiedToolCallResult {
         $contextKey = implode(':', [
             (string) $site->id,
@@ -65,7 +66,7 @@ class UnifiedToolCallService
             return null;
         }
 
-        $messages = $this->buildMessages($prompt, $context['system_prompt'], $question, $history);
+        $messages = $this->buildMessages($prompt, $context['system_prompt'], $question, $history, $responseLanguage);
         $settings = $site->settings;
         $options = [
             'task' => 'chat',
@@ -316,11 +317,19 @@ class UnifiedToolCallService
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function buildMessages(?array $prompt, string $unifiedSystemPrompt, string $question, array $history): array
+    private function buildMessages(?array $prompt, string $unifiedSystemPrompt, string $question, array $history, ?string $responseLanguage): array
     {
+        $languageInstruction = $responseLanguage
+            ? sprintf(
+                'Final response language: %s (ISO 639-1: %s). Write all visitor-facing text only in this language, regardless of the language used in the conversation history.',
+                $this->languageName($responseLanguage),
+                $responseLanguage,
+            )
+            : '';
+
         if ($prompt !== null) {
             return [
-                ['role' => 'system', 'content' => trim((string) ($prompt['system'] ?? '')."\n\n{$unifiedSystemPrompt}")],
+                ['role' => 'system', 'content' => trim((string) ($prompt['system'] ?? '')."\n\n{$unifiedSystemPrompt}\n\n{$languageInstruction}")],
                 ...(is_array($prompt['messages'] ?? null) ? $prompt['messages'] : []),
             ];
         }
@@ -332,9 +341,19 @@ class UnifiedToolCallService
         }
 
         return [
-            ['role' => 'system', 'content' => $unifiedSystemPrompt],
+            ['role' => 'system', 'content' => trim($unifiedSystemPrompt."\n\n{$languageInstruction}")],
             ...$messages,
         ];
+    }
+
+    private function languageName(string $language): string
+    {
+        return [
+            'en' => 'English',
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'pt' => 'Portuguese',
+        ][$language] ?? $language;
     }
 
     /**

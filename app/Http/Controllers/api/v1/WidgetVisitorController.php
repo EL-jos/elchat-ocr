@@ -84,6 +84,8 @@ class WidgetVisitorController extends Controller
             'question' => 'nullable|string|max:1000',
             'conversation_id' => 'nullable|uuid',
             'session_id' => 'nullable|string|max:100',
+            'manual_language' => 'nullable|string|max:35',
+            'browser_languages' => 'nullable|string|max:512',
             // 🖼️ Upload d'image pendant la conversation (visiteur widget)
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192',
         ]);
@@ -130,6 +132,8 @@ class WidgetVisitorController extends Controller
             'question' => $data['question'],
             'conversation_id' => $data['conversation_id'] ?? null,
             'session_id' => $data['session_id'] ?? null,
+            'manual_language' => $data['manual_language'] ?? null,
+            'browser_languages' => $data['browser_languages'] ?? null,
         ]);
 
         // 🖼️ Transmettre le fichier image (FileBag) à la requête interne —

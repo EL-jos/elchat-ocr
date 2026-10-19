@@ -131,6 +131,7 @@ class AIEngagementContextBuilder
             'visitor' => [
                 'id' => $event->visitor_id,
                 'is_returning' => !((bool) ($session?->is_new_visitor ?? true)),
+                'browser_languages' => data_get($session?->client_signals ?? [], 'languages'),
             ],
         ];
     }

@@ -63,5 +63,24 @@ class McpAgentTemplateSeeder extends Seeder
                 'is_active' => true,
             ],
         );
+
+        McpAgentTemplate::updateOrCreate(
+            ['key' => 'website_security_auditor'],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'Website Security Auditor',
+                'category' => 'security',
+                'description' => 'Effectue des audits web publics, read-only et bornés au domaine du site, conserve des preuves HTTP, compare les changements et propose des mesures de durcissement. Le code source, les dépendances et les services privés ne sont analysés que lorsqu’un accès dédié sera disponible.',
+                'icon_url' => null,
+                'required_module_slug' => null,
+                'default_config' => [
+                    'objective' => 'audit_website_security_posture_with_traceable_public_http_evidence',
+                    'tone' => 'professional',
+                    'skills' => [],
+                ],
+                'bootstrap_workflow_slugs' => [],
+                'is_active' => true,
+            ],
+        );
     }
 }

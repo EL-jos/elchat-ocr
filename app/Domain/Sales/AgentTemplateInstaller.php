@@ -11,6 +11,7 @@ use App\Models\Mcp\McpSiteConnector;
 use App\Models\Sales\ProspectingConfig;
 use App\Models\Site;
 use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorConfigurationService;
+use App\Services\WebsiteSecurityAuditor\WebsiteSecurityConfigurationService;
 use App\Services\mcp\WorkflowProvisioningService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -30,6 +31,7 @@ class AgentTemplateInstaller
     public function __construct(
         private readonly WorkflowProvisioningService $provisioning,
         private readonly WebsiteGrowthAdvisorConfigurationService $growthAdvisorConfigurations,
+        private readonly WebsiteSecurityConfigurationService $websiteSecurityConfigurations,
     ) {}
 
     public function install(Site $site, McpAgentTemplate $template): McpAgent
@@ -101,6 +103,10 @@ class AgentTemplateInstaller
                         ['mode' => 'auto', 'actor_scope' => 'admin', 'confirm_actor' => 'admin'],
                     );
                 }
+            }
+
+            if ($normalizedTemplateKey === 'website_security_auditor') {
+                $this->websiteSecurityConfigurations->forAgent($site, $agent);
             }
 
             return $agent;

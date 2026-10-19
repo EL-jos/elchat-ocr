@@ -53,6 +53,7 @@ class MultiHopPipelineServiceV2
         ?array $history = [],
         ?ConversationDirective $directive = null,
         ?ActorContext $actor = null,
+        ?string $responseLanguage = null,
     ): HopResponse {
 
         Log::info("MULTI-HOP ACTIVATED");
@@ -270,6 +271,7 @@ class MultiHopPipelineServiceV2
             extra: [
                 'structured_summary' => $state['summary']
             ],
+            responseLanguage: $responseLanguage,
         );
         //Log::info("RESULTAT DE PROMPT BUILDER", $prompt);
 

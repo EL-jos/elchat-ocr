@@ -87,6 +87,7 @@ class ChatService
         protected ResponseGuard $responseGuard,
 
         protected QueryAnalyzer $queryAnalyzer,
+        protected ResponseLanguageResolver $responseLanguageResolver,
         protected IntentRouter $intentRouter,
 
         protected MultiHopPipelineService $multiHopPipelineService,
@@ -114,7 +115,13 @@ class ChatService
     /**
      * Réponse commerciale incarnée (mode production)
      */
-    public function answer(Site $site, string $question, Conversation $conversation): ChatResponse
+    public function answer(
+        Site $site,
+        string $question,
+        Conversation $conversation,
+        ?string $manualLanguage = null,
+        string|array|null $browserLanguages = null,
+    ): ChatResponse
     {
 
         // ─────────────────────────────
@@ -156,6 +163,14 @@ class ChatService
             question: $resolvedQuestion,
             conversation: $conversation,
             rawQuestion: $question,   // 🆕 texte brut, avant réécriture
+        );
+
+        $responseLanguage = $this->responseLanguageResolver->resolve(
+            allowedLanguages: $site->settings?->bot_language,
+            questionLanguage: $baseQueryPlan->detectedLanguage,
+            questionConfidence: $baseQueryPlan->languageConfidence,
+            manualLanguage: $manualLanguage,
+            browserLanguages: $browserLanguages,
         );
 
         $memoryRefreshRequested = $this->trackIntent($site, $conversation, $baseQueryPlan->intent);
@@ -230,6 +245,7 @@ class ChatService
                 question: $question,
                 history: $history,
                 intent: $baseQueryPlan->intent,
+                responseLanguage: $responseLanguage,
             );
 
             if ($mcpResult->status === 'finished') {
@@ -336,7 +352,8 @@ class ChatService
                     conversation: $conversation,
                     history: $history,
                     directive: $directive,
-                    actor: ActorContext::fromConversation($conversation)
+                    actor: ActorContext::fromConversation($conversation),
+                    responseLanguage: $responseLanguage,
                 )
                 : $this->singleHopPipelineService->handle(
                     question: $currentQuestion,
@@ -345,7 +362,8 @@ class ChatService
                     conversation: $conversation,
                     history: $history,
                     directive: $directive,
-                    actor: ActorContext::fromConversation($conversation)
+                    actor: ActorContext::fromConversation($conversation),
+                    responseLanguage: $responseLanguage,
                 );
 
             if (is_null($results->prompt) || (!is_null($results->message))) {
@@ -363,6 +381,7 @@ class ChatService
                         question: $question,
                         history: $history,
                         intent: $baseQueryPlan->intent,
+                        responseLanguage: $responseLanguage,
                     );
                     $actionResponse = $this->chatResponseForUnifiedResult(
                         $unifiedResult,
@@ -385,6 +404,7 @@ class ChatService
                             question: $question,
                             history: $history,
                             intent: $baseQueryPlan->intent,
+                            responseLanguage: $responseLanguage,
                         );
 
                         if ($legacyResult->status === 'finished') {
@@ -427,6 +447,7 @@ class ChatService
                     question: $currentQuestion,
                     history: $history,
                     intent: $queryPlan->intent,
+                    responseLanguage: $responseLanguage,
                 )
                 : null;
             $unifiedActionResponse = $this->chatResponseForUnifiedResult(
@@ -453,6 +474,7 @@ class ChatService
                     question: $question,
                     history: $history,
                     intent: $queryPlan->intent,
+                    responseLanguage: $responseLanguage,
                 );
 
                 if ($legacyResult->status === 'finished') {

@@ -22,6 +22,7 @@ use App\Http\Controllers\api\v1\TypeSiteController;
 use App\Http\Controllers\api\v1\UserController;
 use App\Http\Controllers\api\v1\VisitorIntelligenceController;
 use App\Http\Controllers\api\v5\WebsiteGrowthAdvisorController;
+use App\Http\Controllers\api\v5\WebsiteSecurityAuditorController;
 use App\Http\Controllers\api\v1\VisitorIntelligenceIngestionController;
 use App\Http\Controllers\api\v1\SocialIntelligenceController;
 use App\Http\Controllers\api\v1\WidgetSettingController;
@@ -306,6 +307,32 @@ Route::prefix('v1')->group(function () {
             Route::controller(WebsiteGrowthAdvisorController::class)->group(function () {
                 Route::get('/agents/{agent}/website-growth-advisor-config', 'configuration');
                 Route::put('/agents/{agent}/website-growth-advisor-config', 'updateConfiguration');
+            });
+
+            Route::prefix('/website-security-audits')->controller(WebsiteSecurityAuditorController::class)->group(function () {
+                Route::get('/', 'index');
+                Route::post('/', 'store');
+                Route::get('/{audit}', 'show');
+                Route::delete('/{audit}', 'destroy');
+                Route::get('/baseline/current', 'currentBaseline');
+                Route::post('/baseline', 'establishBaseline');
+            });
+            Route::controller(WebsiteSecurityAuditorController::class)->group(function () {
+                Route::get('/website-security-sbom', 'sbomIndex');
+                Route::post('/website-security-sbom', 'importSbom');
+                Route::post('/website-security-sbom/compare', 'compareSbomSnapshots');
+                Route::get('/website-security-sbom/{manifest}', 'showSbom');
+            });
+            Route::controller(WebsiteSecurityAuditorController::class)->group(function () {
+                Route::get('/agents/{agent}/website-security-config', 'configuration');
+                Route::put('/agents/{agent}/website-security-config', 'updateConfiguration');
+                Route::get('/website-security-sources', 'sources');
+                Route::put('/website-security-sources/{source}', 'connectSource')->whereIn('source', ['repository', 'server', 'database']);
+                Route::delete('/website-security-sources/{source}', 'disconnectSource')->whereIn('source', ['repository', 'server', 'database']);
+                Route::get('/website-security-remediations', 'remediationProposals');
+                Route::post('/website-security-audits/{audit}/remediation-proposals', 'proposeRemediation');
+                Route::post('/website-security-remediations/{proposal}/approve', 'approveRemediation');
+                Route::post('/website-security-remediations/{proposal}/reject', 'rejectRemediation');
             });
 
         });

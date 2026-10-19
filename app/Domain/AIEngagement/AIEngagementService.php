@@ -196,6 +196,7 @@ class AIEngagementService
                     'ai_engagement_decision_id' => $decision->id,
                     'page_type' => $evaluation['page_type'],
                     'strategy' => $messagePlan['strategy'],
+                    'message_key' => $messagePlan['message_key'] ?? $messagePlan['strategy'],
                 ],
             );
 

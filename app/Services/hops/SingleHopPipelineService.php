@@ -106,6 +106,7 @@ class SingleHopPipelineService
         array $history = [],
         ?ConversationDirective $directive = null,   // 🆕
         ?ActorContext $actor = null,
+        ?string $responseLanguage = null,
     ): HopResponse
     {
 
@@ -328,7 +329,8 @@ class SingleHopPipelineService
             conversation: $conversation,
             cats: $ctas,
             entities: $entities,
-            directive: $directive
+            directive: $directive,
+            responseLanguage: $responseLanguage,
         );
 
         //Log::info("Prompt Payload:", $promptPayload);

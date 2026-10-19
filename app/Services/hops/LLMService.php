@@ -57,10 +57,11 @@ class LLMService
 
         $maxTokens = $options['max_tokens'] ?? 800;
         $maxTokensCap = $options['max_tokens_cap'] ?? ($maxTokens * 2);
+        $maxRetries = max(1, min($this->maxRetries, (int) ($options['max_retries'] ?? $this->maxRetries)));
         $timeouts = LLMModelResolver::timeoutsForTask($task ?? 'chat', $options);
 
         foreach ($models as $modelIndex => $model) {
-            for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
+            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
                 $retryAfterSeconds = null;
 
                 try {
@@ -109,15 +110,18 @@ class LLMService
                     // Un modèle sans endpoint ne redeviendra pas disponible au
                     // prochain retry. Les 4xx (sauf 429) sont également des
                     // erreurs déterministes : basculer immédiatement vers le
-                    // modèle de secours sans consommer les retries.
-                    if (! $retryable || $this->isUnavailableModelError($e)) {
+                    // modèle de secours sans consommer les retries. Certaines
+                    // tâches peuvent aussi désactiver uniquement les retries
+                    // transitoires, tout en gardant la seconde tentative d'une
+                    // réponse tronquée (qui ne passe pas par ce catch).
+                    if (! $retryable || $this->isUnavailableModelError($e) || ! (bool) ($options['retry_transient_failures'] ?? true)) {
                         break;
                     }
 
                     $retryAfterSeconds = LLMRetryPolicy::retryAfterSeconds($e);
                 }
 
-                if ($attempt < $this->maxRetries) {
+                if ($attempt < $maxRetries) {
                     $delayMilliseconds = LLMRetryPolicy::delayMilliseconds($attempt, $retryAfterSeconds);
                     if ($delayMilliseconds > 0) {
                         usleep($delayMilliseconds * 1000);
@@ -540,7 +544,8 @@ class LLMService
             $payload['parallel_tool_calls'] = (bool) $options['parallel_tool_calls'];
         }
 
-        $response = $this->postJson('/chat/completions', $payload, $options, true);
+        $streamResponse = (bool) ($options['stream_response'] ?? true);
+        $response = $this->postJson('/chat/completions', $payload, $options, $streamResponse);
 
         $maxResponseBytes = max(262144, min(16 * 1024 * 1024, (int) config(
             'llm.provider.max_response_bytes',

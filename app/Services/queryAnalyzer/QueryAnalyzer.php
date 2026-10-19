@@ -209,6 +209,8 @@ class QueryAnalyzer
         6. Retrieval strategy (based on query complexity)
         7. Constraints (explicit or implicit limits such as budget, time, region, compliance, performance, etc.)
         8. Reply polarity: classify whether "Raw user input" is a short confirmation, a short refusal, or neither
+        9. Language of "Raw user input": provide its ISO 639-1 code and confidence. Use only the raw input, not the conversation summary or rewritten question. Use an empty code and confidence 0 when it is too short or ambiguous to identify reliably.
+        Language confidence must be a number from 0 to 1. Use confidence below 0.75 when the text is too short, mixed, or ambiguous to classify reliably.
 
         =================
         JSON SCHEMA CONTRACT (MANDATORY)
@@ -238,6 +240,8 @@ class QueryAnalyzer
         search_strategy: "single"
         constraints: []
         reply_polarity: "neutral"
+        detected_language: ""
+        language_confidence: 0.0
 
         Every key is REQUIRED.
 
@@ -286,7 +290,11 @@ class QueryAnalyzer
 
           "constraints": [],
 
-          "reply_polarity": "affirmative | negative | neutral"
+          "reply_polarity": "affirmative | negative | neutral",
+
+          "detected_language": "ISO 639-1 code, or empty string when uncertain",
+
+          "language_confidence": 0.0
         }
 
         =================
@@ -484,6 +492,14 @@ class QueryAnalyzer
             : [];
 
         $plan->replyPolarity = $data['reply_polarity'] ?? 'neutral';
+
+        $detectedLanguage = strtolower(trim((string) ($data['detected_language'] ?? '')));
+        $plan->detectedLanguage = preg_match('/^[a-z]{2}$/', $detectedLanguage)
+            ? $detectedLanguage
+            : null;
+        $plan->languageConfidence = is_numeric($data['language_confidence'] ?? null)
+            ? max(0.0, min(1.0, (float) $data['language_confidence']))
+            : 0.0;
 
         return $plan;
     }
@@ -987,6 +1003,17 @@ You MUST now:
         $data['search_strategy'] = strtolower(trim($data['search_strategy']));
         $data['reply_polarity'] = strtolower(trim($data['reply_polarity'] ?? 'neutral'));
 
+        $rawDetectedLanguage = $data['detected_language'] ?? null;
+        $data['detected_language'] = is_string($rawDetectedLanguage)
+            ? strtolower(trim($rawDetectedLanguage))
+            : '';
+        if (! preg_match('/^[a-z]{2}$/', $data['detected_language'])) {
+            $data['detected_language'] = '';
+        }
+        $data['language_confidence'] = is_numeric($data['language_confidence'] ?? null)
+            ? max(0.0, min(1.0, (float) $data['language_confidence']))
+            : 0.0;
+
         $data['top_k'] = max(
             1,
             min(50, intval($data['top_k']))
@@ -1027,6 +1054,10 @@ You MUST now:
             "constraints" => [],
 
             "reply_polarity" => "neutral",
+
+            "detected_language" => "",
+
+            "language_confidence" => 0.0,
         ];
     }
 }

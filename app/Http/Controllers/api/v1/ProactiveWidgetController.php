@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\api\v1;
 
+use App\Domain\AIEngagement\AIEngagementMessageStrategy;
 use App\Domain\Proactive\ProactiveAuditService;
 use App\Enums\AnalyticsEventType;
 use App\Http\Controllers\Controller;
@@ -9,6 +10,7 @@ use App\Models\Proactive\ProactiveMessage;
 use App\Models\Site;
 use App\Models\Visitor;
 use App\Services\analytics\AnalyticsEventService;
+use App\Services\ia\ResponseLanguageResolver;
 use Illuminate\Http\Request;
 
 class ProactiveWidgetController extends Controller
@@ -16,11 +18,17 @@ class ProactiveWidgetController extends Controller
     public function __construct(
         private readonly AnalyticsEventService $analytics,
         private readonly ProactiveAuditService $audit,
+        private readonly AIEngagementMessageStrategy $engagementMessages,
+        private readonly ResponseLanguageResolver $responseLanguages,
     ) {}
 
     public function pending(Request $request, Site $site)
     {
-        $data = $request->validate(['visitor_uuid' => ['required', 'uuid']]);
+        $data = $request->validate([
+            'visitor_uuid' => ['required', 'uuid'],
+            'manual_language' => ['nullable', 'string', 'max:35'],
+            'browser_languages' => ['nullable', 'string', 'max:512'],
+        ]);
         $visitor = Visitor::query()->where('site_id', $site->id)->where('uuid', $data['visitor_uuid'])->first();
         if (! $visitor) {
             return response()->json(['data' => null]);
@@ -41,6 +49,20 @@ class ProactiveWidgetController extends Controller
 
         if (! $message) {
             return response()->json(['data' => null]);
+        }
+
+        if (data_get($message->metadata ?: [], 'source') === 'ai_engagement') {
+            $language = $this->responseLanguages->resolve(
+                allowedLanguages: $site->settings?->bot_language,
+                manualLanguage: $data['manual_language'] ?? null,
+                browserLanguages: $data['browser_languages'] ?? null,
+            );
+            $messageKey = (string) data_get($message->metadata ?: [], 'message_key', data_get($message->metadata ?: [], 'strategy', 'assistance'));
+            $localizedMessage = $this->engagementMessages->messageForStrategy($messageKey, $language);
+            $chatMessage = $message->chatMessage;
+            if ($localizedMessage !== null && $chatMessage && $chatMessage->content !== $localizedMessage) {
+                $chatMessage->update(['content' => $localizedMessage]);
+            }
         }
 
         return response()->json(['data' => [

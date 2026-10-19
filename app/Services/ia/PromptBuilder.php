@@ -10,6 +10,10 @@ use Illuminate\Support\Facades\DB;
 
 class PromptBuilder
 {
+    public function __construct(
+        private readonly ResponseLanguageResolver $responseLanguageResolver,
+    ) {}
+
     public function build(
         Site $site,
         string $question,
@@ -19,7 +23,8 @@ class PromptBuilder
         ?array $cats = [],
         ?array $entities = [],
         ?ConversationDirective $directive = null,   // 🆕
-        ?array $extra = []
+        ?array $extra = [],
+        ?string $responseLanguage = null,
     ): array {
 
         $messages = [];
@@ -82,7 +87,7 @@ MEMORY;
 
 
         return [
-            'system' => $this->buildSystemPrompt($site),
+            'system' => $this->buildSystemPrompt($site, $responseLanguage),
             'messages' => $messages,
             'max_tokens' => $directive?->maxTokens ?? 380,   // 🆕
         ];
@@ -193,18 +198,21 @@ MEMORY;
         return implode("\n\n----------------\n\n", $blocks);
     }
 
-    protected function buildSystemPrompt(Site $site): string
+    protected function buildSystemPrompt(Site $site, ?string $responseLanguage = null): string
     {
         $companyName = $site->name
             ?? parse_url($site->url, PHP_URL_HOST)
             ?? 'notre entreprise';
 
-        $botLanguage = $site->settings->bot_language ?? 'fr';
+        $botLanguage = $responseLanguage ?? $this->responseLanguageResolver->resolve(
+            $site->settings?->bot_language,
+        );
 
         $basePrompt = $this->renderSystemPrompt(
             config('ai.system_prompt'),
             [
                 'BOT_LANGUAGE' => $botLanguage,
+                'BOT_LANGUAGE_NAME' => $this->responseLanguageResolver->languageName($botLanguage),
                 'companyName'  => $companyName,
             ]
         );
@@ -231,6 +239,12 @@ MEMORY;
         if ($role?->prompt) {
             $blocks[] = "COMPORTEMENT :\n" . $role->prompt;
         }
+
+        $blocks[] = sprintf(
+            'CONTRAT DE LANGUE POUR CETTE RÉPONSE : rédige toute la réponse uniquement en %s (ISO 639-1 : %s). Cette langue a déjà été résolue par la plateforme ; ne la redéduis pas depuis le texte ou l’historique.',
+            $this->responseLanguageResolver->languageName($botLanguage),
+            $botLanguage,
+        );
 
         return implode("\n\n==============================\n\n", $blocks);
     }

@@ -5,10 +5,13 @@ use App\Jobs\RunProspectingCampaignJob;
 use App\Jobs\SyncProspectToCrmJob;
 use App\Jobs\Microsoft365SyncJob;
 use App\Jobs\WebsiteGrowthAdvisor\RunWebsiteGrowthAdvisorAnalysisJob;
+use App\Jobs\WebsiteSecurityAuditor\RunWebsiteSecurityAuditJob;
 use App\Models\Mcp\McpSiteConnector;
 use App\Models\Site;
 use App\Models\WebsiteGrowthAdvisorAnalysis;
 use App\Models\WebsiteGrowthAdvisorConfiguration;
+use App\Models\WebsiteSecurityAudit;
+use App\Models\WebsiteSecurityConfiguration;
 use App\Models\Social\SocialAnalysis;
 use App\Models\Social\SocialIntelligenceSetting;
 use App\Jobs\SocialIntelligence\{RunSocialIntelligenceAnalysisJob, SyncSocialIntelligenceJob};
@@ -17,6 +20,7 @@ use App\Models\Proactive\ProactiveMessage;
 use App\Models\Sales\Prospect;
 use App\Models\Sales\ProspectingCampaign;
 use App\Services\WebsiteGrowthAdvisor\WebsiteGrowthAdvisorConfigurationService;
+use App\Services\WebsiteSecurityAuditor\WebsiteSecurityConfigurationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
@@ -223,6 +227,46 @@ Schedule::call(function () {
         }
     }
 })->everyMinute()->name('website-growth-advisor-scheduler')->withoutOverlapping()->onOneServer();
+
+// Website Security Auditor patrol — queue read-only audits using the same
+// Laravel scheduler and the dedicated Website Growth Advisor worker queue.
+Schedule::call(function () {
+    $configurationIds = WebsiteSecurityConfiguration::query()
+        ->where('is_active', true)
+        ->where('execution_mode', 'scheduled')
+        ->whereNotNull('next_run_at')
+        ->where('next_run_at', '<=', now())
+        ->pluck('id');
+
+    foreach ($configurationIds as $configurationId) {
+        $auditId = DB::transaction(function () use ($configurationId): ?string {
+            $configuration = WebsiteSecurityConfiguration::query()->whereKey($configurationId)->lockForUpdate()->first();
+            if (! $configuration || ! $configuration->is_active || $configuration->execution_mode !== 'scheduled' || ! $configuration->next_run_at?->isPast()) return null;
+
+            $running = WebsiteSecurityAudit::query()->where('site_id', $configuration->site_id)->whereIn('status', ['queued', 'running'])->exists();
+            if ($running) return null;
+
+            $settings = app(WebsiteSecurityConfigurationService::class)->effective($configuration);
+            $audit = WebsiteSecurityAudit::query()->create([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'account_id' => $configuration->account_id,
+                'site_id' => $configuration->site_id,
+                'agent_id' => $configuration->agent_id,
+                'trigger' => 'scheduled',
+                'status' => 'queued',
+                'progress' => 0,
+                'phase' => 'queued',
+                'progress_message' => 'Patrouille de sécurité placée dans la file d’attente.',
+                'configuration_snapshot' => $settings,
+            ]);
+            $configuration->next_run_at = app(WebsiteSecurityConfigurationService::class)->scheduleNextRun($settings, now());
+            $configuration->save();
+            return (string) $audit->id;
+        });
+
+        if ($auditId) RunWebsiteSecurityAuditJob::dispatch($auditId);
+    }
+})->everyMinute()->name('website-security-patrol-scheduler')->withoutOverlapping()->onOneServer();
 
 // Reprend les prospects conservés localement lorsqu'un CRM était absent,
 // temporairement indisponible ou lorsqu'une adresse email a été complétée.

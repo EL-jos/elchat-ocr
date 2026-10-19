@@ -16,4 +16,6 @@ class QueryPlan
     public string $searchStrategy = "single";
     public  array $constraints = [];
     public string $replyPolarity = 'neutral';
+    public ?string $detectedLanguage = null;
+    public float $languageConfidence = 0.0;
 }

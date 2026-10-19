@@ -47,7 +47,7 @@ class MultiHopPipelineService
     ) {
         $this->maxHops = max(1, (int) config('llm.multi_hop.max_hops', 2));
     }
-    public function handle(string $question, QueryPlan $plan, Site $site, Conversation $conversation = null, array $history = [], ?ActorContext $actor = null): HopResponse
+    public function handle(string $question, QueryPlan $plan, Site $site, Conversation $conversation = null, array $history = [], ?ActorContext $actor = null, ?string $responseLanguage = null): HopResponse
     {
         $state = $this->initState($plan);
 
@@ -199,7 +199,8 @@ class MultiHopPipelineService
             history: $history,
             conversation: $conversation,
             cats: $ctas ?? [],
-            entities: $entities ?? []
+            entities: $entities ?? [],
+            responseLanguage: $responseLanguage,
         );
         Log::info("Prompt Payload:", [
             "prompt" => $prompt,

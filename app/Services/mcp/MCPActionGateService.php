@@ -382,7 +382,14 @@ PROMPT;
         return $this->thinkingLabelFor($connectorSlug, $toolName);
     }
 
-    public function tryHandle(Site $site, Conversation $conversation, string $question, array $history, ?string $intent = null): MCPGateResult
+    public function tryHandle(
+        Site $site,
+        Conversation $conversation,
+        string $question,
+        array $history,
+        ?string $intent = null,
+        ?string $responseLanguage = null,
+    ): MCPGateResult
     {
         $actor = ActorContext::fromConversation($conversation);
         $permittedTools = $this->permissions->filterAllowedTools($site, $actor, $this->connectorToolSchemas($site));
@@ -395,7 +402,7 @@ PROMPT;
 
         // Aucun agent configuré : comportement historique, passerelle générique.
         if ($activeAgents->isEmpty()) {
-            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, null, $intent);
+            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, null, $intent, $responseLanguage);
         }
 
         $selected = $this->supervisor->route($site, $question, $history, $activeAgents);
@@ -405,14 +412,14 @@ PROMPT;
         if (empty($selected)) {
             $fallback = $activeAgents->firstWhere('is_default', true) ?? $activeAgents->first();
 
-            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $fallback, $intent);
+            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $fallback, $intent, $responseLanguage);
         }
 
         if (count($selected) === 1) {
-            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $selected[0], $intent);
+            return $this->handleForAgent($site, $conversation, $actor, $question, $history, $permittedTools, $selected[0], $intent, $responseLanguage);
         }
 
-        return $this->handleMultiAgent($site, $conversation, $actor, $question, $history, $permittedTools, $selected, $intent);
+        return $this->handleMultiAgent($site, $conversation, $actor, $question, $history, $permittedTools, $selected, $intent, $responseLanguage);
     }
 
     /**
@@ -422,6 +429,7 @@ PROMPT;
     private function handleForAgent(
         Site $site, Conversation $conversation, ActorContext $actor, string $question, array $history,
         array $permittedTools, ?McpAgent $agent, ?string $intent,
+        ?string $responseLanguage = null,
     ): MCPGateResult {
         $agentAllowedNames = ($agent && ! empty($agent->skills)) ? $this->agentSkills->resolveAllowedToolNames($site, $agent->skills) : [];
         $scopedTools = $agentAllowedNames
@@ -451,7 +459,7 @@ PROMPT;
         ];
 
         $messages = [
-            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent, $agent, $agentAllowedNames, $agentWorkflowIds)],
+            ['role' => 'system', 'content' => $this->systemPrompt($site, $actor, $intent, $agent, $agentAllowedNames, $agentWorkflowIds).$this->responseLanguageInstruction($responseLanguage)],
             ...$history,
             ['role' => 'user', 'content' => $question],
         ];
@@ -482,6 +490,7 @@ PROMPT;
     private function handleMultiAgent(
         Site $site, Conversation $conversation, ActorContext $actor, string $question, array $history,
         array $permittedTools, array $agents, ?string $intent,
+        ?string $responseLanguage,
     ): MCPGateResult {
         $answers = [];
         $suggestedActions = [];
@@ -494,7 +503,7 @@ PROMPT;
             }
             $processedAgentIds[] = $agent->id;
 
-            $result = $this->handleForAgent($site, $conversation, $actor, $question, $runningHistory, $permittedTools, $agent, $intent);
+            $result = $this->handleForAgent($site, $conversation, $actor, $question, $runningHistory, $permittedTools, $agent, $intent, $responseLanguage);
 
             if ($result->status === 'awaiting_confirmation') {
                 return $result;
@@ -899,7 +908,7 @@ PROMPT;
         }
     }
 
-    private function executeAuthorized(Site $site, Conversation $conversation, ActorContext $actor, string $connectorSlug, string $toolName, array $params, int $hop, bool $forced = false): ToolResult
+    private function executeAuthorized(Site $site, Conversation $conversation, ActorContext $actor, string $connectorSlug, string $toolName, array $params, int $hop, bool $forced = false, bool $humanApproved = false): ToolResult
     {
         if ($connectorSlug === RAGToolAdapter::CONNECTOR_SLUG) {
             $result = $this->ragTool->search($site, $params['query'] ?? '', actor: $actor);
@@ -934,12 +943,15 @@ PROMPT;
             // Une confirmation ne doit contourner que la seconde demande de
             // confirmation. Le mode deny, le périmètre de l'acteur et une
             // éventuelle modification de permission sont toujours revalidés.
+            // Remediation approval is persisted separately by the auditor. It
+            // may satisfy the confirmation step, but still consumes limits and
+            // rechecks deny mode plus the actor scope below.
             $this->permissions->authorize(
                 $site,
                 $actor,
                 $connectorSlug,
                 $toolName,
-                skipConfirmation: $forced,
+                skipConfirmation: $forced || $humanApproved,
                 consumeDailyLimit: !$forced,
             );
         } catch (Throwable $exception) {
@@ -1260,6 +1272,22 @@ un checkout_url, NE L'ÉCRIS JAMAIS dans ta réponse texte : un bouton s'affiche
 PROMPT;
 
         return $prompt.$this->agentPersona($agent).$this->workflowGuidance($site, $agentAllowedNames, $agentWorkflowIds);
+    }
+
+    private function responseLanguageInstruction(?string $language): string
+    {
+        if (! $language) {
+            return '';
+        }
+
+        $name = [
+            'en' => 'English',
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'pt' => 'Portuguese',
+        ][$language] ?? $language;
+
+        return "\n\nLANGUE DE RÉPONSE VERROUILLÉE : réponds uniquement en {$name} (code ISO 639-1 : {$language}), même si les messages précédents utilisent une autre langue. La plateforme a déjà résolu ce choix.";
     }
 
     /**
@@ -1611,6 +1639,7 @@ PROMPT;
         string $qualifiedToolName,
         array $params,
         bool $systemActor = false,
+        bool $humanApproved = false,
     ): ToolResult
     {
         $actor = $systemActor
@@ -1618,7 +1647,7 @@ PROMPT;
             : ActorContext::fromConversation($conversation);
         ['connector' => $connectorSlug, 'tool' => $toolName] = ToolSchema::fromQualifiedName($qualifiedToolName);
 
-        return $this->executeAuthorized($site, $conversation, $actor, $connectorSlug, $toolName, $params, hop: 0);
+        return $this->executeAuthorized($site, $conversation, $actor, $connectorSlug, $toolName, $params, hop: 0, humanApproved: $humanApproved);
     }
 
     /**

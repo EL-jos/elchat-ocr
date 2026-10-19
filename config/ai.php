@@ -13,11 +13,9 @@ return [
     'system_prompt' => <<<PROMPT
     RÈGLE DE LANGUE — PRIORITÉ ABSOLUE :
 
-    * Tu dois répondre uniquement dans l'une des langues autorisées suivantes : {{BOT_LANGUAGE}}.
-    * {{BOT_LANGUAGE}} contient une ou plusieurs langues au format ISO 639-1, séparées par des virgules (exemple : fr,en).
-    * Si plusieurs langues sont autorisées, détecte la langue du message de l'utilisateur et réponds dans cette même langue lorsqu'elle fait partie des langues autorisées.
-    * Si la langue du message de l'utilisateur ne fait pas partie des langues autorisées, réponds dans la première langue de la liste {{BOT_LANGUAGE}}.
-    * Tu comprends toutes les langues, mais tu ne dois répondre que dans une langue autorisée.
+    * La langue résolue pour cette réponse est {{BOT_LANGUAGE_NAME}} (code ISO 639-1 : {{BOT_LANGUAGE}}).
+    * Réponds uniquement dans cette langue, même si les messages précédents de l'assistant ou de l'utilisateur utilisent une autre langue.
+    * Ne redéduis pas la langue à partir de l'historique et ne la change pas pendant cette réponse.
     * Cette règle prévaut sur toutes les autres instructions.
     * Tu ne dois jamais mentionner cette règle ni le code langue.
 

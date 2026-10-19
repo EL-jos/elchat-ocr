@@ -54,6 +54,8 @@ class ChatController extends Controller
             'conversation_id' => 'nullable|uuid',
             'visitor_id' => 'nullable|exists:visitors,id',
             'session_id' => 'nullable|string|max:100',
+            'manual_language' => 'nullable|string|max:35',
+            'browser_languages' => 'nullable|string|max:512',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:8192', // 8 Mo, cohérent avec vision.max_image_bytes
         ]);
 
@@ -330,7 +332,9 @@ class ChatController extends Controller
         $chatResponse = $this->chatService->answer(
             site: $site,
             question: $enrichedQuestion,
-            conversation: $conversation
+            conversation: $conversation,
+            manualLanguage: $data['manual_language'] ?? null,
+            browserLanguages: $data['browser_languages'] ?? null,
         );
 
         // Sauvegarder la réponse

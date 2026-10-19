@@ -168,21 +168,39 @@ final class WebsiteGrowthAdvisorLiveCrawler
         if (! $this->isSafePublicUrl($url, $errors)) return ['page' => null];
 
         try {
-            $response = ($this->http ?: HttpClient::create())
-                ->request('GET', $url, [
+            $client = $this->http ?: HttpClient::create();
+            $finalUrl = $url;
+            $response = null;
+            for ($redirect = 0; $redirect <= 3; $redirect++) {
+                if (! $this->isSafePublicUrl($finalUrl, $errors) || ! $this->isSameHost($finalUrl, $baseHost)) {
+                    $errors[] = 'Redirection hors du domaine ou vers une adresse interdite refusée : '.$url;
+                    return ['page' => null];
+                }
+                $response = $client->request('GET', $finalUrl, [
                     'timeout' => self::REQUEST_TIMEOUT,
-                    'max_redirects' => 3,
+                    'max_redirects' => 0,
                     'headers' => [
                         'User-Agent' => 'ELChat-WebsiteGrowthAdvisor/1.0',
                         'Accept' => 'text/html,application/xhtml+xml',
                     ],
                 ]);
-            $statusCode = $response->getStatusCode();
-            $finalUrl = $this->normalizeUrl((string) ($response->getInfo('url') ?: $url)) ?: $url;
-            if (! $this->isSameHost($finalUrl, $baseHost)) {
-                $errors[] = 'Redirection hors du domaine refusée : '.$url;
-                return ['page' => null];
+                $statusCode = $response->getStatusCode();
+                if (! in_array($statusCode, [301, 302, 303, 307, 308], true)) break;
+                $location = trim((string) ($response->getHeaders(false)['location'][0] ?? ''));
+                if ($location === '') break;
+                if ($redirect === 3) {
+                    $errors[] = 'Limite de redirections atteinte pour '.$url;
+                    return ['page' => null];
+                }
+                $next = $this->normalizeUrl($this->resolveUrl($location, $finalUrl) ?? '');
+                if (! $next || ! $this->isSameHost($next, $baseHost) || ! $this->isSafePublicUrl($next, $errors)) {
+                    $errors[] = 'Redirection vers une cible hors du périmètre refusée : '.$url;
+                    return ['page' => null];
+                }
+                $finalUrl = $next;
             }
+            if (! $response) return ['page' => null];
+            $statusCode = $response->getStatusCode();
             if ($statusCode >= 400) {
                 $errors[] = 'Réponse HTTP '.$statusCode.' pour '.$url;
                 return ['page' => null];
@@ -202,7 +220,7 @@ final class WebsiteGrowthAdvisorLiveCrawler
             }
             if (strlen($html) > self::MAX_HTML_BYTES) $html = substr($html, 0, self::MAX_HTML_BYTES);
 
-            return ['page' => $this->extractPage($html, $finalUrl, $statusCode, $baseHost)];
+            return ['page' => $this->extractPage($html, $finalUrl, $statusCode, $baseHost, $headers)];
         } catch (Throwable $exception) {
             $errors[] = 'Échec de lecture de '.$url.' : '.Str::limit($exception->getMessage(), 240, '…');
             return ['page' => null];
@@ -210,7 +228,7 @@ final class WebsiteGrowthAdvisorLiveCrawler
     }
 
     /** @return array<string, mixed> */
-    private function extractPage(string $html, string $url, int $statusCode, string $baseHost): array
+    private function extractPage(string $html, string $url, int $statusCode, string $baseHost, array $responseHeaders = []): array
     {
         $crawler = new Crawler($html, $url);
         $title = $crawler->filter('title')->count() ? $this->text($crawler->filter('title')->text(), 300) : null;
@@ -360,7 +378,50 @@ final class WebsiteGrowthAdvisorLiveCrawler
             'body_text' => $this->text($bodyText, self::MAX_TEXT_LENGTH),
             'word_count' => str_word_count(strip_tags($bodyText)),
             'fetched_at' => now()->toISOString(),
+            'security_observations' => $this->securityObservations($responseHeaders, $url),
             'discovered_links' => array_keys($discovered),
+        ];
+    }
+
+    /**
+     * Retain only presence bits and cookie attribute counts. Header values,
+     * cookie names and cookie values are deliberately not persisted.
+     *
+     * @param array<string, array<int, string>> $headers
+     * @return array<string, mixed>
+     */
+    private function securityObservations(array $headers, string $url): array
+    {
+        $present = [];
+        foreach ([
+            'content-security-policy', 'x-content-type-options', 'referrer-policy',
+            'permissions-policy', 'strict-transport-security', 'x-frame-options',
+        ] as $header) {
+            $present[$header] = trim((string) ($headers[$header][0] ?? '')) !== '';
+        }
+
+        $csp = strtolower((string) ($headers['content-security-policy'][0] ?? ''));
+        $present['csp-frame-ancestors'] = preg_match('/(?:^|;)\s*frame-ancestors(?:\s|;|$)/i', $csp) === 1;
+
+        $cookies = ['observed' => 0, 'missing_secure' => 0, 'missing_httponly' => 0, 'missing_samesite' => 0];
+        foreach ($headers['set-cookie'] ?? [] as $cookieHeader) {
+            if (! is_string($cookieHeader) || trim($cookieHeader) === '') continue;
+            $cookies['observed']++;
+            $attributes = [];
+            foreach (array_slice(explode(';', $cookieHeader), 1) as $attribute) {
+                $name = strtolower(trim(explode('=', trim($attribute), 2)[0]));
+                if ($name !== '') $attributes[$name] = true;
+            }
+            foreach (['secure', 'httponly', 'samesite'] as $flag) {
+                if (! isset($attributes[$flag])) $cookies['missing_'.$flag]++;
+            }
+        }
+
+        return [
+            'url' => $url,
+            'https' => strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https',
+            'headers' => $present,
+            'cookies' => $cookies,
         ];
     }
 
@@ -401,7 +462,7 @@ final class WebsiteGrowthAdvisorLiveCrawler
             if (! $this->isSafePublicUrl($robotsUrl, $errors)) return [];
             $response = ($this->http ?: HttpClient::create())->request('GET', $robotsUrl, [
                 'timeout' => 5,
-                'max_redirects' => 2,
+                'max_redirects' => 0,
                 'headers' => ['User-Agent' => 'ELChat-WebsiteGrowthAdvisor/1.0', 'Accept' => 'text/plain'],
             ]);
             $final = $this->normalizeUrl((string) ($response->getInfo('url') ?: $robotsUrl)) ?: $robotsUrl;
