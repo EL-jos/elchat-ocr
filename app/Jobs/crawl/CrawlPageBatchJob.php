@@ -129,13 +129,28 @@ class CrawlPageBatchJob implements ShouldQueue
                         'age' => $page->id,
                         'title' => $page->title
                     ]);
+
+                    $crawlJob->update(['status' => 'done', 'error_message' => null]);
+                    $message = "Page indexée : {$url}";
+                } else {
+                    $errorMessage = 'Aucun contenu exploitable extrait (page inaccessible ou contenu éditorial absent).';
+                    $crawlJob->update([
+                        'status' => 'error',
+                        'error_message' => $errorMessage,
+                    ]);
+                    Log::warning('Crawl terminé sans contenu exploitable', [
+                        'site_id' => $site->id,
+                        'crawl_job_id' => $crawlJob->id,
+                        'url' => $url,
+                        'reason' => $errorMessage,
+                    ]);
+                    $message = "Aucun contenu exploitable : {$url}";
                 }
 
-                $crawlJob->update(['status' => 'done']);
                 $this->sendProgress(
                     $site,
                     $mercureService,
-                    "Page indexée : {$url}"
+                    $message
                 );
             } catch (\Throwable $e) {
                 $crawlJob->update([

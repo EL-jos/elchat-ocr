@@ -12,6 +12,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Site;
 use App\Models\User;
+use App\Models\VisitorSession;
 use App\Services\conversation\VisitorConversionService;
 use App\Services\analytics\AnalyticsEventService;
 use App\Services\MercureService;
@@ -63,14 +64,103 @@ class ConversationController extends Controller
         }
 
         $paginator = $query->paginate($perPage);
+        $conversations = $paginator->items();
+        $this->attachVisitorLocationsToConversations($conversations, $siteId);
 
         return response()->json([
-            'data' => ConversationListResource::collection($paginator->items()),
+            'data' => ConversationListResource::collection($conversations),
             'current_page' => $paginator->currentPage(),
             'last_page' => $paginator->lastPage(),
             'per_page' => $paginator->perPage(),
             'total' => $paginator->total(),
         ]);
+    }
+
+    /** Add session location to sidebar cards without persisting it on conversations. */
+    private function attachVisitorLocationsToConversations(array $conversations, string $siteId): void
+    {
+        $pairs = collect($conversations)
+            ->filter(fn (Conversation $conversation) => $conversation->visitor_id && is_string(data_get($conversation->metadata, 'session_id')))
+            ->map(fn (Conversation $conversation) => [
+                'visitor_id' => (string) $conversation->visitor_id,
+                'session_key' => (string) data_get($conversation->metadata, 'session_id'),
+            ])
+            ->filter(fn (array $pair) => $pair['session_key'] !== '')
+            ->unique(fn (array $pair) => $pair['visitor_id'].'|'.$pair['session_key'])
+            ->values();
+
+        $visitorIds = collect($conversations)
+            ->pluck('visitor_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $sessionsByPair = collect();
+        if ($pairs->isNotEmpty()) {
+            $sessionsByPair = VisitorSession::query()
+                ->where('site_id', $siteId)
+                ->where(function ($query) use ($pairs): void {
+                    foreach ($pairs as $pair) {
+                        $query->orWhere(function ($query) use ($pair): void {
+                            $query->where('visitor_id', $pair['visitor_id'])
+                                ->where('session_key', $pair['session_key']);
+                        });
+                    }
+                })
+                ->get(['id', 'visitor_id', 'session_key', 'country_code', 'country_name', 'city'])
+                ->keyBy(fn (VisitorSession $session) => $session->visitor_id.'|'.$session->session_key);
+        }
+
+        $missingVisitorIds = collect($conversations)
+            ->filter(function (Conversation $conversation) use ($sessionsByPair): bool {
+                if (! $conversation->visitor_id) return false;
+                $sessionKey = (string) data_get($conversation->metadata, 'session_id', '');
+                return ! $sessionsByPair->has($conversation->visitor_id.'|'.$sessionKey);
+            })
+            ->pluck('visitor_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $latestSessionsByVisitor = collect();
+        if ($missingVisitorIds->isNotEmpty()) {
+            $latestByVisitor = VisitorSession::query()
+                ->where('site_id', $siteId)
+                ->whereIn('visitor_id', $missingVisitorIds)
+                ->select('visitor_id')
+                ->selectRaw('MAX(last_seen_at) as latest_seen_at')
+                ->groupBy('visitor_id');
+
+            $latestSessionsByVisitor = VisitorSession::query()
+                ->joinSub($latestByVisitor, 'latest_visitor_sessions', function ($join): void {
+                    $join->on('visitor_sessions.visitor_id', '=', 'latest_visitor_sessions.visitor_id')
+                        ->on('visitor_sessions.last_seen_at', '=', 'latest_visitor_sessions.latest_seen_at');
+                })
+                ->where('visitor_sessions.site_id', $siteId)
+                ->get([
+                    'visitor_sessions.id',
+                    'visitor_sessions.visitor_id',
+                    'visitor_sessions.session_key',
+                    'visitor_sessions.country_code',
+                    'visitor_sessions.country_name',
+                    'visitor_sessions.city',
+                ])
+                ->unique('visitor_id')
+                ->keyBy('visitor_id');
+        }
+
+        foreach ($conversations as $conversation) {
+            $sessionKey = (string) data_get($conversation->metadata, 'session_id', '');
+            $session = $conversation->visitor_id
+                ? ($sessionsByPair->get($conversation->visitor_id.'|'.$sessionKey)
+                    ?? $latestSessionsByVisitor->get($conversation->visitor_id))
+                : null;
+
+            $conversation->setAttribute('visitor_session_id', $session?->id);
+            $conversation->setAttribute('country_code', $session?->country_code);
+            $conversation->setAttribute('country_name', $session?->country_name);
+            $conversation->setAttribute('city', $session?->city);
+        }
     }
 
     /**
@@ -349,6 +439,33 @@ class ConversationController extends Controller
             ->with(['displayedCtas', 'chatFormSubmissions.files'])
             ->orderBy('created_at', 'asc')
             ->paginate($perPage);
+
+        // La localisation est calculée par Visitor Intelligence à partir de
+        // la session du widget. On la charge une fois et on l'ajoute aux
+        // messages de cette réponse admin, sans modifier les données stockées
+        // sur les messages ni exposer ces champs aux endpoints du widget.
+        $visitorSession = null;
+        if ($conversation->visitor_id) {
+            $sessionQuery = VisitorSession::query()
+                ->where('site_id', $siteId)
+                ->where('visitor_id', $conversation->visitor_id);
+            $sessionKey = data_get($conversation->metadata, 'session_id');
+
+            if (is_string($sessionKey) && $sessionKey !== '') {
+                $visitorSession = (clone $sessionQuery)
+                    ->where('session_key', $sessionKey)
+                    ->first();
+            }
+
+            $visitorSession ??= $sessionQuery->orderByDesc('last_seen_at')->first();
+        }
+
+        $paginator->getCollection()->each(function (Message $message) use ($visitorSession): void {
+            $message->setAttribute('visitor_session_id', $visitorSession?->id);
+            $message->setAttribute('country_code', $visitorSession?->country_code);
+            $message->setAttribute('country_name', $visitorSession?->country_name);
+            $message->setAttribute('city', $visitorSession?->city);
+        });
 
         return response()->json([
             'data' => MessageResource::collection($paginator->items()),

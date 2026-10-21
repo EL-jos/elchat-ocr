@@ -26,6 +26,10 @@ class ConversationListResource extends JsonResource
             'lastMessagePreview' => $lastMessage?->content ? Str::limit($lastMessage->content, 90) : null,
             'lastMessageAt' => optional($lastMessage?->created_at ?? $this->updated_at)->toIso8601String(),
             'createdAt' => optional($this->created_at)->toIso8601String(),
+            'visitorSessionId' => $this->visitor_session_id,
+            'countryCode' => $this->country_code,
+            'countryName' => $this->country_name,
+            'city' => $this->city,
         ];
     }
 

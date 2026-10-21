@@ -85,11 +85,25 @@ class SitemapPageBatchJob implements ShouldQueue
                         'source' => 'sitemap',
                         'site_id' => $site->id,
                     ]);
+
+                    $crawlJob->update(['status' => 'done', 'error_message' => null]);
+                    $message = "Crawl : {$crawlJob->page_url}";
+                } else {
+                    $errorMessage = 'Aucun contenu exploitable extrait (page inaccessible ou contenu éditorial absent).';
+                    $crawlJob->update([
+                        'status' => 'error',
+                        'error_message' => $errorMessage,
+                    ]);
+                    $this->notify(
+                        'indexing_warning',
+                        0,
+                        "Aucun contenu exploitable : {$crawlJob->page_url}",
+                        false
+                    );
+                    $message = "Aucun contenu exploitable : {$crawlJob->page_url}";
                 }
 
-                $crawlJob->update(['status' => 'done']);
-
-                $this->notifyProgress($site, "Crawl: {$crawlJob->page_url}");
+                $this->notifyProgress($site, $message);
 
             } catch (\Throwable $e) {
 

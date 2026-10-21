@@ -204,11 +204,21 @@ class CrawlSiteJob implements ShouldQueue
                             'site_id' => $site->id,
                         ]
                     );
-                }
 
-                $crawlJob->update([
-                    'status' => 'done'
-                ]);
+                    $crawlJob->update(['status' => 'done', 'error_message' => null]);
+                } else {
+                    $errorMessage = 'Aucun contenu exploitable extrait (page inaccessible ou contenu éditorial absent).';
+                    $crawlJob->update([
+                        'status' => 'error',
+                        'error_message' => $errorMessage,
+                    ]);
+                    Log::warning('Crawl terminé sans contenu exploitable', [
+                        'site_id' => $site->id,
+                        'crawl_job_id' => $crawlJob->id,
+                        'url' => $url,
+                        'reason' => $errorMessage,
+                    ]);
+                }
 
             } catch (\Throwable $e) {
 

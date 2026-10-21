@@ -46,7 +46,10 @@ class CrawlPageJob implements ShouldQueue
                 'site_id' => $site->id,
             ]);
         } else {
-            Log::warning("Page non créée pour {$this->url}");
+            Log::warning('Crawl terminé sans contenu exploitable', [
+                'site_id' => $site->id,
+                'url' => $this->url,
+            ]);
         }
     }
 

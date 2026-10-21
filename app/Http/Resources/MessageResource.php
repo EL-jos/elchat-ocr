@@ -38,6 +38,13 @@ class MessageResource extends JsonResource
             'visitor_read_at' => optional($this->visitor_read_at)->toIso8601String(),
             'tenant_read_at' => optional($this->tenant_read_at)->toIso8601String(),
             'entities' => $this->entities ?? [],
+            // Présents uniquement sur la réponse admin Conversations, ajoutés
+            // par ConversationController sans persister ces données au niveau
+            // du message.
+            'visitor_session_id' => $this->visitor_session_id,
+            'country_code' => $this->country_code,
+            'country_name' => $this->country_name,
+            'city' => $this->city,
 
             // message_ctas (snapshot des CTAs réellement affichées sur ce message)
             'ctas' => $this->whenLoaded('displayedCtas', fn () => $this->displayedCtas->map(fn ($c) => [

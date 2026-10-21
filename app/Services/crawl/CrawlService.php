@@ -249,18 +249,50 @@ class CrawlService {
 
             $canonical = $this->normalizeUrl($canonical);
 
-            // ✅ 2. Extraction META intelligente
+            // ✅ 2. Métadonnées puis sélection évaluée du contenu principal.
             $meta = $this->extractMeta($crawler);
+            $extractionDiagnostics = [];
+            $main = $this->extractBestContent($crawler, $meta['title'] ?? null, $extractionDiagnostics);
+            if (!$main) {
+                Log::warning('Aucun contenu éditorial exploitable après nettoyage', [
+                    'site_id' => $site->id,
+                    'url' => $url,
+                    'extraction' => $extractionDiagnostics,
+                ]);
+                return null;
+            }
 
-            // ✅ 3. Détection type page
-            $pageType = $this->detectPageType($crawler, $url);
+            if (($extractionDiagnostics['confidence'] ?? null) === 'low') {
+                $textChars = (int) ($extractionDiagnostics['text_chars'] ?? 0);
+                $contentBlocks = (int) ($extractionDiagnostics['content_blocks'] ?? 0);
+                $minimumUsableChars = max(40, (int) config('crawl.content_extraction.minimum_usable_chars', 120));
+                $highConfidenceChars = max(250, (int) config('crawl.content_extraction.high_confidence_chars', 500));
+                $belowQualityGate = $textChars < $minimumUsableChars
+                    || ($contentBlocks === 0 && $textChars < $highConfidenceChars);
 
-            // ✅ 4. Extraction contenu principal
-            $main = $this->extractBestContent($crawler);
-            if (!$main) return null;
+                if ($belowQualityGate) {
+                    $extractionDiagnostics['warnings'][] = 'minimum_content_quality_gate_rejected';
+                    Log::warning('Page ignorée : contenu extrait insuffisant ou peu structuré', [
+                        'site_id' => $site->id,
+                        'url' => $url,
+                        'extraction' => $extractionDiagnostics,
+                    ]);
 
-            // ✅ 5. Nettoyage avancé
-            $this->cleanDomAdvanced($main);
+                    return null;
+                }
+
+                Log::warning('Extraction de contenu à faible confiance', [
+                    'site_id' => $site->id,
+                    'url' => $url,
+                    'extraction' => $extractionDiagnostics,
+                ]);
+            }
+
+            // Les titres et mots-clés de contenu viennent de la zone retenue,
+            // pas des menus, cookies ou widgets présents ailleurs dans la page.
+            $meta['keywords'] = $this->extractKeywords($crawler, $main);
+            $schemas = $this->extractSchemaOrg($crawler);
+            $pageType = $this->detectPageType($main, $url, $schemas);
 
             // 👁️ 5bis. Extraction des images "utiles" du contenu principal
             // (fait APRÈS le nettoyage : nav/footer/header/sidebar/cookie déjà supprimés)
@@ -272,8 +304,6 @@ class CrawlService {
             if (empty($sections)) {
                 $sections = $this->extractLooseSections($main);
             }
-
-            $schemas = $this->extractSchemaOrg($crawler);
 
             // transformer schema en contenu RAG
             $structuredSections = $this->extractStructuredDataAsText($schemas);
@@ -299,6 +329,7 @@ class CrawlService {
                     'importance' => $importance,
                     'keywords' => $meta['keywords'],
                     'schemas'   => $schemas,
+                    'extraction' => $extractionDiagnostics,
                 ], JSON_UNESCAPED_UNICODE),
                 'plain_text' => $this->buildPlainText($sections),
                 'source'       => 'crawl',
@@ -435,23 +466,6 @@ class CrawlService {
             }
         }
     }
-    private function cleanDomAdvanced(Crawler $crawler): void
-    {
-        $selectors = [
-            'script','style','nav','footer','header','aside',
-            'form','iframe','button','svg',
-            '[class*="cookie"]',
-            '[class*="footer"]',
-            '[class*="sidebar"]',
-            '[class*="related"]',
-            '[class*="share"]',
-            '[id*="cookie"]',
-            '[id*="footer"]'
-        ];
-
-        $crawler->filter(implode(',', $selectors))
-            ->each(fn ($n) => $n->getNode(0)?->parentNode?->removeChild($n->getNode(0)));
-    }
     private function extractHierarchicalSections(Crawler $content): array
     {
         $sections = [];
@@ -459,7 +473,8 @@ class CrawlService {
         $h2 = null;
         $h3 = null;
 
-        $content->filter('h1,h2,h3,p,li')->each(function (Crawler $node) use (&$sections, &$h1, &$h2, &$h3) {
+        $seenContent = [];
+        $content->filter('h1,h2,h3,p,li,blockquote,pre,dt,dd,caption,tr')->each(function (Crawler $node) use (&$sections, &$h1, &$h2, &$h3, &$seenContent) {
 
             $tag = strtolower($node->nodeName());
             $text = trim($node->text());
@@ -484,7 +499,13 @@ class CrawlService {
                 return;
             }
 
-            if (in_array($tag, ['p', 'li'])) {
+            if (in_array($tag, ['p', 'li', 'blockquote', 'pre', 'dt', 'dd', 'caption', 'tr'], true)) {
+                $fingerprint = hash('sha256', mb_strtolower(preg_replace('/\s+/u', ' ', $text) ?? $text));
+                if (isset($seenContent[$fingerprint])) {
+                    return;
+                }
+                $seenContent[$fingerprint] = true;
+
                 $sections[] = [
                     'h1' => $h1,
                     'h2' => $h2,
@@ -524,14 +545,50 @@ class CrawlService {
             'language' => $crawler->filter('html')->attr('lang') ?? 'unknown',
         ];
     }
-    private function detectPageType(Crawler $crawler, string $url): string
+    private function detectPageType(Crawler $crawler, string $url, array $schemas = []): string
     {
-        if (str_contains($url, 'blog')) return 'article';
-        if ($crawler->filter('article')->count()) return 'article';
-        if ($crawler->filter('[class*="product"]')->count()) return 'product';
-        if ($crawler->filter('form')->count()) return 'landing';
+        $schemaTypes = [];
+        $this->collectSchemaTypes($schemas, $schemaTypes);
+        $schemaTypes = array_unique($schemaTypes);
+
+        if (in_array('product', $schemaTypes, true)) return 'product';
+        if (in_array('faqpage', $schemaTypes, true)) return 'faq';
+        if (array_intersect(['article', 'blogposting', 'newsarticle', 'report'], $schemaTypes)) return 'article';
+
+        if (preg_match('#/(?:blog|blogs|article|articles|news|actualites)(?:/|$)#i', parse_url($url, PHP_URL_PATH) ?? '')) {
+            return 'article';
+        }
+
+        if ($crawler->filter('[itemtype*="Product"],[itemprop="price"],[itemprop="offers"]')->count()) {
+            return 'product';
+        }
+
+        if ($crawler->filter('article')->count() && $crawler->filter('p,li')->count() > 0) {
+            return 'article';
+        }
+
+        if (preg_match('#/(?:contact|devis|quote|demande)(?:/|$)#i', parse_url($url, PHP_URL_PATH) ?? '')) {
+            return 'landing';
+        }
 
         return 'generic';
+    }
+
+    private function collectSchemaTypes(array $value, array &$types): void
+    {
+        if (isset($value['@type'])) {
+            foreach ((array) $value['@type'] as $type) {
+                if (is_string($type)) {
+                    $types[] = strtolower(preg_replace('/^.*[\/#:]/', '', $type) ?? $type);
+                }
+            }
+        }
+
+        foreach ($value as $item) {
+            if (is_array($item)) {
+                $this->collectSchemaTypes($item, $types);
+            }
+        }
     }
     private function computeImportance(string $url, int $depth, string $type): float
     {
@@ -601,33 +658,12 @@ class CrawlService {
         }
         return '/' . implode('/', $parts);
     }
-    private function extractBestContent(Crawler $crawler): ?Crawler
+    private function extractBestContent(Crawler $crawler, ?string $title = null, ?array &$diagnostics = null): ?Crawler
     {
-        foreach (['main', 'article', '[role="main"]'] as $selector) {
-            if ($crawler->filter($selector)->count()) {
-                return $crawler->filter($selector);
-            }
-        }
+        $result = app(PageContentExtractor::class)->extract($crawler, $title);
+        $diagnostics = $result['diagnostics'];
 
-        // Heuristique densité de texte
-        $bestNode  = null;
-        $bestScore = 0;
-
-        $crawler->filter('div, section')->each(function (Crawler $node) use (&$bestNode, &$bestScore) {
-            $textLength = mb_strlen(trim($node->text()));
-            $linkCount  = $node->filter('a')->count();
-
-            //if ($textLength < 300) return;
-            //if ($linkCount > ($textLength / 100)) return;
-
-            $score = $textLength - ($linkCount * 50);
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestNode  = $node;
-            }
-        });
-
-        return $bestNode ?: ($crawler->filter('body')->count() ? $crawler->filter('body') : null);
+        return $result['content'];
     }
     private function extractLooseSections(Crawler $content): array
     {
@@ -702,9 +738,10 @@ class CrawlService {
             return null;
         }
     }
-    private function extractKeywords(Crawler $crawler): array
+    private function extractKeywords(Crawler $crawler, ?Crawler $content = null): array
     {
         $keywords = [];
+        $keywordContent = $content ?? $crawler;
 
         // meta keywords
         if ($crawler->filter('meta[name="keywords"]')->count()) {
@@ -713,7 +750,7 @@ class CrawlService {
         }
 
         // h1 / h2
-        $crawler->filter('h1,h2,h3')->each(function (Crawler $node) use (&$keywords) {
+        $keywordContent->filter('h1,h2,h3')->each(function (Crawler $node) use (&$keywords) {
             $text = trim($node->text());
             if ($text) {
                 $keywords[] = $text;
@@ -732,7 +769,7 @@ class CrawlService {
 
         $keywords = array_merge(
             $keywords,
-            $this->extractKeywordsFromText($crawler->text())
+            $this->extractKeywordsFromText($keywordContent->text())
         );
 
         return array_values($keywords);
@@ -936,20 +973,20 @@ class CrawlService {
 
         $crawler = new Crawler($html);
 
-        // Nettoyage avancé
-        $main = $this->extractBestContent($crawler);
-        if ($main) $this->cleanDomAdvanced($main);
+        // Même extraction évaluée que pour les pages web, sur une copie du DOM.
+        $extractionDiagnostics = [];
+        $main = $this->extractBestContent($crawler, $meta['title'] ?? null, $extractionDiagnostics);
 
         // Sections hiérarchiques
         $sections = $main ? $this->extractHierarchicalSections($main) : [];
         if (empty($sections)) {
-            $sections = $this->extractLooseSections($crawler);
+            $sections = $this->extractLooseSections($main ?? $crawler);
         }
 
         // Keywords
         $keywords = array_merge(
             $meta['keywords'] ?? [],
-            $this->extractKeywordsFromText($crawler->text())
+            $this->extractKeywordsFromText(($main ?? $crawler)->text())
         );
         $keywords = array_unique($keywords);
 
@@ -978,6 +1015,7 @@ class CrawlService {
                 'importance' => $importance,
                 'keywords'   => $keywords,
                 'schemas'    => [],
+                'extraction' => $extractionDiagnostics,
             ], JSON_UNESCAPED_UNICODE),
             'plain_text' => $this->buildPlainText($sections),
         ];
