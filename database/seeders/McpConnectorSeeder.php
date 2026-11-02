@@ -7,6 +7,7 @@ use App\Domain\MCP\Connectors\BrevoConnector;
 use App\Domain\MCP\Connectors\BufferConnector;
 use App\Domain\MCP\Connectors\ClickUpConnector;
 use App\Domain\MCP\Connectors\DataForSeoConnector;
+use App\Domain\MCP\Connectors\DevPilotConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleAdsConnector;
 use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
@@ -33,6 +34,7 @@ use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
 use App\Domain\MCP\Connectors\TrelloConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
+use App\Domain\MCP\Connectors\WordPressConnector;
 use App\Models\Mcp\McpConnector;
 use Illuminate\Database\Seeder;
 
@@ -44,6 +46,13 @@ class McpConnectorSeeder extends Seeder
 {
     public function run(): void
     {
+        McpConnector::updateOrCreate(['slug' => 'devpilot'], [
+            'name' => 'ELChat DevPilot', 'category' => 'development', 'auth_type' => 'internal',
+            'adapter_class' => DevPilotConnector::class,
+            'description' => 'Agent de développement logiciel sur les projets distants explicitement connectés, avec chemins bornés et validations humaines pour les modifications.',
+            'icon_url' => null, 'is_active' => true,
+        ]);
+
         McpConnector::updateOrCreate(['slug' => 'woocommerce'], [
             'name' => 'WooCommerce',
             'category' => 'e_commerce',
@@ -52,6 +61,16 @@ class McpConnectorSeeder extends Seeder
             'description' => "Consultation et gestion des commandes de votre boutique WooCommerce.",
             'is_active' => true,
             'icon_url' => 'https://cdn.simpleicons.org/woocommerce/96588C',
+        ]);
+
+        McpConnector::updateOrCreate(['slug' => 'wordpress'], [
+            'name' => 'WordPress',
+            'category' => 'cms',
+            'adapter_class' => WordPressConnector::class,
+            'auth_type' => 'api_key',
+            'description' => 'Gestion sécurisée du contenu, des utilisateurs, des commentaires, extensions, thèmes, taxonomies et éditeur de site via l’API REST WordPress et le pont ELChat facultatif.',
+            'is_active' => true,
+            'icon_url' => 'https://cdn.simpleicons.org/wordpress/21759B',
         ]);
 
         McpConnector::updateOrCreate(['slug' => 'google_calendar'], [

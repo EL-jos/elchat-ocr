@@ -86,8 +86,8 @@ return [
         'website_security_auditor' => [
             'model' => env('LLM_WEBSITE_SECURITY_AUDITOR_MODEL', 'openai/gpt-4.1-mini'),
             'fallback_model' => env('LLM_WEBSITE_SECURITY_AUDITOR_FALLBACK_MODEL', 'deepseek/deepseek-v3.2'),
-            'connect_timeout' => 10,
-            'request_timeout' => (int) env('WEBSITE_SECURITY_AUDITOR_REQUEST_TIMEOUT', 45),
+            'connect_timeout' => 5,
+            'request_timeout' => (int) env('WEBSITE_SECURITY_AUDITOR_REQUEST_TIMEOUT', 15),
         ],
 
         'social_lead_rewrite' => [

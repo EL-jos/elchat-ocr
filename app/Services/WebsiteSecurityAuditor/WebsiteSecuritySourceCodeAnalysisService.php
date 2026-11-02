@@ -25,6 +25,7 @@ final class WebsiteSecuritySourceCodeAnalysisService
         $bytes = 0;
         $scanned = 0;
         $parseErrors = 0;
+        $scannedFiles = [];
         foreach (array_slice($files, 0, self::MAX_FILES) as $file) {
             if (! is_array($file) || ! is_string($file['content'] ?? null) || ! is_string($file['path'] ?? null)) {
                 continue;
@@ -37,12 +38,18 @@ final class WebsiteSecuritySourceCodeAnalysisService
             $bytes += $length;
             $scanned++;
             $path = $this->safePath($file['path']);
+            $scannedFiles[] = $path;
             $source = (string) ($file['source'] ?? 'authorized_source');
             $lines = preg_split('/\r\n|\r|\n/', $content) ?: [];
             $signals = [];
+            $insideBlockComment = false;
+            $insideHtmlComment = false;
 
             foreach ($lines as $index => $line) {
                 $lineNo = $index + 1;
+                if ($this->isCommentOnlyLine($line, $insideBlockComment, $insideHtmlComment)) {
+                    continue;
+                }
                 $this->lineSignals($line, $path, $source, $lineNo, $signals);
             }
 
@@ -78,12 +85,14 @@ final class WebsiteSecuritySourceCodeAnalysisService
                     'id' => $id, 'fingerprint' => $fingerprint,
                     'type' => 'source_code_security_signal', 'category' => 'code_analysis',
                     'title' => $signal['title'],
-                    'description' => 'Un motif de code déterministe a été repéré. Ce signal nécessite une revue du flux de données et du contexte; il ne démontre pas à lui seul une vulnérabilité exploitable.',
+                    'description' => $this->findingDescription($signal),
                     'severity' => $signal['severity'], 'status' => 'review_required',
                     'detection_status' => 'detected', 'validation_state' => 'suspected',
                     'ground_truth' => 'not_determinable', 'asset' => $path,
                     'reachability' => 'unknown', 'exposure' => 'unknown', 'exploitability' => 'unknown',
                     'confidence' => 'low', 'source' => $source,
+                    'source_usage' => $this->sourceUsage($path),
+                    'runtime_usage' => 'not_verified',
                     'remediation' => [
                         'recommendation' => $this->recommendation($signal['rule']),
                         'verification_plan' => 'Faire examiner le contexte et les chemins de données par un développeur; relancer l’analyse après une correction approuvée.',
@@ -92,6 +101,7 @@ final class WebsiteSecuritySourceCodeAnalysisService
                         'id' => $id, 'source' => 'bounded_source_file_read', 'type' => 'static_code_pattern',
                         'data' => [
                             'file' => $path, 'line' => $signal['line'], 'rule' => $signal['rule'],
+                            'source_usage' => $this->sourceUsage($path), 'runtime_usage' => 'not_verified',
                             'line_sha256' => hash('sha256', $lineText), 'code_excerpt' => null,
                             'untrusted_content' => true, 'secret_value_included' => false,
                         ],
@@ -100,7 +110,13 @@ final class WebsiteSecuritySourceCodeAnalysisService
             }
         }
 
-        return ['findings' => $findings, 'files_scanned' => $scanned, 'parse_errors' => $parseErrors, 'bytes_scanned' => $bytes];
+        return [
+            'findings' => $findings,
+            'files_scanned' => $scanned,
+            'files' => array_values(array_unique($scannedFiles)),
+            'parse_errors' => $parseErrors,
+            'bytes_scanned' => $bytes,
+        ];
     }
 
     /** @param array<string, array{rule: string, title: string, severity: string, line: int}> $signals */
@@ -167,5 +183,77 @@ final class WebsiteSecuritySourceCodeAnalysisService
         $path = preg_replace('#(^|/)\.\.(?=/|$)#', '$1[redacted]', $path) ?: $path;
 
         return substr($path, 0, 240);
+    }
+
+    private function isCommentOnlyLine(string $line, bool &$insideBlockComment, bool &$insideHtmlComment): bool
+    {
+        $trimmed = trim($line);
+        if ($trimmed === '') {
+            return true;
+        }
+
+        if ($insideBlockComment) {
+            $end = strpos($trimmed, '*/');
+            if ($end === false) {
+                return true;
+            }
+            $insideBlockComment = false;
+            $trimmed = ltrim(substr($trimmed, $end + 2));
+            if ($trimmed === '') {
+                return true;
+            }
+        }
+        if ($insideHtmlComment) {
+            $end = strpos($trimmed, '-->');
+            if ($end === false) {
+                return true;
+            }
+            $insideHtmlComment = false;
+            $trimmed = ltrim(substr($trimmed, $end + 3));
+            if ($trimmed === '') {
+                return true;
+            }
+        }
+
+        if (str_starts_with($trimmed, '/*')) {
+            if (! str_contains(substr($trimmed, 2), '*/')) {
+                $insideBlockComment = true;
+            }
+            return true;
+        }
+        if (str_starts_with($trimmed, '<!--')) {
+            if (! str_contains(substr($trimmed, 4), '-->')) {
+                $insideHtmlComment = true;
+            }
+            return true;
+        }
+
+        return preg_match('/^(?:\/\/|--(?=\s|$)|#(?=\s|!|$)|;|\*\/|\*\s)/', $trimmed) === 1;
+    }
+
+    /** @param array{rule: string, title: string, severity: string, line: int} $signal */
+    private function findingDescription(array $signal): string
+    {
+        return match ($signal['rule']) {
+            'provider_secret_literal', 'hardcoded_credential' => 'Une ligne du fichier contient une valeur qui ressemble à un secret ou à un identifiant codé en dur. La valeur est masquée. Sa validité, ses permissions et son exposition effective ne sont pas vérifiées.',
+            'process_execution' => 'Un appel à une fonction qui lance un processus a été repéré. Le scanner ne sait pas si des données contrôlées par un utilisateur atteignent ses arguments; une injection de commande n’est donc pas confirmée.',
+            'dynamic_code_evaluation' => 'Un appel à eval a été repéré. L’origine de son entrée et son chemin d’exécution ne sont pas établis; l’exécution de contenu fourni par un attaquant n’est pas confirmée.',
+            'unsafe_deserialization' => 'Un appel à unserialize a été repéré. Le scanner ne peut pas établir si la donnée désérialisée est contrôlée par un utilisateur; l’exploitation n’est pas confirmée.',
+            'dynamic_sql' => 'Une construction de requête SQL correspondant à un motif à risque a été repérée. Le scanner n’a pas vérifié le paramétrage de la requête ni le flux des entrées; une injection SQL n’est pas confirmée.',
+            'dynamic_file_access' => 'Un accès fichier semble lié à une entrée dynamique. Le chemin complet, sa validation et sa portée d’exécution n’ont pas été vérifiés; une traversée de répertoire n’est pas confirmée.',
+            'weak_hash_function' => 'Un appel à MD5 ou SHA-1 a été repéré. Le contexte d’utilisation n’est pas connu; le constat ne signifie pas que cette fonction protège des mots de passe.',
+            'debug_enabled' => 'Une configuration qui semble activer le mode debug a été repérée dans le fichier. La configuration réellement chargée en production n’a pas été vérifiée.',
+            'tls_verification_disabled' => 'Une option qui désactive la vérification TLS a été repérée. Le scanner ne peut pas établir si ce chemin de code est exécuté ni dans quel environnement.',
+            'wildcard_cors' => 'Une origine CORS générique a été repérée dans le code. La configuration active en production et les réponses réellement émises n’ont pas été vérifiées.',
+            'unsafe_html_sink' => 'Un motif d’insertion HTML ou de sortie brute a été repéré. L’échappement effectué en amont et l’origine des données n’ont pas été vérifiés; une XSS n’est pas confirmée.',
+            default => 'Un motif de sécurité a été repéré dans le fichier et nécessite une vérification du contexte, des entrées et du chemin d’exécution avant de conclure à une faille exploitable.',
+        };
+    }
+
+    private function sourceUsage(string $path): string
+    {
+        return preg_match('#(^|/)(tests?|specs?|fixtures?|examples?|demos?)(/|$)#i', str_replace('\\', '/', $path)) === 1
+            ? 'test_or_example_file'
+            : 'application_or_configuration_candidate';
     }
 }

@@ -1,8 +1,5 @@
 <?php
 
-ini_set('max_execution_time', 0);
-set_time_limit(0);
-
 use App\Http\Controllers\api\v1\AIRoleController;
 use App\Http\Controllers\api\v1\AnalyticsController;
 use App\Http\Controllers\api\v1\AuthController;
@@ -33,6 +30,7 @@ use App\Http\Controllers\api\v4\SocialIntegrationController;
 use App\Http\Controllers\api\v5\AdminCopilotController;
 use App\Http\Controllers\api\v5\AIEngagementController;
 use App\Http\Controllers\api\v5\MCPAgentController;
+use App\Http\Controllers\api\v5\DevPilotController;
 use App\Http\Controllers\api\v5\MCPCapabilityController;
 use App\Http\Controllers\api\v5\MCPConnectorController;
 use App\Http\Controllers\api\v5\Microsoft365SyncController;
@@ -206,6 +204,34 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::prefix('/site/{site}/mcp')->group(function () {
+
+            Route::controller(DevPilotController::class)->prefix('/devpilot')->group(function () {
+                Route::get('/projects', 'projects');
+                Route::post('/projects', 'storeProject');
+                Route::put('/projects/{project}', 'updateProject');
+                Route::delete('/projects/{project}', 'destroyProject');
+                Route::get('/wordpress-profiles', 'wordpressProfiles');
+                Route::post('/wordpress-profiles', 'storeWordPressProfile');
+                Route::put('/wordpress-profiles/{profile}', 'updateWordPressProfile');
+                Route::delete('/wordpress-profiles/{profile}', 'destroyWordPressProfile');
+                Route::get('/connections', 'connectionIndex');
+                Route::post('/wordpress-bridge/pair', 'pairWordPressBridge')->middleware('throttle:5,1');
+                Route::post('/connections/test', 'testConnectionInput');
+                Route::post('/connections', 'storeConnection');
+                Route::put('/connections/{connection}', 'updateConnection');
+                Route::post('/connections/{connection}/test', 'testConnection');
+                Route::delete('/connections/{connection}', 'destroyConnection');
+                Route::get('/projects/{project}/tasks', 'tasks');
+                Route::post('/projects/{project}/tasks', 'storeTask');
+                Route::delete('/projects/{project}/tasks', 'destroyTasks');
+                Route::delete('/projects/{project}/tasks/{task}', 'destroyTask');
+                Route::get('/projects/{project}/tasks/{task}', 'showTask');
+                Route::post('/projects/{project}/tasks/{task}/reply', 'replyTask');
+                Route::post('/projects/{project}/tasks/{task}/terminal-sessions/{session}/input', 'terminalInput');
+                Route::post('/projects/{project}/tasks/{task}/approve', 'approveTask');
+                Route::post('/projects/{project}/tasks/{task}/reject', 'rejectTask');
+                Route::post('/projects/{project}/tasks/{task}/cancel', 'cancelTask');
+            });
 
             Route::controller(Microsoft365SyncController::class)->prefix('/microsoft-365')->group(function () {
                 Route::get('/sources', 'index');

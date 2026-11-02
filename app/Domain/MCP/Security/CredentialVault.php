@@ -15,6 +15,24 @@ use Illuminate\Support\Facades\Log;
  */
 class CredentialVault
 {
+    /** Encrypts credentials for domain records that need multiple named connections per site. */
+    public function seal(array $credentials): string
+    {
+        return Crypt::encryptString(json_encode($credentials, JSON_THROW_ON_ERROR));
+    }
+
+    /** Decrypts an encrypted credential payload. Invalid ciphertext fails closed. */
+    public function open(string $encrypted): ?array
+    {
+        try {
+            $decoded = json_decode(Crypt::decryptString($encrypted), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
     public function store(Site $site, string $connectorSlug, array $credentials, array $settings = [], array $metadata = []): McpSiteConnector
     {
         $connector = McpConnector::where('slug', $connectorSlug)->firstOrFail();
@@ -22,7 +40,7 @@ class CredentialVault
         return McpSiteConnector::updateOrCreate(
             ['site_id' => $site->id, 'mcp_connector_id' => $connector->id],
             [
-                'credentials_encrypted' => Crypt::encryptString(json_encode($credentials)),
+                'credentials_encrypted' => $this->seal($credentials),
                 'settings' => $settings,
                 'status' => 'connected',
                 'connected_at' => now(),
@@ -45,7 +63,7 @@ class CredentialVault
         }
 
         try {
-            $decrypted = json_decode(Crypt::decryptString($record->credentials_encrypted), true);
+            $decrypted = $this->open($record->credentials_encrypted);
         } catch (\Exception $e) {
             Log::error("MCP: échec de déchiffrement des identifiants pour site {$site->id} / {$connectorSlug}");
             return null;
@@ -56,7 +74,8 @@ class CredentialVault
             return null;
         }
 
-        $credentials = array_merge($decrypted, $record->settings ?? []);
+        // Settings are non-secret connector options; encrypted credentials always win on key collisions.
+        $credentials = array_merge($record->settings ?? [], $decrypted);
         if (!array_key_exists('granted_scopes', $credentials) && $record->granted_scopes !== null) {
             $credentials['granted_scopes'] = $record->granted_scopes;
         }
@@ -75,7 +94,7 @@ class CredentialVault
             ->firstOrFail();
 
         $record->update([
-            'credentials_encrypted' => Crypt::encryptString(json_encode($newCredentials)),
+            'credentials_encrypted' => $this->seal($newCredentials),
             'status' => 'connected',
             'last_used_at' => now(),
         ]);

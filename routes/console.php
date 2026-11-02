@@ -4,9 +4,12 @@ use App\Jobs\Proactive\SendProactiveMessageJob;
 use App\Jobs\RunProspectingCampaignJob;
 use App\Jobs\SyncProspectToCrmJob;
 use App\Jobs\Microsoft365SyncJob;
+use App\Services\DevPilot\DevPilotQueueDispatcher;
+use App\Services\DevPilot\DevPilotTaskMaintenanceService;
 use App\Jobs\WebsiteGrowthAdvisor\RunWebsiteGrowthAdvisorAnalysisJob;
 use App\Jobs\WebsiteSecurityAuditor\RunWebsiteSecurityAuditJob;
 use App\Models\Mcp\McpSiteConnector;
+use App\Models\DevPilot\DevPilotTask;
 use App\Models\Site;
 use App\Models\WebsiteGrowthAdvisorAnalysis;
 use App\Models\WebsiteGrowthAdvisorConfiguration;
@@ -26,6 +29,20 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
+
+Schedule::call(function (): void {
+    $retentionDays = max(1, (int) config('devpilot.task_retention_days', 180));
+    $expired = DevPilotTask::query()->where('created_at', '<', now()->subDays($retentionDays));
+    (clone $expired)->select('id')->orderBy('id')->chunkById(100, function ($tasks): void {
+        foreach ($tasks as $task) app(\App\Services\DevPilot\DevPilotTaskAttachmentService::class)->deleteForTask((string) $task->id);
+    });
+    $expired->delete();
+})->dailyAt('03:45')->name('devpilot-task-retention')->withoutOverlapping()->onOneServer();
+
+Schedule::call(function (): void {
+    app(DevPilotTaskMaintenanceService::class)->run();
+    app(DevPilotQueueDispatcher::class)->dispatchStaleTasks();
+})->everyMinute()->name('devpilot-task-maintenance-and-dispatch')->withoutOverlapping(10)->onOneServer();
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());

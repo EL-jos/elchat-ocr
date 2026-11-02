@@ -68,12 +68,30 @@ final class WebsiteSecurityFindingAnalyzer
             foreach (['missing_secure' => ['Secure', 'medium'], 'missing_httponly' => ['HttpOnly', 'low'], 'missing_samesite' => ['SameSite', 'low']] as $key => [$flag, $severity]) {
                 $count = (int) ($cookies[$key] ?? 0);
                 if ($count < 1) continue;
+                $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+                $description = $count.' cookie(s) de la réponse observée ne déclarent pas l’attribut '.$flag.'. Les noms et valeurs ne sont pas conservés.';
+                if ($flag === 'Secure') {
+                    $description .= $scheme === 'https'
+                        ? ' La réponse observée est en HTTPS. Le scanner n’a pas testé si le site accepte HTTP et ne sait pas si ces cookies sont des cookies de session; un détournement de session n’est pas démontré.'
+                        : ' Le scanner n’a pas établi si ces cookies sont des cookies de session ni si le site accepte une connexion HTTP; un détournement de session n’est pas démontré.';
+                }
                 $findings[] = $this->finding(
                     'cookie_missing_'.strtolower($flag), 'configuration', 'Attribut de cookie '.$flag.' absent',
-                    $count.' cookie(s) observé(s) ne déclarent pas l’attribut '.$flag.'. Les valeurs et noms des cookies ne sont pas conservés.',
+                    $description,
                     $severity, $url,
-                    ['url' => $url, 'cookie_count' => $count, 'attribute' => $flag, 'observed_at' => $observedAt],
-                    'Ajouter l’attribut '.$flag.' aux cookies concernés après vérification du comportement attendu.',
+                    [
+                        'url' => $url,
+                        'scheme' => $scheme !== '' ? $scheme : 'unknown',
+                        'cookie_count' => $count,
+                        'attribute' => $flag,
+                        'cookie_name_or_value_recorded' => false,
+                        'cookie_purpose' => 'unknown',
+                        'http_endpoint_tested' => false,
+                        'observed_at' => $observedAt,
+                    ],
+                    $flag === 'Secure'
+                        ? 'Ajouter Secure au Set-Cookie. Pour une session Laravel, vérifier SESSION_SECURE_COOKIE=true; pour les autres cookies, activer secure=true dans leur configuration. À déployer après confirmation que le site sert la session en HTTPS.'
+                        : 'Ajouter l’attribut '.$flag.' aux cookies concernés après vérification du comportement attendu.',
                     'Relancer la requête et vérifier que les cookies observés incluent l’attribut '.$flag.'.',
                     ['Seuls les attributs des cookies Set-Cookie ont été comptés; leur contenu a été ignoré.'],
                 );

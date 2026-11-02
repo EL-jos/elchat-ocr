@@ -24,6 +24,7 @@
         "phpoffice/phppresentation": "^0.9.0",
         "phpoffice/phpspreadsheet": "^5.4",
         "phpoffice/phpword": "^1.4",
+        "phpseclib/phpseclib": "~3.0.56",
         "romanzipp/laravel-queue-monitor": "^5.4",
         "smalot/pdfparser": "^2.12",
         "socialiteproviders/slack": "^5.2",

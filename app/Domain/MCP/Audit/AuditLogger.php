@@ -33,7 +33,7 @@ class AuditLogger
             'conversation_id' => $conversationId,
             'connector_slug' => $connectorSlug,
             'tool_name' => $toolName,
-            'input_params' => $this->scrub($inputParams),
+            'input_params' => $this->scrub($inputParams, $connectorSlug),
             'output_summary' => $result ? ['summary' => $result->humanSummary, 'success' => $result->success] : null,
             'permission_mode' => $permissionMode,
             'status' => $status,
@@ -43,17 +43,27 @@ class AuditLogger
         ]);
     }
 
-    private function scrub(array $params): array
+    private function scrub(array $params, string $connectorSlug): array
     {
         foreach ($params as $key => $value) {
             if (is_array($value)) {
-                $params[$key] = $this->scrub($value);
+                $params[$key] = $this->scrub($value, $connectorSlug);
                 continue;
             }
             foreach (self::SENSITIVE_KEYS as $sensitive) {
                 if (str_contains(strtolower((string) $key), $sensitive)) {
                     $params[$key] = '***redacted***';
                 }
+            }
+        }
+
+        if (($params['content'] ?? null) !== null && isset($params['project_id'], $params['path'])) {
+            $params['content'] = '[file content omitted from audit log]';
+        }
+
+        if ($connectorSlug === 'wordpress') {
+            foreach (['content', 'base64_content', 'email', 'first_name', 'last_name', 'description', 'excerpt', 'alt_text', 'caption', 'meta'] as $key) {
+                if (array_key_exists($key, $params)) $params[$key] = '[omitted from WordPress audit log]';
             }
         }
 

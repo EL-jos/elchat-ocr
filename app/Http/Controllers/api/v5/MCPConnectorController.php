@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\api\v5;
 
 use App\Domain\MCP\Contracts\ProvidesSiteScopedTools;
+use App\Domain\MCP\Contracts\VerifiesConnectorConnection;
 use App\Domain\MCP\Registry\ConnectorRegistry;
 use App\Domain\MCP\Security\CredentialVault;
 use App\Domain\MCP\Security\PermissionEngine;
@@ -100,7 +101,19 @@ class MCPConnectorController extends Controller
             abort(400, 'Ce connecteur ne peut pas être activé via cette route.');
         }
 
-        $this->vault->store($site, $slug, $validated['credentials'], $validated['settings'] ?? []);
+        $credentials = $validated['credentials'];
+        if ($this->registry->has($slug)) {
+            $adapter = $this->registry->get($slug);
+            if ($adapter instanceof VerifiesConnectorConnection) {
+                try {
+                    $credentials = $adapter->authenticate($credentials);
+                    $adapter->verifyConnection($credentials);
+                } catch (\Throwable $exception) {
+                    return response()->json(['message' => $exception->getMessage()], 422);
+                }
+            }
+        }
+        $this->vault->store($site, $slug, $credentials, $validated['settings'] ?? []);
 
         // 🆕 Pré-remplit mcp_permissions avec les valeurs par défaut suggérées par
         // chaque outil (voir ToolSchema::$defaultMode/$defaultActorScope/$defaultConfirmActor).
@@ -809,6 +822,22 @@ class MCPConnectorController extends Controller
             // semrush
             'domain' => ['nullable', 'string', 'max:255'],
             'database' => ['nullable', 'string', 'max:5'],
+
+            // imap_professional_email — configuration réseau non secrète.
+            // Les usernames/mots de passe restent uniquement dans credentials
+            // et sont chiffrés par CredentialVault.
+            'imap_host' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9.:-]+$/'],
+            'imap_port' => ['nullable', 'integer', 'between:1,65535'],
+            'imap_encryption' => ['nullable', 'in:ssl,starttls,notls'],
+            'smtp_host' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9.:-]+$/'],
+            'smtp_port' => ['nullable', 'integer', 'between:1,65535'],
+            'smtp_encryption' => ['nullable', 'in:ssl,starttls,notls'],
+            'folder_delimiter' => ['nullable', 'string', 'size:1', 'regex:/^[^\x00-\x1F\x7F]$/'],
+            'default_folder' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x1F\x7F]+$/'],
+            'draft_folder' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x1F\x7F]+$/'],
+            'sent_folder' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x1F\x7F]+$/'],
+            'trash_folder' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x1F\x7F]+$/'],
+            'archive_folder' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x1F\x7F]+$/'],
         ]);
 
         $record = $site->mcpSiteConnectors()

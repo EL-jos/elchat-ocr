@@ -31,6 +31,9 @@ return [
 
     'connections' => [
 
+        // DevPilot commands can run for command_max_seconds; retry_after for its
+        // queue connection must exceed that maximum plus the safety margin.
+
         'sync' => [
             'driver' => 'sync',
         ],
@@ -68,7 +71,7 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 21600),
             'block_for' => null,
             'after_commit' => false,
         ],

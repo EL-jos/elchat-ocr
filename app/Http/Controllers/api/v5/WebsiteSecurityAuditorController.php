@@ -118,7 +118,7 @@ class WebsiteSecurityAuditorController extends Controller
         $validated = match ($source) {
             'repository' => $request->validate([
                 'provider' => ['required', Rule::in(['github', 'gitlab'])],
-                'repository' => ['required', 'string', 'max:512'], 'access_token' => ['required', 'string', 'min:8', 'max:4096'],
+                'repository' => ['required', 'string', 'max:512'], 'access_token' => ['nullable', 'string', 'min:8', 'max:4096'],
                 'branch' => ['nullable', 'string', 'max:255'],
             ]),
             'server' => $request->validate([
@@ -131,7 +131,7 @@ class WebsiteSecurityAuditorController extends Controller
             'database' => $request->validate([
                 'driver' => ['required', Rule::in(['mysql', 'pgsql'])], 'host' => ['required', 'string', 'max:253'],
                 'port' => ['nullable', 'integer', 'between:1,65535'], 'database' => ['required', 'string', 'max:128'],
-                'username' => ['required', 'string', 'max:128'], 'password' => ['required', 'string', 'max:4096'],
+                'username' => ['required', 'string', 'max:128'], 'password' => ['nullable', 'string', 'max:4096'],
                 'read_only_confirmed' => ['required', 'accepted'], 'tls_verify' => ['required', 'accepted'],
                 'private_network_authorized' => ['required', 'boolean'],
             ]),

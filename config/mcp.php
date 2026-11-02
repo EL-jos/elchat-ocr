@@ -5,6 +5,7 @@ use App\Domain\MCP\Connectors\BrevoConnector;
 use App\Domain\MCP\Connectors\BufferConnector;
 use App\Domain\MCP\Connectors\ClickUpConnector;
 use App\Domain\MCP\Connectors\DataForSeoConnector;
+use App\Domain\MCP\Connectors\DevPilotConnector;
 use App\Domain\MCP\Connectors\ElchatPlatformConnector;
 use App\Domain\MCP\Connectors\GoogleAdsConnector;
 use App\Domain\MCP\Connectors\GoogleAnalyticsConnector;
@@ -31,6 +32,7 @@ use App\Domain\MCP\Connectors\ShopifyConnector;
 use App\Domain\MCP\Connectors\SlackConnector;
 use App\Domain\MCP\Connectors\TrelloConnector;
 use App\Domain\MCP\Connectors\WooCommerceConnector;
+use App\Domain\MCP\Connectors\WordPressConnector;
 
 return [
     /*
@@ -38,6 +40,30 @@ return [
      * Utile comme kill switch en production sans déployer.
      */
     'enabled' => env('MCP_ENABLED', true),
+
+    'wordpress' => [
+        'timeout_seconds' => (int) env('MCP_WORDPRESS_TIMEOUT_SECONDS', 12),
+        'max_response_bytes' => (int) env('MCP_WORDPRESS_MAX_RESPONSE_BYTES', 2097152),
+    ],
+
+    /*
+     * Exact, reviewed read-only MCP tools DevPilot may use as inspections.
+     * Anything not declared here and not marked isWriteAction is classified
+     * as effect-unknown and requires critical DevPilot confirmation.
+     */
+    'devpilot_read_only_tools' => [
+        'woocommerce.search_products',
+        'woocommerce.get_product',
+        'woocommerce.get_product_variations',
+        'woocommerce.get_product_stock',
+        'woocommerce.recommend_products',
+        'woocommerce.get_reviews',
+        'woocommerce.get_shipping_methods',
+        'woocommerce.estimate_shipping',
+        'woocommerce.track_package',
+        'woocommerce.get_sales_summary',
+        'woocommerce.get_top_products',
+    ],
 
     /*
      * Génération unifiée : le modèle de conversation reçoit les outils MCP
@@ -80,9 +106,11 @@ return [
      * table mcp_connectors, gérée depuis l'admin ou un seeder).
      */
     'connectors' => [
+        'devpilot' => ['class' => DevPilotConnector::class],
         'woocommerce' => [
             'class' => WooCommerceConnector::class,
         ],
+        'wordpress' => ['class' => WordPressConnector::class],
         'google_calendar' => [
             'class' => GoogleCalendarConnector::class,
             'client_id' => env('GOOGLE_CLIENT_ID'),

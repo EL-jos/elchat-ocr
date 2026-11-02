@@ -77,7 +77,11 @@ final class WebsiteSecurityAuditorService
         array_push($findings, ...$assetDiscovery['findings']);
         $progress && $progress(['progress' => 40, 'phase' => 'asset_discovery', 'message' => 'Découverte DNS et réseau autorisée terminée.']);
 
-        $sourceData = ['files' => [], 'dependency_files' => [], 'database' => null, 'sources' => []];
+        $sourceCodeRequested = ! empty($checks['repository_analysis']) || ! empty($checks['server_configuration']);
+        $sourceData = ['files' => [], 'dependency_files' => [], 'database' => null, 'sources' => [], 'source_code_coverage' => [
+            'requested' => false, 'status' => 'not_requested', 'files_read' => 0, 'bytes_read' => 0,
+            'coverage_complete' => false, 'limit_reasons' => [], 'source_names' => [],
+        ]];
         if (! empty($checks['repository_analysis']) || ! empty($checks['server_configuration']) || ! empty($checks['database_posture'])) {
             $progress && $progress(['progress' => 43, 'phase' => 'authorized_sources', 'message' => 'Lecture limitée des sources explicitement connectées.']);
             $sourceData = $this->sourceAccess->collect($site, $checks, $progress);
@@ -118,7 +122,24 @@ final class WebsiteSecurityAuditorService
                 }
             }
         } else {
-            $codeAnalysis = ['files_scanned' => 0, 'parse_errors' => 0, 'bytes_scanned' => 0, 'findings' => []];
+            $codeAnalysis = ['files_scanned' => 0, 'files' => [], 'parse_errors' => 0, 'bytes_scanned' => 0, 'findings' => []];
+        }
+        $sourceCodeCoverage = is_array($sourceData['source_code_coverage'] ?? null)
+            ? $sourceData['source_code_coverage']
+            : ['requested' => $sourceCodeRequested, 'status' => $sourceCodeRequested ? 'unavailable' : 'not_requested', 'files_read' => 0, 'bytes_read' => 0, 'coverage_complete' => false, 'limit_reasons' => [], 'source_names' => []];
+        if ($sourceCodeRequested && ($sourceCodeCoverage['coverage_complete'] ?? false)) {
+            $sourceLimitReasons = is_array($sourceCodeCoverage['limit_reasons'] ?? null) ? $sourceCodeCoverage['limit_reasons'] : [];
+            if ($codeAnalysis['files_scanned'] !== (int) ($sourceCodeCoverage['files_read'] ?? 0)) {
+                $sourceLimitReasons[] = 'source_code_analysis_file_or_byte_limit';
+            }
+            if ($codeAnalysis['parse_errors'] > 0) {
+                $sourceLimitReasons[] = 'php_parse_errors';
+            }
+            if ($sourceLimitReasons !== []) {
+                $sourceCodeCoverage['coverage_complete'] = false;
+                $sourceCodeCoverage['status'] = 'partial';
+                $sourceCodeCoverage['limit_reasons'] = array_values(array_unique($sourceLimitReasons));
+            }
         }
         $progress && $progress(['progress' => 58, 'phase' => 'source_analysis', 'message' => 'Collecte des sources terminée; consolidation de l’inventaire.']);
 
@@ -213,8 +234,10 @@ final class WebsiteSecurityAuditorService
         if (! empty($configuration['ai_interpretation'])) {
             $progress && $progress(['progress' => 82, 'phase' => 'ai_analysis', 'message' => 'Interprétation du jeu de preuves borné.']);
             $unknowns = [];
-            if ($codeAnalysis['files_scanned'] === 0) {
-                $unknowns[] = 'analyse du code source autorisé';
+            if ($sourceCodeRequested && ! ($sourceCodeCoverage['coverage_complete'] ?? false)) {
+                $unknowns[] = 'couverture partielle du code source autorisé';
+            } elseif (! $sourceCodeRequested) {
+                $unknowns[] = 'analyse du code source non demandée';
             }
             $unknowns[] = 'reachability complète et exploitabilité démontrée';
             $unknowns[] = 'attack paths validés';
@@ -241,7 +264,7 @@ final class WebsiteSecurityAuditorService
             } else {
                 $unknowns[] = 'avis vulnérabilités hors couverture OSV';
             }
-            $progress && $progress(['progress' => 84, 'phase' => 'ai_analysis', 'message' => 'Interprétation IA en cours; chaque modèle est borné à 20 secondes.']);
+            $progress && $progress(['progress' => 84, 'phase' => 'ai_analysis', 'message' => 'Préparation du résumé en langage clair.']);
             $aiAnalysis = $this->aiAnalysis->interpret($findings, $unknowns, $assetDiscovery['attack_paths']);
             $progress && $progress(['progress' => 90, 'phase' => 'ai_analysis', 'message' => 'Interprétation IA terminée; préparation du rapport.']);
         }
@@ -257,8 +280,10 @@ final class WebsiteSecurityAuditorService
         if (($configuration['audit_mode'] ?? 'audit') === 'investigation') {
             $warnings[] = 'Le mode investigation reste limité aux contrôles HTTP publics et read-only disponibles.';
         }
-        if (! empty($sourceData['sources']['server']['scan_limited'])) {
-            $warnings[] = 'La lecture SFTP a été bornée pour éviter une attente excessive; certains dossiers ou fichiers peuvent ne pas avoir été examinés.';
+        if ($sourceCodeRequested && ! ($sourceCodeCoverage['coverage_complete'] ?? false)) {
+            $warnings[] = 'La couverture du code source est partielle : certains fichiers peuvent être hors périmètre, trop volumineux, inaccessibles ou au-delà des limites de lecture.';
+        } elseif ($sourceCodeRequested) {
+            $warnings[] = 'Tous les fichiers source texte pris en charge dans la source connectée ont été lus; cela ne vérifie pas quels fichiers sont réellement chargés en production.';
         }
 
         $available = ['public_http_headers', 'https_transport_observation', 'set_cookie_attribute_counts', 'same_host_link_discovery'];
@@ -283,6 +308,8 @@ final class WebsiteSecurityAuditorService
         $notAvailable = ['authenticated_endpoints', 'full_data_flow_reachability', 'validated_attack_path_analysis'];
         if ($codeAnalysis['files_scanned'] === 0) {
             $notAvailable[] = 'source_code_analysis';
+        } elseif ($sourceCodeRequested && ! ($sourceCodeCoverage['coverage_complete'] ?? false)) {
+            $notAvailable[] = 'complete_source_code_coverage';
         }
         if (($sourceData['sources']['database']['status'] ?? null) !== 'available') {
             $notAvailable[] = 'database_schema_analysis';
@@ -333,6 +360,29 @@ final class WebsiteSecurityAuditorService
                 'source_content_sent_to_llm' => false,
                 'database_rows_read' => 0,
             ],
+            'source_code_analysis' => [
+                'requested' => $sourceCodeRequested,
+                'status' => $sourceCodeRequested
+                    ? (($sourceCodeCoverage['coverage_complete'] ?? false) ? 'complete_within_scope' : 'partial')
+                    : 'not_requested',
+                'files_read' => (int) ($sourceCodeCoverage['files_read'] ?? 0),
+                'files_scanned' => $codeAnalysis['files_scanned'],
+                'bytes_read' => (int) ($sourceCodeCoverage['bytes_read'] ?? 0),
+                'bytes_scanned' => $codeAnalysis['bytes_scanned'],
+                'signals_found' => count($codeAnalysis['findings']),
+                'parse_errors' => $codeAnalysis['parse_errors'],
+                'coverage_complete' => (bool) ($sourceCodeCoverage['coverage_complete'] ?? false),
+                'runtime_usage' => 'not_verified',
+                'files' => $codeAnalysis['files'],
+                'sources' => $sourceData['sources'],
+                'limits' => $sourceCodeCoverage['limits'] ?? [],
+                'limit_reasons' => array_values(array_filter($sourceCodeCoverage['limit_reasons'] ?? [], 'is_string')),
+                'explanation' => $sourceCodeRequested
+                    ? (($sourceCodeCoverage['coverage_complete'] ?? false)
+                        ? 'Tous les fichiers texte pris en charge trouvés dans la source connectée ont été analysés (hors dossiers exclus et fichiers trop volumineux). Cela confirme la présence des motifs repérés, pas leur exécution en production ni leur exploitabilité.'
+                        : 'Analyse statique limitée aux fichiers source reconnus et accessibles. Le scan exclut notamment vendor, node_modules et les fichiers générés; il est plafonné à 80 fichiers, 4 Mio par source et 128 Kio par fichier. La présence d’un motif ne prouve ni son exécution en production ni son exploitabilité.')
+                    : 'L’analyse du code source n’était pas sélectionnée pour cet audit.',
+            ],
             'vulnerability_intelligence' => [
                 'status' => $intelligence['status'] ?? 'not_requested',
                 'source' => $intelligence['source'] ?? 'OSV',
@@ -359,12 +409,15 @@ final class WebsiteSecurityAuditorService
         $status = $pages === [] || ($crawl['status'] ?? null) === 'unavailable'
             ? 'partial'
             : (($crawl['status'] ?? null) === 'partial' ? 'partial' : 'completed');
+        if ($sourceCodeRequested && ! ($sourceCodeCoverage['coverage_complete'] ?? false)) {
+            $status = 'partial';
+        }
 
         $audit->forceFill([
             'status' => $status,
             'progress' => 100,
             'phase' => $status,
-            'progress_message' => $status === 'completed' ? 'Analyse terminée dans le périmètre disponible.' : 'Analyse partielle; consultez les limites et avertissements.',
+            'progress_message' => $status === 'completed' ? 'Analyse terminée dans le périmètre disponible.' : 'Analyse partielle; consultez les limites et avertissements, notamment la couverture du code source.',
             'scope_report' => $scopeReport,
             'inventory' => $inventory,
             'findings' => array_values($findings),

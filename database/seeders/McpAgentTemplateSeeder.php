@@ -18,6 +18,28 @@ class McpAgentTemplateSeeder extends Seeder
     public function run(): void
     {
         McpAgentTemplate::updateOrCreate(
+            ['key' => 'devpilot'],
+            [
+                'id' => (string) Str::uuid(),
+                'name' => 'ELChat DevPilot',
+                'category' => 'development',
+                'description' => 'Analyse et modifie des projets sur les serveurs sélectionnés, selon les capacités et permissions réellement vérifiées. Les changements distants sensibles attendent une validation humaine.',
+                'icon_url' => null,
+                'required_module_slug' => null,
+                'default_config' => [
+                    'objective' => 'Développer et maintenir les projets distants choisis par le membre du tenant, avec preuves et limites explicites.',
+                    'tone' => 'professional',
+                    'skills' => [
+                        'devpilot__list_projects', 'devpilot__inspect_project', 'devpilot__list_files',
+                        'devpilot__read_file', 'devpilot__search_files', 'devpilot__database_schema',
+                    ],
+                ],
+                'bootstrap_workflow_slugs' => [],
+                'is_active' => true,
+            ],
+        );
+
+        McpAgentTemplate::updateOrCreate(
             ['key' => 'sales_hunter'],
             [
                 'id' => (string) Str::uuid(),

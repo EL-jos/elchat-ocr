@@ -29,12 +29,8 @@ class PermissionEngine
 
         // 🆕 Un outil réservé à l'admin ne peut pas être appelé par un visiteur,
         // même si mode='auto'.
-        if ($permission->actor_scope === 'admin' && !$actor->isAdmin) {
+        if (! $this->actorMayInvoke((string) $permission->actor_scope, $actor)) {
             throw new PermissionDeniedException("L'action {$connectorSlug}.{$toolName} est réservée à un administrateur.");
-        }
-
-        if ($consumeDailyLimit) {
-            $this->enforceDailyLimit($site, $permission);
         }
 
         if ($permission->mode === 'confirm' && !$skipConfirmation) {
@@ -44,6 +40,11 @@ class PermissionEngine
                 [],
                 confirmActor: $permission->confirm_actor ?? 'admin',
             );
+        }
+
+        // A confirmation prompt has not executed the action, so it must not spend quota.
+        if ($consumeDailyLimit) {
+            $this->enforceDailyLimit($site, $permission);
         }
 
         return $permission;
@@ -67,7 +68,7 @@ class PermissionEngine
             }
             // Un admin voit aussi les outils 'visitor' (il peut tout faire),
             // un visiteur ne voit jamais les outils 'admin'.
-            return $rule->actor_scope === 'visitor' || $actor->isAdmin;
+            return $this->actorMayInvoke((string) $rule->actor_scope, $actor);
         }));
     }
 
@@ -99,12 +100,17 @@ class PermissionEngine
         }
 
         $key = "mcp:calls:{$site->id}:{$permission->connector_slug}:{$permission->tool_name}:" . now()->format('Y-m-d');
-        $count = (int) Cache::get($key, 0);
+        Cache::add($key, 0, now()->endOfDay());
+        $count = (int) Cache::increment($key);
 
-        if ($count >= $permission->daily_call_limit) {
+        if ($count > $permission->daily_call_limit) {
+            Cache::decrement($key);
             throw new PermissionDeniedException("Limite quotidienne atteinte pour {$permission->connector_slug}.{$permission->tool_name}.");
         }
+    }
 
-        Cache::put($key, $count + 1, now()->endOfDay());
+    private function actorMayInvoke(string $actorScope, ActorContext $actor): bool
+    {
+        return $actorScope === 'visitor' || $actor->isAdmin;
     }
 }

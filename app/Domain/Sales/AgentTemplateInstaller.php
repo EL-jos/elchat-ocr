@@ -109,6 +109,28 @@ class AgentTemplateInstaller
                 $this->websiteSecurityConfigurations->forAgent($site, $agent);
             }
 
+            if ($normalizedTemplateKey === 'devpilot') {
+                $connector = McpConnector::query()->where('slug', 'devpilot')->first();
+                if ($connector) {
+                    McpSiteConnector::firstOrCreate(
+                        ['site_id' => $site->id, 'mcp_connector_id' => $connector->id],
+                        ['status' => 'connected', 'connected_at' => now()],
+                    );
+                }
+
+                foreach ([
+                    ['list_projects', 'auto'], ['inspect_project', 'confirm'], ['list_files', 'auto'],
+                    ['read_file', 'auto'], ['search_files', 'auto'], ['write_file', 'confirm'],
+                    ['delete_file', 'confirm'], ['rename_file', 'confirm'], ['create_directory', 'confirm'],
+                    ['run_command', 'confirm'], ['database_schema', 'auto'],
+                ] as [$tool, $mode]) {
+                    McpPermission::firstOrCreate(
+                        ['site_id' => $site->id, 'connector_slug' => 'devpilot', 'tool_name' => $tool],
+                        ['mode' => $mode, 'actor_scope' => 'admin', 'confirm_actor' => 'admin'],
+                    );
+                }
+            }
+
             return $agent;
         });
     }

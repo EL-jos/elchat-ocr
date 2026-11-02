@@ -63,11 +63,24 @@ class OpenRouterToolClient
      * @param array $tools Format OpenAI: [{type: 'function', function: {name, description, parameters}}]
      * @return array ['text' => ?string, 'tool_calls' => array] — tool_calls vide si le modèle a répondu directement.
      */
-    public function send(array $messages, array $tools, string $toolChoice = 'auto', float $temperature = 0.2, int $maxTokens = 500): array
+    public function send(
+        array $messages,
+        array $tools,
+        string $toolChoice = 'auto',
+        float $temperature = 0.2,
+        int $maxTokens = 500,
+        ?int $requestTimeoutSeconds = null,
+        ?array $extraBody = null,
+        ?string $modelOverride = null,
+    ): array
     {
+        $tools = $this->normalizeToolSchemas($tools);
+        $models = is_string($modelOverride) && trim($modelOverride) !== ''
+            ? LLMModelResolver::modelsForTask('mcp', ['model' => trim($modelOverride)])
+            : $this->models;
         $baseUrl = rtrim((string) config('llm.provider.base_url', 'https://openrouter.ai/api/v1'), '/');
 
-        foreach ($this->models as $modelIndex => $model) {
+        foreach ($models as $modelIndex => $model) {
             for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
                 $response = null;
                 $retryable = true;
@@ -80,15 +93,15 @@ class OpenRouterToolClient
                         'Authorization' => 'Bearer ' . $this->apiKey,
                         'Content-Type' => 'application/json',
                     ])->connectTimeout($this->connectTimeout)
-                        ->timeout($this->requestTimeout)
-                        ->post($baseUrl.'/chat/completions', [
+                        ->timeout($requestTimeoutSeconds ?? $this->requestTimeout)
+                        ->post($baseUrl.'/chat/completions', array_replace($extraBody ?? [], [
                         'model' => $model,
                         'messages' => $messages,
                         'tools' => $tools,
                         'tool_choice' => $toolChoice,
                         'temperature' => $temperature,
                         'max_tokens' => $maxTokens,
-                    ]);
+                    ]));
 
                     $maxResponseBytes = max(262144, min(16 * 1024 * 1024, (int) config('mcp.llm.max_response_bytes', 4194304)));
                     [$body, $complete] = $this->readResponseBody($response, $response->successful() ? $maxResponseBytes : 8000);
@@ -106,6 +119,8 @@ class OpenRouterToolClient
                                 'text' => $message['content'] ?? null,
                                 'tool_calls' => $message['tool_calls'] ?? [],
                                 'raw_message' => $message, // à réinjecter tel quel dans l'historique pour le tour suivant
+                                'finish_reason' => $choice['finish_reason'] ?? null,
+                                'usage' => is_array($decoded['usage'] ?? null) ? $decoded['usage'] : null,
                             ];
                         }
                     } elseif ($response->successful()) {
@@ -157,12 +172,51 @@ class OpenRouterToolClient
             if (isset($this->models[$modelIndex + 1])) {
                 Log::warning('MCP bascule vers le modèle de secours', [
                     'failed_model' => $model,
-                    'fallback_model' => $this->models[$modelIndex + 1],
+                    'fallback_model' => $models[$modelIndex + 1],
                 ]);
             }
         }
 
         throw new RuntimeException('Appel LLM (function-calling) échoué après ' . $this->maxRetries . ' tentatives.');
+    }
+
+    /**
+     * PHP encodes an empty array as [], while JSON Schema requires `properties`
+     * to be an object. Normalize at the provider boundary so every tool source
+     * (including dynamically supplied connector tools) gets valid JSON.
+     *
+     * @param array<int, mixed> $tools
+     * @return array<int, mixed>
+     */
+    private function normalizeToolSchemas(array $tools): array
+    {
+        foreach ($tools as $index => $tool) {
+            if (! is_array($tool)
+                || ! is_array($tool['function'] ?? null)
+                || ! is_array($tool['function']['parameters'] ?? null)) {
+                continue;
+            }
+
+            $tools[$index]['function']['parameters'] = $this->normalizeJsonSchema(
+                $tool['function']['parameters'],
+            );
+        }
+
+        return $tools;
+    }
+
+    /** @param array<mixed> $schema */
+    private function normalizeJsonSchema(array $schema): array
+    {
+        foreach ($schema as $key => $value) {
+            if ($key === 'properties' && is_array($value) && $value === []) {
+                $schema[$key] = new \stdClass();
+            } elseif (is_array($value)) {
+                $schema[$key] = $this->normalizeJsonSchema($value);
+            }
+        }
+
+        return $schema;
     }
 
     private function isUnavailableModelError(int $status, string $body): bool

@@ -46,10 +46,16 @@ final class WebsiteSecuritySourceAccessService
         $result = [];
         foreach (['repository', 'server', 'database'] as $type) {
             $saved = is_array($connections[$type] ?? null);
+            $details = $saved && is_array($metadata[$type] ?? null) ? $metadata[$type] : [];
+            if ($saved) {
+                // Return only displayable connection settings. Credentials remain in the encrypted vault.
+                $details = array_replace($details, $this->publicConnectionDetails($type, $connections[$type]));
+            }
+            unset($details['token'], $details['access_token'], $details['password'], $details['private_key'], $details['private_key_passphrase']);
             $result[$type] = [
                 'connected' => $saved && ($record?->status === 'connected'),
                 'status' => $saved ? 'connected' : 'disconnected',
-                'details' => $saved && is_array($metadata[$type] ?? null) ? $metadata[$type] : [],
+                'details' => $details,
                 'last_connected_at' => $saved && is_string($metadata[$type]['connected_at'] ?? null) ? $metadata[$type]['connected_at'] : null,
             ];
         }
@@ -64,6 +70,10 @@ final class WebsiteSecuritySourceAccessService
         $repository = trim((string) ($input['repository'] ?? ''));
         $token = (string) ($input['access_token'] ?? '');
         $branch = trim((string) ($input['branch'] ?? ''));
+        $connections = $this->connections($site);
+        if ($token === '') {
+            $token = (string) ($connections['repository']['token'] ?? '');
+        }
         if (! in_array($provider, ['github', 'gitlab'], true) || ! $this->validRepositoryPath($repository, $provider) || strlen($token) < 8 || strlen($token) > 4096) {
             throw ValidationException::withMessages(['source' => 'Fournissez un fournisseur pris en charge, un chemin de dépôt valide et un jeton en lecture seule.']);
         }
@@ -89,7 +99,6 @@ final class WebsiteSecuritySourceAccessService
             throw ValidationException::withMessages(['branch' => 'Branche invalide.']);
         }
 
-        $connections = $this->connections($site);
         $connections['repository'] = compact('provider', 'repository', 'token', 'branch');
         $this->persist($site, $connections, [
             'provider' => $provider, 'repository' => $repository, 'branch' => $branch,
@@ -108,6 +117,13 @@ final class WebsiteSecuritySourceAccessService
         $password = (string) ($input['password'] ?? '');
         $privateKey = (string) ($input['private_key'] ?? '');
         $passphrase = (string) ($input['private_key_passphrase'] ?? '');
+        $connections = $this->connections($site);
+        $savedConnection = is_array($connections['server'] ?? null) ? $connections['server'] : [];
+        if ($password === '' && $privateKey === '') {
+            $password = (string) ($savedConnection['password'] ?? '');
+            $privateKey = (string) ($savedConnection['private_key'] ?? '');
+            $passphrase = (string) ($savedConnection['private_key_passphrase'] ?? '');
+        }
         $expectedFingerprint = trim((string) ($input['host_key_sha256'] ?? ''));
         $rootPath = trim((string) ($input['root_path'] ?? '/')) ?: '/';
         $privateNetworkAuthorized = (bool) ($input['private_network_authorized'] ?? false);
@@ -151,7 +167,6 @@ final class WebsiteSecuritySourceAccessService
             'host_key_sha256' => $expectedFingerprint, 'root_path' => rtrim($rootPath, '/') ?: '/',
             'private_network_authorized' => $privateNetworkAuthorized,
         ];
-        $connections = $this->connections($site);
         $connections['server'] = $connection;
         $this->persist($site, $connections, [
             'host' => $host, 'port' => $port, 'username' => $username,
@@ -171,10 +186,14 @@ final class WebsiteSecuritySourceAccessService
         $database = trim((string) ($input['database'] ?? ''));
         $username = trim((string) ($input['username'] ?? ''));
         $password = (string) ($input['password'] ?? '');
+        $connections = $this->connections($site);
+        if ($password === '') {
+            $password = (string) ($connections['database']['password'] ?? '');
+        }
         $privateNetworkAuthorized = (bool) ($input['private_network_authorized'] ?? false);
         if (! in_array($driver, ['mysql', 'pgsql'], true) || ! $this->validHost($host) || $port < 1 || $port > 65535
             || ! preg_match('/^[A-Za-z0-9_$.-]{1,128}$/', $database) || $username === '' || strlen($username) > 128
-            || strlen($password) > 4096 || empty($input['read_only_confirmed']) || empty($input['tls_verify'])) {
+            || $password === '' || strlen($password) > 4096 || empty($input['read_only_confirmed']) || empty($input['tls_verify'])) {
             throw ValidationException::withMessages(['source' => 'Utilisez MySQL ou PostgreSQL, confirmez un compte en lecture seule et exigez TLS avec vérification du certificat.']);
         }
         $resolvedAddress = $this->resolveAuthorizedAddress($host, $privateNetworkAuthorized);
@@ -185,7 +204,6 @@ final class WebsiteSecuritySourceAccessService
         } catch (Throwable) {
             throw ValidationException::withMessages(['source' => 'Connexion DB sécurisée impossible. Vérifiez l’accès en lecture seule, le certificat TLS et les paramètres; les identifiants n’ont pas été enregistrés.']);
         }
-        $connections = $this->connections($site);
         $connections['database'] = $connection;
         $this->persist($site, $connections, [
             'driver' => $driver, 'host' => $host, 'port' => $port, 'database' => $database,
@@ -265,7 +283,12 @@ final class WebsiteSecuritySourceAccessService
                 );
                 array_push($files, ...$repoFiles['files']);
                 $dependencyFiles = $repoFiles['dependency_files'];
-                $sources['repository'] = ['status' => 'available', 'files_read' => count($repoFiles['files']), 'dependency_files_read' => count($dependencyFiles), 'contents_sent_to_llm' => false];
+                $sources['repository'] = [
+                    'status' => 'available', 'files_read' => count($repoFiles['files']),
+                    'candidate_files' => $repoFiles['candidate_files'], 'dependency_files_read' => count($dependencyFiles),
+                    'scan_limited' => $repoFiles['scan_limited'], 'limit_reasons' => $repoFiles['limit_reasons'],
+                    'contents_sent_to_llm' => false,
+                ];
             } catch (Throwable) {
                 $sources['repository'] = ['status' => 'unavailable', 'files_read' => 0, 'reason' => 'repository_read_failed'];
             }
@@ -286,6 +309,7 @@ final class WebsiteSecuritySourceAccessService
                     'status' => 'available', 'files_read' => count($serverScan['files']), 'commands_executed' => 0,
                     'contents_sent_to_llm' => false, 'scan_limited' => $serverScan['scan_limited'],
                     'limit_reason' => $serverScan['limit_reason'],
+                    'limit_reasons' => $serverScan['limit_reason'] !== null ? [$serverScan['limit_reason']] : [],
                 ];
             } catch (Throwable) {
                 $sources['server'] = ['status' => 'unavailable', 'files_read' => 0, 'reason' => 'sftp_read_failed', 'commands_executed' => 0];
@@ -315,10 +339,56 @@ final class WebsiteSecuritySourceAccessService
             $reportProgress('database', 1, 'Base de données non connectée; étape ignorée.');
         }
 
-        return ['files' => array_slice($files, 0, self::MAX_SOURCE_FILES), 'dependency_files' => $dependencyFiles, 'database' => $database, 'sources' => $sources];
+        $sourceFiles = array_slice($files, 0, self::MAX_SOURCE_FILES);
+        $sourceCodeRequested = ! empty($checks['repository_analysis']) || ! empty($checks['server_configuration']);
+        $limitReasons = [];
+        foreach (['repository', 'server'] as $sourceName) {
+            $sourceStatus = $sources[$sourceName] ?? null;
+            if (is_array($sourceStatus) && ! empty($sourceStatus['scan_limited'])) {
+                array_push($limitReasons, ...array_filter($sourceStatus['limit_reasons'] ?? [$sourceName.'_scan_limited'], 'is_string'));
+            }
+            if (is_array($sourceStatus) && in_array($sourceStatus['status'] ?? null, ['unavailable', 'not_configured'], true)) {
+                $limitReasons[] = $sourceName.'_not_available';
+            }
+        }
+        if (count($files) > self::MAX_SOURCE_FILES) {
+            $limitReasons[] = 'combined_source_file_limit';
+        }
+        $requestedCodeSources = array_keys(array_filter([
+            'repository' => ! empty($checks['repository_analysis']),
+            'server' => ! empty($checks['server_configuration']),
+        ]));
+        $availableCodeSources = array_filter($requestedCodeSources, fn (string $name): bool => ($sources[$name]['status'] ?? null) === 'available');
+        $coverageComplete = $sourceCodeRequested && $availableCodeSources !== []
+            && $limitReasons === [] && count($sourceFiles) > 0;
+        $codeStatus = ! $sourceCodeRequested ? 'not_requested'
+            : ($availableCodeSources === [] ? 'unavailable'
+                : ($limitReasons !== [] ? 'partial' : (count($sourceFiles) === 0 ? 'no_files' : 'complete')));
+        $sourceCodeCoverage = [
+            'requested' => $sourceCodeRequested,
+            'status' => $codeStatus,
+            'scope' => 'supported_first_party_source_files_in_connected_sources',
+            'files_read' => count($sourceFiles),
+            'bytes_read' => array_sum(array_map(static fn (array $file): int => strlen($file['content']), $sourceFiles)),
+            'coverage_complete' => $coverageComplete,
+            'limit_reasons' => array_values(array_unique($limitReasons)),
+            'source_names' => array_keys($availableCodeSources),
+            'limits' => [
+                'max_files' => self::MAX_SOURCE_FILES,
+                'max_bytes_per_source' => self::MAX_SOURCE_BYTES,
+                'max_bytes_per_file' => self::MAX_FILE_BYTES,
+                'excluded_directories' => ['.git', '.svn', '.ssh', '.aws', '.config', '.docker', '.idea', '.vscode', 'vendor', 'node_modules', 'dist', 'build', 'coverage', 'cache', 'tmp', 'temp', 'logs', 'storage', 'uploads', 'backups', 'backup'],
+                'eligible_extensions' => ['php', 'phtml', 'inc', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'vue', 'svelte', 'html', 'htm', 'twig', 'py', 'rb', 'go', 'java', 'cs', 'rs', 'c', 'h', 'cc', 'cpp', 'hh', 'hpp', 'kt', 'swift', 'dart', 'ex', 'exs', 'scala', 'sql', 'sh', 'bash', 'conf', 'ini', 'yaml', 'yml', 'toml', 'json'],
+            ],
+        ];
+
+        return [
+            'files' => $sourceFiles, 'dependency_files' => $dependencyFiles, 'database' => $database,
+            'sources' => $sources, 'source_code_coverage' => $sourceCodeCoverage,
+        ];
     }
 
-    /** @return array{files: array<int, array{path: string, source: string, content: string}>, dependency_files: array<int, array{path: string, source: string, content: string}>} */
+    /** @return array{files: array<int, array{path: string, source: string, content: string}>, dependency_files: array<int, array{path: string, source: string, content: string}>, candidate_files: int, scan_limited: bool, limit_reasons: array<int, string>} */
     private function repositoryFiles(array $connection, ?callable $progress = null): array
     {
         $provider = $connection['provider'];
@@ -327,6 +397,8 @@ final class WebsiteSecuritySourceAccessService
         $token = $connection['token'];
         $candidates = [];
         $dependencyCandidates = [];
+        $candidateCount = 0;
+        $limitReasons = [];
         if ($provider === 'github') {
             $branchResponse = $this->github($token)->get('https://api.github.com/repos/'.$repository.'/branches/'.rawurlencode($branch));
             $sha = $branchResponse->json('commit.sha');
@@ -341,20 +413,32 @@ final class WebsiteSecuritySourceAccessService
             if (! $treeResponse->successful() || ! is_array($tree)) {
                 throw new \RuntimeException('Git tree unavailable');
             }
+            if ((bool) $treeResponse->json('truncated', false)) {
+                $limitReasons[] = 'repository_tree_truncated';
+            }
             foreach ($tree as $item) {
                 if (($item['type'] ?? null) === 'blob' && isset($item['path'])) {
                     $path = (string) $item['path'];
                     if ($this->isDependencyFile($path) && (int) ($item['size'] ?? 2_097_153) <= 2_097_152) {
                         $dependencyCandidates[] = $path;
-                    } elseif ($this->eligiblePath($path) && (int) ($item['size'] ?? self::MAX_FILE_BYTES + 1) <= self::MAX_FILE_BYTES) {
-                        $candidates[] = $path;
+                    } elseif ($this->eligiblePath($path)) {
+                        if (isset($item['size']) && (int) $item['size'] > self::MAX_FILE_BYTES) {
+                            $limitReasons[] = 'source_file_size_limit';
+                        } else {
+                            $candidateCount++;
+                            if (count($candidates) < self::MAX_SOURCE_FILES) {
+                                $candidates[] = $path;
+                            } else {
+                                $limitReasons[] = 'source_file_count_limit';
+                            }
+                        }
                     }
-                }
-                if (count($candidates) >= self::MAX_SOURCE_FILES) {
-                    break;
                 }
             }
             $read = $this->readRepositorySourceFiles($provider, $repository, $branch, $token, $candidates, $progress);
+            if (count($read) < count($candidates)) {
+                $limitReasons[] = 'repository_files_not_read';
+            }
 
             $progress && $progress(0.82);
             $dependencyFiles = $this->readRepositoryDependencyFiles(
@@ -367,31 +451,54 @@ final class WebsiteSecuritySourceAccessService
             );
             $progress && $progress(1);
 
-            return ['files' => $read, 'dependency_files' => $dependencyFiles];
+            $limitReasons = array_values(array_unique($limitReasons));
+            return [
+                'files' => $read, 'dependency_files' => $dependencyFiles, 'candidate_files' => $candidateCount,
+                'scan_limited' => $limitReasons !== [], 'limit_reasons' => $limitReasons,
+            ];
         }
 
         $projectId = rawurlencode($repository);
-        $response = $this->gitlab($token)->get("https://gitlab.com/api/v4/projects/{$projectId}/repository/tree", [
-            'recursive' => 'true', 'per_page' => '100', 'ref' => $branch,
-        ]);
-        $tree = $response->json();
-        if (! $response->successful() || ! is_array($tree)) {
-            throw new \RuntimeException('GitLab tree unavailable');
-        }
-        foreach ($tree as $item) {
-            if (($item['type'] ?? null) === 'blob' && isset($item['path'])) {
-                $path = (string) $item['path'];
-                if ($this->isDependencyFile($path) && (int) ($item['size'] ?? 2_097_153) <= 2_097_152) {
-                    $dependencyCandidates[] = $path;
-                } elseif ($this->eligiblePath($path) && (int) ($item['size'] ?? self::MAX_FILE_BYTES + 1) <= self::MAX_FILE_BYTES) {
-                    $candidates[] = $path;
+        for ($page = 1; $page <= 20; $page++) {
+            $response = $this->gitlab($token)->get("https://gitlab.com/api/v4/projects/{$projectId}/repository/tree", [
+                'recursive' => 'true', 'per_page' => '100', 'page' => (string) $page, 'ref' => $branch,
+            ]);
+            $tree = $response->json();
+            if (! $response->successful() || ! is_array($tree)) {
+                throw new \RuntimeException('GitLab tree unavailable');
+            }
+            foreach ($tree as $item) {
+                if (($item['type'] ?? null) === 'blob' && isset($item['path'])) {
+                    $path = (string) $item['path'];
+                    if ($this->isDependencyFile($path)) {
+                        $dependencyCandidates[] = $path;
+                    } elseif ($this->eligiblePath($path)) {
+                        if (isset($item['size']) && (int) $item['size'] > self::MAX_FILE_BYTES) {
+                            $limitReasons[] = 'source_file_size_limit';
+                        } else {
+                            $candidateCount++;
+                            if (count($candidates) < self::MAX_SOURCE_FILES) {
+                                $candidates[] = $path;
+                            } else {
+                                $limitReasons[] = 'source_file_count_limit';
+                            }
+                        }
+                    }
                 }
             }
-            if (count($candidates) >= self::MAX_SOURCE_FILES) {
+
+            $nextPage = trim((string) $response->header('X-Next-Page'));
+            if ($nextPage === '') {
                 break;
+            }
+            if ($page === 20) {
+                $limitReasons[] = 'repository_tree_page_limit';
             }
         }
         $read = $this->readRepositorySourceFiles($provider, $repository, $branch, $token, $candidates, $progress);
+        if (count($read) < count($candidates)) {
+            $limitReasons[] = 'repository_files_not_read';
+        }
 
         $progress && $progress(0.82);
         $dependencyFiles = $this->readRepositoryDependencyFiles(
@@ -404,7 +511,11 @@ final class WebsiteSecuritySourceAccessService
         );
         $progress && $progress(1);
 
-        return ['files' => $read, 'dependency_files' => $dependencyFiles];
+        $limitReasons = array_values(array_unique($limitReasons));
+        return [
+            'files' => $read, 'dependency_files' => $dependencyFiles, 'candidate_files' => $candidateCount,
+            'scan_limited' => $limitReasons !== [], 'limit_reasons' => $limitReasons,
+        ];
     }
 
     /** @param array<int, string> $paths @return array<int, array{path: string, source: string, content: string}> */
@@ -586,6 +697,9 @@ final class WebsiteSecuritySourceAccessService
                 }
                 $path = rtrim($directory, '/').'/'.$name;
                 if ($sftp->is_link($path)) {
+                    if (! $this->excludedDirectory($name)) {
+                        $limitReason ??= 'source_symlink_skipped';
+                    }
                     continue;
                 }
                 if ($sftp->is_dir($path)) {
@@ -595,6 +709,8 @@ final class WebsiteSecuritySourceAccessService
                         } else {
                             $limitReason ??= 'directory_queue_limit';
                         }
+                    } elseif ($depth >= 5 && ! $this->excludedDirectory($name)) {
+                        $limitReason ??= 'directory_depth_limit';
                     }
 
                     continue;
@@ -604,11 +720,17 @@ final class WebsiteSecuritySourceAccessService
                     continue;
                 }
                 $stat = $sftp->stat($path);
-                if (! is_array($stat) || (int) ($stat['size'] ?? self::MAX_FILE_BYTES + 1) > self::MAX_FILE_BYTES) {
+                if (! is_array($stat)) {
+                    $limitReason ??= 'unreadable_file_metadata';
+                    continue;
+                }
+                if ((int) ($stat['size'] ?? self::MAX_FILE_BYTES + 1) > self::MAX_FILE_BYTES) {
+                    $limitReason ??= 'source_file_size_limit';
                     continue;
                 }
                 $content = $sftp->get($path);
                 if (! is_string($content) || ! $this->safeTextFile($relative, $content)) {
+                    $limitReason ??= 'unreadable_source_file';
                     continue;
                 }
                 if ($total + strlen($content) > self::MAX_SOURCE_BYTES) {
@@ -857,7 +979,7 @@ final class WebsiteSecuritySourceAccessService
             return true;
         }
 
-        return preg_match('/\.(php|phtml|inc|js|jsx|ts|tsx|mjs|cjs|py|rb|go|java|cs|rs|conf|ini|ya?ml|toml|json)$/i', $path) === 1;
+        return preg_match('/\.(php|phtml|inc|js|jsx|ts|tsx|mjs|cjs|vue|svelte|html?|twig|py|rb|go|java|cs|rs|c|h|cc|cpp|hh|hpp|kt|swift|dart|ex|exs|scala|sql|sh|bash|conf|ini|ya?ml|toml|json)$/i', $path) === 1;
     }
 
     private function isDependencyFile(string $path): bool
@@ -885,6 +1007,31 @@ final class WebsiteSecuritySourceAccessService
         $saved = $this->vault->retrieve($site, self::CONNECTOR_SLUG) ?? [];
 
         return is_array($saved['connections'] ?? null) ? $saved['connections'] : [];
+    }
+
+    /** @return array<string, mixed> */
+    private function publicConnectionDetails(string $type, array $connection): array
+    {
+        $fields = match ($type) {
+            'repository' => ['provider', 'repository', 'branch'],
+            'server' => ['host', 'port', 'username', 'host_key_sha256', 'root_path'],
+            'database' => ['driver', 'host', 'port', 'database', 'username'],
+            default => [],
+        };
+        $details = [];
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $connection)) {
+                $details[$field] = $connection[$field];
+            }
+        }
+
+        if ($type === 'server' && array_key_exists('private_network_authorized', $connection)) {
+            $details['private_network_authorized'] = (bool) $connection['private_network_authorized'];
+        } elseif ($type === 'database' && array_key_exists('privateNetworkAuthorized', $connection)) {
+            $details['private_network_authorized'] = (bool) $connection['privateNetworkAuthorized'];
+        }
+
+        return $details;
     }
 
     private function persist(Site $site, array $connections, array $sourceStatuses): void
